@@ -64,7 +64,7 @@ create table public.maintenance (
   status text not null default 'open' check (status in ('open', 'in_progress', 'resolved')),
   assigned_to uuid references public.team_members(id) on delete set null,
   cost numeric(10,2),
-  reported_by uuid not null references public.team_members(id),
+  reported_by uuid not null references public.team_members(id) on delete restrict,
   resolved_at timestamptz,
   notes text not null default '',
   created_at timestamptz not null default now()
@@ -149,19 +149,44 @@ create policy "admin can modify"
   on public.reservations for all to authenticated
   using ((select role from public.team_members where id = auth.uid()) = 'admin');
 
--- Política: todos los autenticados pueden modificar tareas, mantenimiento, stock y compras
+-- Política: admins modifican el catálogo de insumos
 
-create policy "authenticated can modify"
-  on public.tasks for all to authenticated using (true);
+create policy "admin can modify supplies"
+  on public.supplies for all to authenticated
+  using ((select role from public.team_members where id = auth.uid()) = 'admin');
 
-create policy "authenticated can modify"
-  on public.maintenance for all to authenticated using (true);
+-- Política: autenticados modifican tareas (propias o si son admin)
 
-create policy "authenticated can modify"
+create policy "authenticated can modify tasks"
+  on public.tasks for all to authenticated
+  using (
+    assigned_to = auth.uid()
+    or (select role from public.team_members where id = auth.uid()) = 'admin'
+  );
+
+-- Política: autenticados modifican mantenimiento (reportado por ellos o admin)
+
+create policy "authenticated can modify maintenance"
+  on public.maintenance for all to authenticated
+  using (
+    reported_by = auth.uid()
+    or assigned_to = auth.uid()
+    or (select role from public.team_members where id = auth.uid()) = 'admin'
+  );
+
+-- Política: autenticados modifican stock (cualquier autenticado puede actualizar cantidades)
+
+create policy "authenticated can modify property_supplies"
   on public.property_supplies for all to authenticated using (true);
 
-create policy "authenticated can modify"
-  on public.purchase_requests for all to authenticated using (true);
+-- Política: autenticados modifican solicitudes de compra (propias o admin)
+
+create policy "authenticated can modify purchase_requests"
+  on public.purchase_requests for all to authenticated
+  using (
+    requested_by = auth.uid()
+    or (select role from public.team_members where id = auth.uid()) = 'admin'
+  );
 
 -- ── Storage bucket (aplicar manualmente en Supabase Dashboard) ─────────────
 -- Storage → New Bucket → Name: photos → Public: true
