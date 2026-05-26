@@ -49,11 +49,9 @@
 }
 
 :root {
-  --primary-airbnb: #ff385c;
+  /* AirAdmin status colors */
   --primary-hover: #e0314f;
   --bg: #f8fafc;
-  --card-bg: #ffffff;
-  --border-color: #e2e8f0;
   --text: #0f172a;
   --text-muted: #94a3b8;
   --urgent: #ef4444;
@@ -84,6 +82,12 @@
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
   --radius: 0.625rem;
+
+  /* AirAdmin brand overrides — these take precedence over shadcn defaults above */
+  --primary: #ff385c;
+  --card: #ffffff;
+  --border: #e2e8f0;
+
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.205 0 0);
