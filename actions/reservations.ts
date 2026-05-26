@@ -2,9 +2,9 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { canDo } from '@/lib/permissions'
-import type { Reservation } from '@/lib/types'
+import type { Reservation, UserRole } from '@/lib/types'
 
-async function getCallerRole(): Promise<string | null> {
+async function getCallerRole(): Promise<UserRole | null> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null
@@ -13,16 +13,24 @@ async function getCallerRole(): Promise<string | null> {
     .select('role')
     .eq('id', user.id)
     .single()
-  return data?.role ?? null
+  return (data?.role as UserRole) ?? null
 }
 
+/**
+ * Obtiene reservas. Sin filtro = todas. Con filtro 'YYYY-MM' incluye reservas
+ * que se solapan con el mes (check_in < primer día del mes siguiente
+ * y check_out >= primer día del mes).
+ */
 export async function getReservations(month?: string): Promise<Reservation[]> {
   const supabase = await createClient()
   let query = supabase.from('reservations').select('*').order('check_in')
   if (month) {
+    const [year, mon] = month.split('-').map(Number)
+    const nextMonthYear = mon === 12 ? year + 1 : year
+    const nextMonth = `${nextMonthYear}-${String(mon === 12 ? 1 : mon + 1).padStart(2, '0')}-01`
     query = query
-      .gte('check_in', `${month}-01`)
-      .lt('check_out', `${month}-32`)
+      .gte('check_out', `${month}-01`)   // sale después de que empieza el mes
+      .lt('check_in', nextMonth)          // entra antes de que termine el mes
   }
   const { data, error } = await query
   if (error) throw new Error(error.message)
@@ -33,7 +41,7 @@ export async function createReservation(
   formData: FormData
 ): Promise<{ success: boolean; error?: string }> {
   const role = await getCallerRole()
-  if (!role || !canDo(role as 'admin' | 'cleaning' | 'maintenance', 'reservations:edit')) {
+  if (!role || !canDo(role, 'reservations:edit')) {
     return { success: false, error: 'No autorizado' }
   }
   const supabase = await createClient()
@@ -57,7 +65,7 @@ export async function updateReservation(
   id: string, formData: FormData
 ): Promise<{ success: boolean; error?: string }> {
   const role = await getCallerRole()
-  if (!role || !canDo(role as 'admin' | 'cleaning' | 'maintenance', 'reservations:edit')) {
+  if (!role || !canDo(role, 'reservations:edit')) {
     return { success: false, error: 'No autorizado' }
   }
   const supabase = await createClient()
@@ -75,9 +83,17 @@ export async function updateReservation(
   return { success: true }
 }
 
-export async function deleteReservation(id: string): Promise<void> {
+export async function deleteReservation(
+  id: string
+): Promise<{ success: boolean; error?: string }> {
+  const role = await getCallerRole()
+  if (!role || !canDo(role, 'reservations:edit')) {
+    return { success: false, error: 'No autorizado' }
+  }
   const supabase = await createClient()
-  await supabase.from('reservations').delete().eq('id', id)
+  const { error } = await supabase.from('reservations').delete().eq('id', id)
+  if (error) return { success: false, error: error.message }
   revalidatePath('/calendar')
   revalidatePath('/')
+  return { success: true }
 }

@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import {
   format, startOfMonth, endOfMonth, eachDayOfInterval,
   addMonths, subMonths
@@ -7,6 +7,7 @@ import {
 import { es } from 'date-fns/locale'
 import type { Property, Reservation } from '@/lib/types'
 import { reservationOverlapsDate } from '@/lib/utils'
+import { ReservationBlock } from './ReservationBlock'
 import { ReservationForm } from './ReservationForm'
 
 interface Props {
@@ -14,8 +15,16 @@ interface Props {
   reservations: Reservation[]
 }
 
+/** Color del bloque según el status y source de la reserva */
+function getBlockColor(res: Reservation): string {
+  if (res.status === 'blocked') return '#94a3b8'
+  if (res.source === 'airbnb') return '#ff385c'
+  return '#6366f1'
+}
+
 export function CalendarView({ properties, reservations }: Props) {
-  const [currentMonth, setCurrentMonth] = useState(new Date())
+  // startOfMonth evita mismatch de hidratación SSR por hora del día
+  const [currentMonth, setCurrentMonth] = useState(() => startOfMonth(new Date()))
   const [selectedReservation, setSelectedReservation] = useState<Reservation | null>(null)
   const [formOpen, setFormOpen] = useState(false)
   const [selectedPropertyId, setSelectedPropertyId] = useState('')
@@ -25,12 +34,21 @@ export function CalendarView({ properties, reservations }: Props) {
     end: endOfMonth(currentMonth),
   })
 
+  // Pre-agrupado por property_id para O(P×D) en vez de O(P×D×R)
+  const reservationsByProperty = useMemo(() => {
+    const map = new Map<string, Reservation[]>()
+    for (const r of reservations) {
+      const list = map.get(r.property_id) ?? []
+      list.push(r)
+      map.set(r.property_id, list)
+    }
+    return map
+  }, [reservations])
+
   function getReservationForDay(propertyId: string, date: Date): Reservation | null {
     const dateStr = format(date, 'yyyy-MM-dd')
-    return reservations.find(r =>
-      r.property_id === propertyId &&
-      reservationOverlapsDate(r.check_in, r.check_out, dateStr)
-    ) ?? null
+    const list = reservationsByProperty.get(propertyId) ?? []
+    return list.find(r => reservationOverlapsDate(r.check_in, r.check_out, dateStr)) ?? null
   }
 
   function openNew(propertyId: string) {
@@ -56,7 +74,7 @@ export function CalendarView({ properties, reservations }: Props) {
       {/* Navegación de mes */}
       <div className="flex items-center justify-between px-4 py-3 sticky left-0 bg-[#f8fafc]">
         <button
-          onClick={() => setCurrentMonth(m => subMonths(m, 1))}
+          onClick={() => setCurrentMonth(m => startOfMonth(subMonths(m, 1)))}
           className="w-10 h-10 flex items-center justify-center text-[#94a3b8] text-xl"
           aria-label="Mes anterior"
         >‹</button>
@@ -64,7 +82,7 @@ export function CalendarView({ properties, reservations }: Props) {
           {format(currentMonth, 'MMMM yyyy', { locale: es })}
         </span>
         <button
-          onClick={() => setCurrentMonth(m => addMonths(m, 1))}
+          onClick={() => setCurrentMonth(m => startOfMonth(addMonths(m, 1)))}
           className="w-10 h-10 flex items-center justify-center text-[#94a3b8] text-xl"
           aria-label="Mes siguiente"
         >›</button>
@@ -100,17 +118,16 @@ export function CalendarView({ properties, reservations }: Props) {
                   onClick={() => res ? openEdit(res) : openNew(property.id)}
                 >
                   {res && (
-                    <div
-                      className="absolute inset-1 rounded text-[9px] flex items-center
-                                 justify-center font-medium select-none"
+                    <ReservationBlock
+                      reservation={res}
+                      onClick={openEdit}
                       style={{
-                        backgroundColor: res.source === 'airbnb' ? '#ff385c' : '#6366f1',
-                        color: 'white',
+                        backgroundColor: getBlockColor(res),
                         borderRadius: isCheckIn ? '4px 0 0 4px' : '0',
+                        left: 2,
+                        right: 2,
                       }}
-                    >
-                      {isCheckIn ? '→' : ''}
-                    </div>
+                    />
                   )}
                 </div>
               )

@@ -35,7 +35,8 @@ export function ReservationForm({ open, onClose, reservation, propertyId, proper
   async function handleDelete() {
     if (!reservation || !confirm('¿Eliminar esta reserva?')) return
     startTransition(async () => {
-      await deleteReservation(reservation.id)
+      const result = await deleteReservation(reservation.id)
+      if (!result.success) { setError(result.error ?? 'Error al eliminar'); return }
       onClose()
     })
   }
