@@ -36,7 +36,7 @@ export function PropertyForm({ open, onClose, property }: Props) {
   }
 
   return (
-    <Sheet open={open} onOpenChange={v => !v && onClose()}>
+    <Sheet open={open} onOpenChange={v => !v && onClose()} key={property?.id ?? 'new'}>
       <SheetContent side="bottom" className="rounded-t-2xl max-h-[90vh] overflow-y-auto">
         <SheetHeader className="mb-4">
           <SheetTitle>{property ? 'Editar apartamento' : 'Nuevo apartamento'}</SheetTitle>
