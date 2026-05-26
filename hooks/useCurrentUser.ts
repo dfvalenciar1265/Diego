@@ -9,21 +9,32 @@ export function useCurrentUser() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    let cancelled = false
     const supabase = createClient()
 
     async function load() {
+      setLoading(true)
+
       const { data: { user } } = await supabase.auth.getUser()
+      if (cancelled) return
+
       if (!user) {
         setMember(null)
         setLoading(false)
         return
       }
 
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('team_members')
         .select('*')
         .eq('id', user.id)
         .single()
+
+      if (cancelled) return
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('Failed to fetch team member:', error)
+      }
 
       setMember(data ?? null)
       setLoading(false)
@@ -35,7 +46,10 @@ export function useCurrentUser() {
       load()
     })
 
-    return () => subscription.unsubscribe()
+    return () => {
+      cancelled = true
+      subscription.unsubscribe()
+    }
   }, [])
 
   return { member, loading }
