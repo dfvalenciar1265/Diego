@@ -1,0 +1,116 @@
+<h2>Gestión de Insumos — Flujo Combinado A+B</h2>
+<p class="subtitle">Stock por apto + solicitudes del equipo trabajando juntos</p>
+
+<div class="section">
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+
+    <!-- Vista Admin -->
+    <div>
+      <h3 style="color:#a78bfa;margin-bottom:0.75rem;">👤 Lo que ve el Admin (tú)</h3>
+
+      <div style="background:#1e293b;border-radius:10px;padding:1rem;margin-bottom:0.75rem;">
+        <p style="margin:0 0 8px;color:#64748b;font-size:0.75rem;text-transform:uppercase;">📦 Alertas de stock bajo — hoy</p>
+        <div style="display:flex;flex-direction:column;gap:6px;font-size:0.82rem;">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="color:#f43f5e;">⚠️ Desinfectante — Apto 3D</span>
+            <span style="background:#1e1e2e;color:#94a3b8;padding:2px 8px;border-radius:6px;font-size:0.75rem;">Quedan 0</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="color:#fb923c;">⚡ Detergente — Apto 1A</span>
+            <span style="background:#1e1e2e;color:#94a3b8;padding:2px 8px;border-radius:6px;font-size:0.75rem;">Quedan 1</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="color:#fb923c;">⚡ Jabón — Apto 7C</span>
+            <span style="background:#1e1e2e;color:#94a3b8;padding:2px 8px;border-radius:6px;font-size:0.75rem;">Quedan 1</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="background:#1e293b;border-radius:10px;padding:1rem;">
+        <p style="margin:0 0 8px;color:#64748b;font-size:0.75rem;text-transform:uppercase;">🛒 Solicitudes del equipo</p>
+        <div style="display:flex;flex-direction:column;gap:6px;font-size:0.82rem;">
+          <div style="display:flex;gap:8px;align-items:flex-start;">
+            <span style="color:#94a3b8;flex:1;">"Falta escoba nueva en Apto 5F" — María</span>
+            <span style="background:#7c3aed;color:white;padding:2px 8px;border-radius:6px;font-size:0.72rem;cursor:pointer;white-space:nowrap;">✓ Comprado</span>
+          </div>
+          <div style="display:flex;gap:8px;align-items:flex-start;">
+            <span style="color:#94a3b8;flex:1;">"Se acabó el cloro en Apto 2B" — María</span>
+            <span style="background:#7c3aed;color:white;padding:2px 8px;border-radius:6px;font-size:0.72rem;cursor:pointer;white-space:nowrap;">✓ Comprado</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Vista Limpiadora -->
+    <div>
+      <h3 style="color:#34d399;margin-bottom:0.75rem;">🧹 Lo que ve la Limpiadora</h3>
+
+      <div style="background:#1e293b;border-radius:10px;padding:1rem;margin-bottom:0.75rem;">
+        <p style="margin:0 0 8px;color:#64748b;font-size:0.75rem;text-transform:uppercase;">📋 Stock del apto mientras limpia</p>
+        <div style="display:flex;flex-direction:column;gap:6px;font-size:0.82rem;">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="color:#94a3b8;">🧴 Desinfectante</span>
+            <div style="display:flex;gap:6px;align-items:center;">
+              <span style="color:#64748b;">Cantidad:</span>
+              <div style="display:flex;gap:4px;">
+                <span style="background:#0f172a;color:#94a3b8;padding:2px 8px;border-radius:4px;cursor:pointer;">−</span>
+                <span style="color:#f1f5f9;padding:2px 8px;">2</span>
+                <span style="background:#0f172a;color:#94a3b8;padding:2px 8px;border-radius:4px;cursor:pointer;">+</span>
+              </div>
+            </div>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="color:#94a3b8;">🧻 Papel higiénico</span>
+            <div style="display:flex;gap:6px;align-items:center;">
+              <span style="color:#64748b;">Cantidad:</span>
+              <div style="display:flex;gap:4px;">
+                <span style="background:#0f172a;color:#94a3b8;padding:2px 8px;border-radius:4px;cursor:pointer;">−</span>
+                <span style="color:#f1f5f9;padding:2px 8px;">8</span>
+                <span style="background:#0f172a;color:#94a3b8;padding:2px 8px;border-radius:4px;cursor:pointer;">+</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="background:#1e293b;border-radius:10px;padding:1rem;">
+        <p style="margin:0 0 8px;color:#64748b;font-size:0.75rem;text-transform:uppercase;">➕ Solicitar algo que falta</p>
+        <div style="background:#0f172a;border-radius:8px;padding:0.75rem;font-size:0.82rem;">
+          <input class="mock-input" placeholder="¿Qué hace falta? ej: escoba nueva..." style="width:100%;margin-bottom:8px;">
+          <div style="display:flex;gap:6px;align-items:center;">
+            <select style="background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:6px;padding:4px 8px;font-size:0.78rem;flex:1;">
+              <option>Apto 3D</option>
+            </select>
+            <button class="mock-button" style="white-space:nowrap;font-size:0.78rem;">Enviar solicitud</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="section" style="margin-top:1.25rem;">
+  <h3>🔄 Flujo completo</h3>
+  <div style="display:flex;gap:0;align-items:center;flex-wrap:wrap;margin-top:0.75rem;font-size:0.82rem;">
+    <div style="background:#1e293b;border-radius:8px;padding:8px 14px;color:#94a3b8;text-align:center;">
+      🧹 Limpiadora actualiza<br>stock al limpiar
+    </div>
+    <div style="color:#334155;padding:0 8px;font-size:1.2rem;">→</div>
+    <div style="background:#1e293b;border-radius:8px;padding:8px 14px;color:#94a3b8;text-align:center;">
+      📦 Sistema detecta<br>stock bajo
+    </div>
+    <div style="color:#334155;padding:0 8px;font-size:1.2rem;">→</div>
+    <div style="background:#7c3aed22;border:1px solid #7c3aed;border-radius:8px;padding:8px 14px;color:#a78bfa;text-align:center;">
+      ⚠️ Alerta en el<br>Dashboard (Admin)
+    </div>
+    <div style="color:#334155;padding:0 8px;font-size:1.2rem;">→</div>
+    <div style="background:#1e293b;border-radius:8px;padding:8px 14px;color:#94a3b8;text-align:center;">
+      🛒 Admin compra<br>y marca resuelto
+    </div>
+    <div style="color:#334155;padding:0 8px;font-size:1.2rem;">→</div>
+    <div style="background:#1e293b;border-radius:8px;padding:8px 14px;color:#94a3b8;text-align:center;">
+      📦 Stock se actualiza<br>al entregar
+    </div>
+  </div>
+</div>

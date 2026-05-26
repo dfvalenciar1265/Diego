@@ -1,0 +1,85 @@
+<h2>Arquitectura del MVP</h2>
+<p class="subtitle">4 módulos core + roles de equipo — todo lo demás es fase 2</p>
+
+<div class="section">
+  <h3>🏗️ Módulos del MVP</h3>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-top:1rem;">
+
+    <div style="background:#1e1e2e;border:1px solid #7c3aed;border-radius:12px;padding:1.25rem;">
+      <div style="font-size:1.5rem;margin-bottom:0.5rem;">📊</div>
+      <h3 style="margin:0 0 0.5rem;color:#a78bfa;">Dashboard General</h3>
+      <ul style="margin:0;padding-left:1.2rem;color:#94a3b8;font-size:0.9rem;">
+        <li>Check-ins y check-outs de hoy</li>
+        <li>Tareas pendientes del día</li>
+        <li>Ocupación de la semana por apto</li>
+        <li>Resumen financiero del mes</li>
+      </ul>
+    </div>
+
+    <div style="background:#1e1e2e;border:1px solid #7c3aed;border-radius:12px;padding:1.25rem;">
+      <div style="font-size:1.5rem;margin-bottom:0.5rem;">📅</div>
+      <h3 style="margin:0 0 0.5rem;color:#a78bfa;">Calendario de Reservas</h3>
+      <ul style="margin:0;padding-left:1.2rem;color:#94a3b8;font-size:0.9rem;">
+        <li>Vista mensual por apartamento</li>
+        <li>Reservas Airbnb + directas</li>
+        <li>Check-in / check-out por bloque</li>
+        <li>Bloqueos manuales</li>
+      </ul>
+    </div>
+
+    <div style="background:#1e1e2e;border:1px solid #7c3aed;border-radius:12px;padding:1.25rem;">
+      <div style="font-size:1.5rem;margin-bottom:0.5rem;">✅</div>
+      <h3 style="margin:0 0 0.5rem;color:#a78bfa;">Gestión de Tareas</h3>
+      <ul style="margin:0;padding-left:1.2rem;color:#94a3b8;font-size:0.9rem;">
+        <li>Limpiezas asignadas por reserva</li>
+        <li>Mantenimientos (crear, asignar, cerrar)</li>
+        <li>Vista del equipo: "mis tareas de hoy"</li>
+        <li>Estado: pendiente / en curso / listo</li>
+      </ul>
+    </div>
+
+    <div style="background:#1e1e2e;border:1px solid #7c3aed;border-radius:12px;padding:1.25rem;">
+      <div style="font-size:1.5rem;margin-bottom:0.5rem;">🏠</div>
+      <h3 style="margin:0 0 0.5rem;color:#a78bfa;">Propiedades</h3>
+      <ul style="margin:0;padding-left:1.2rem;color:#94a3b8;font-size:0.9rem;">
+        <li>Ficha de cada apartamento</li>
+        <li>Código de acceso, instrucciones</li>
+        <li>Fotos e info para el equipo</li>
+        <li>Historial de reservas</li>
+      </ul>
+    </div>
+
+  </div>
+</div>
+
+<div class="section" style="margin-top:1.5rem;">
+  <h3>👥 Roles de usuario</h3>
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.75rem;margin-top:0.75rem;">
+    <div style="background:#1e1e2e;border:1px solid #334155;border-radius:10px;padding:1rem;text-align:center;">
+      <div style="font-size:1.5rem;">👤</div>
+      <h4 style="color:#e2e8f0;margin:0.5rem 0 0.25rem;">Admin</h4>
+      <p style="color:#64748b;font-size:0.8rem;margin:0;">Acceso total. Tú.</p>
+    </div>
+    <div style="background:#1e1e2e;border:1px solid #334155;border-radius:10px;padding:1rem;text-align:center;">
+      <div style="font-size:1.5rem;">🧹</div>
+      <h4 style="color:#e2e8f0;margin:0.5rem 0 0.25rem;">Limpieza</h4>
+      <p style="color:#64748b;font-size:0.8rem;margin:0;">Solo sus tareas del día</p>
+    </div>
+    <div style="background:#1e1e2e;border:1px solid #334155;border-radius:10px;padding:1rem;text-align:center;">
+      <div style="font-size:1.5rem;">🔧</div>
+      <h4 style="color:#e2e8f0;margin:0.5rem 0 0.25rem;">Mantenimiento</h4>
+      <p style="color:#64748b;font-size:0.8rem;margin:0;">Sus tareas + puede reportar incidencias</p>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top:1.5rem;">
+  <h3>🚫 Fase 2 (fuera del MVP)</h3>
+  <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+    <span style="background:#1e293b;color:#64748b;padding:4px 12px;border-radius:999px;font-size:0.85rem;">💬 Mensajería con huéspedes</span>
+    <span style="background:#1e293b;color:#64748b;padding:4px 12px;border-radius:999px;font-size:0.85rem;">💰 Módulo financiero completo</span>
+    <span style="background:#1e293b;color:#64748b;padding:4px 12px;border-radius:999px;font-size:0.85rem;">📈 Reportes avanzados</span>
+    <span style="background:#1e293b;color:#64748b;padding:4px 12px;border-radius:999px;font-size:0.85rem;">🔔 Notificaciones push/WhatsApp</span>
+    <span style="background:#1e293b;color:#64748b;padding:4px 12px;border-radius:999px;font-size:0.85rem;">🔌 Sync automático con Airbnb</span>
+  </div>
+</div>

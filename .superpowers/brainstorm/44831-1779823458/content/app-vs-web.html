@@ -1,0 +1,142 @@
+<h2>¿App nativa, PWA o Web?</h2>
+<p class="subtitle">Para tu caso: 90% móvil, equipo pequeño, MVP rápido</p>
+
+<div class="options">
+
+  <div class="option" data-choice="native" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>App Nativa (React Native / Flutter)</h3>
+      <p>Una app real en App Store y Google Play. Se comporta exactamente como cualquier app de tu teléfono.</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;margin-top:0.75rem;font-size:0.78rem;">
+        <div style="background:#0f172a;border-radius:8px;padding:8px;">
+          <p style="margin:0 0 4px;color:#22c55e;font-size:0.68rem;font-weight:600;">✅ Ventajas</p>
+          <ul style="margin:0;padding-left:1rem;color:#94a3b8;font-size:0.68rem;line-height:1.6;">
+            <li>Experiencia 100% nativa</li>
+            <li>Push notifications reales</li>
+            <li>Acceso completo a cámara/GPS</li>
+            <li>Funciona offline</li>
+          </ul>
+        </div>
+        <div style="background:#0f172a;border-radius:8px;padding:8px;">
+          <p style="margin:0 0 4px;color:#ef4444;font-size:0.68rem;font-weight:600;">⚠️ Desventajas</p>
+          <ul style="margin:0;padding-left:1rem;color:#94a3b8;font-size:0.68rem;line-height:1.6;">
+            <li>3-4x más tiempo de desarrollo</li>
+            <li>Revisión App Store (días/semanas)</li>
+            <li>Updates lentos</li>
+            <li>Dos codebases (iOS + Android)</li>
+          </ul>
+        </div>
+      </div>
+      <div style="margin-top:0.75rem;background:#1e293b;border-radius:8px;padding:8px;display:flex;gap:12px;align-items:center;">
+        <span style="font-size:1.2rem;">⏱️</span>
+        <div>
+          <p style="margin:0;color:#f1f5f9;font-size:0.7rem;font-weight:600;">Tiempo estimado de MVP</p>
+          <p style="margin:0;color:#ef4444;font-size:0.68rem;">3–5 meses</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="pwa" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>PWA — Progressive Web App <span style="background:#ff385c;color:white;font-size:0.7rem;padding:2px 8px;border-radius:999px;margin-left:6px;">RECOMENDADO</span></h3>
+      <p>Una web app que <strong>se instala en el teléfono como una app</strong> — ícono en pantalla de inicio, sin barra del navegador, push notifications, cámara. Sin App Store.</p>
+
+      <div style="margin-top:0.75rem;background:#0f172a;border-radius:10px;padding:10px;font-size:0.72rem;">
+        <p style="margin:0 0 6px;color:#a78bfa;font-weight:600;">¿Cómo la instala tu equipo?</p>
+        <div style="display:flex;gap:8px;align-items:center;color:#94a3b8;">
+          <div style="background:#1e293b;border-radius:6px;padding:4px 8px;white-space:nowrap;">1. Abren el link</div>
+          <span style="color:#475569;">→</span>
+          <div style="background:#1e293b;border-radius:6px;padding:4px 8px;white-space:nowrap;">2. "Agregar a inicio"</div>
+          <span style="color:#475569;">→</span>
+          <div style="background:#1e293b;border-radius:6px;padding:4px 8px;white-space:nowrap;">3. ¡Listo! 🎉</div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;margin-top:0.75rem;font-size:0.78rem;">
+        <div style="background:#0f172a;border-radius:8px;padding:8px;">
+          <p style="margin:0 0 4px;color:#22c55e;font-size:0.68rem;font-weight:600;">✅ Ventajas</p>
+          <ul style="margin:0;padding-left:1rem;color:#94a3b8;font-size:0.68rem;line-height:1.6;">
+            <li>Se ve y siente como app</li>
+            <li>Un solo codebase</li>
+            <li>Deploy instantáneo</li>
+            <li>Sin App Store</li>
+            <li>Push notifications ✓</li>
+            <li>Cámara y GPS ✓</li>
+            <li>Funciona offline (básico)</li>
+          </ul>
+        </div>
+        <div style="background:#0f172a;border-radius:8px;padding:8px;">
+          <p style="margin:0 0 4px;color:#f59e0b;font-size:0.68rem;font-weight:600;">⚠️ Límites</p>
+          <ul style="margin:0;padding-left:1rem;color:#94a3b8;font-size:0.68rem;line-height:1.6;">
+            <li>No está en App Store</li>
+            <li>Push en iOS requiere iOS 16.4+</li>
+            <li>Offline limitado vs nativa</li>
+          </ul>
+        </div>
+      </div>
+      <div style="margin-top:0.75rem;background:#1e293b;border-radius:8px;padding:8px;display:flex;gap:12px;align-items:center;">
+        <span style="font-size:1.2rem;">⏱️</span>
+        <div>
+          <p style="margin:0;color:#f1f5f9;font-size:0.7rem;font-weight:600;">Tiempo estimado de MVP</p>
+          <p style="margin:0;color:#22c55e;font-size:0.68rem;">4–6 semanas</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="web" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Web Responsive (solo navegador)</h3>
+      <p>Una página web adaptada a móvil. Se accede siempre desde el navegador, sin instalación.</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;margin-top:0.75rem;font-size:0.78rem;">
+        <div style="background:#0f172a;border-radius:8px;padding:8px;">
+          <p style="margin:0 0 4px;color:#22c55e;font-size:0.68rem;font-weight:600;">✅ Ventajas</p>
+          <ul style="margin:0;padding-left:1rem;color:#94a3b8;font-size:0.68rem;line-height:1.6;">
+            <li>Más simple de construir</li>
+            <li>Cualquier dispositivo</li>
+            <li>Sin instalación</li>
+          </ul>
+        </div>
+        <div style="background:#0f172a;border-radius:8px;padding:8px;">
+          <p style="margin:0 0 4px;color:#ef4444;font-size:0.68rem;font-weight:600;">⚠️ Desventajas</p>
+          <ul style="margin:0;padding-left:1rem;color:#94a3b8;font-size:0.68rem;line-height:1.6;">
+            <li>Sin push notifications</li>
+            <li>Barra del navegador siempre visible</li>
+            <li>UX inferior en móvil</li>
+            <li>Sin acceso a cámara fácil</li>
+          </ul>
+        </div>
+      </div>
+      <div style="margin-top:0.75rem;background:#1e293b;border-radius:8px;padding:8px;display:flex;gap:12px;align-items:center;">
+        <span style="font-size:1.2rem;">⏱️</span>
+        <div>
+          <p style="margin:0;color:#f1f5f9;font-size:0.7rem;font-weight:600;">Tiempo estimado de MVP</p>
+          <p style="margin:0;color:#22c55e;font-size:0.68rem;">3–4 semanas</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div style="background:#1e293b;border-radius:12px;padding:1rem;margin-top:1.25rem;">
+  <p style="margin:0 0 6px;color:#a78bfa;font-size:0.82rem;font-weight:700;">💡 Por qué PWA es perfecto para tu caso</p>
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;font-size:0.72rem;color:#94a3b8;">
+    <div style="text-align:center;padding:8px;background:#0f172a;border-radius:8px;">
+      <p style="font-size:1.2rem;margin:0">📱</p>
+      <p style="margin:4px 0 0;">Tu equipo la instala <strong style="color:#e2e8f0;">en 30 segundos</strong> sin App Store</p>
+    </div>
+    <div style="text-align:center;padding:8px;background:#0f172a;border-radius:8px;">
+      <p style="font-size:1.2rem;margin:0">🚀</p>
+      <p style="margin:4px 0 0;">Actualizas la plataforma y <strong style="color:#e2e8f0;">todos lo ven al instante</strong></p>
+    </div>
+    <div style="text-align:center;padding:8px;background:#0f172a;border-radius:8px;">
+      <p style="font-size:1.2rem;margin:0">📸</p>
+      <p style="margin:4px 0 0;"><strong style="color:#e2e8f0;">Cámara para fotos</strong> de mantenimiento desde la app</p>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,62 @@
+<h2>¿Dónde vive la gestión de insumos?</h2>
+<p class="subtitle">3 opciones — cada una con un flujo diferente</p>
+
+<div class="options">
+
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Dentro de Tareas — "Solicitudes de compra"</h3>
+      <p>La limpiadora reporta qué falta mientras hace su tarea. Tú ves una lista de compras pendientes y marcas cuando ya compraste.</p>
+      <div style="background:#0f172a;border-radius:8px;padding:0.75rem;margin-top:0.75rem;font-size:0.8rem;">
+        <p style="margin:0 0 6px;color:#64748b;">Flujo:</p>
+        <p style="margin:0;color:#94a3b8;">🧹 Limpiadora → "Se acabó el desinfectante en Apto 3D"<br>
+        ↓<br>
+        📋 Aparece en tu lista de <strong style="color:#a78bfa;">compras pendientes</strong><br>
+        ↓<br>
+        ✅ Tú marcas "Comprado" cuando lo resuelves</p>
+      </div>
+      <div class="pros-cons" style="margin-top:0.75rem;">
+        <div class="pros"><h4>✅ Pros</h4><ul><li>Sin módulo extra</li><li>El equipo ya sabe dónde reportar</li></ul></div>
+        <div class="cons"><h4>⚠️ Contras</h4><ul><li>Mezcla tareas con compras</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Dentro de Propiedades — Stock por apto <span style="background:#7c3aed;color:white;font-size:0.7rem;padding:2px 8px;border-radius:999px;margin-left:6px;">RECOMENDADO</span></h3>
+      <p>Cada apartamento tiene su lista de insumos con stock mínimo. Cuando baja del mínimo, aparece en el dashboard como alerta de reposición.</p>
+      <div style="background:#0f172a;border-radius:8px;padding:0.75rem;margin-top:0.75rem;font-size:0.8rem;">
+        <p style="margin:0 0 6px;color:#64748b;">Ejemplo vista en Apto 3D:</p>
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <div style="display:flex;justify-content:space-between;color:#94a3b8;"><span>🧴 Desinfectante</span><span style="color:#f43f5e;">⚠️ Stock bajo (1)</span></div>
+          <div style="display:flex;justify-content:space-between;color:#94a3b8;"><span>🧻 Papel higiénico</span><span style="color:#34d399;">OK (12)</span></div>
+          <div style="display:flex;justify-content:space-between;color:#94a3b8;"><span>🧼 Jabón líquido</span><span style="color:#34d399;">OK (3)</span></div>
+          <div style="display:flex;justify-content:space-between;color:#94a3b8;"><span>🌊 Detergente</span><span style="color:#fb923c;">Último (1)</span></div>
+        </div>
+      </div>
+      <div class="pros-cons" style="margin-top:0.75rem;">
+        <div class="pros"><h4>✅ Pros</h4><ul><li>Control real por apto</li><li>Alerta proactiva antes de que se acabe</li><li>La limpiadora actualiza el stock al usarlo</li></ul></div>
+        <div class="cons"><h4>⚠️ Contras</h4><ul><li>Requiere que el equipo actualice el stock</li><li>Un poco más de setup inicial</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Módulo propio — Inventario & Compras</h3>
+      <p>Un módulo dedicado con lista maestra de insumos, historial de compras, costos y proveedores. Más completo pero más pesado para el MVP.</p>
+      <div style="background:#0f172a;border-radius:8px;padding:0.75rem;margin-top:0.75rem;font-size:0.8rem;color:#64748b;">
+        Incluiría: catálogo de productos · stock por apto · órdenes de compra · registro de gastos · proveedores preferidos
+      </div>
+      <div class="pros-cons" style="margin-top:0.75rem;">
+        <div class="pros"><h4>✅ Pros</h4><ul><li>Control total de inventario</li><li>Historial de gastos en insumos</li></ul></div>
+        <div class="cons"><h4>⚠️ Contras</h4><ul><li>Más complejo de construir</li><li>Overkill para MVP con 4-10 aptos</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+</div>
