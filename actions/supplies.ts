@@ -16,11 +16,11 @@ export async function getPropertySupplies(propertyId: string): Promise<PropertyS
 
 export async function getLowStockAlerts(): Promise<PropertySupply[]> {
   const supabase = await createClient()
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('property_supplies')
     .select('*, supply:supplies(*), property:properties(name)')
-    .filter('current_qty', 'lte', 'min_qty')
-  return data ?? []
+  if (error) throw new Error(error.message)
+  return (data ?? []).filter(r => r.current_qty <= r.min_qty)
 }
 
 export async function updateStock(
@@ -53,18 +53,20 @@ export async function addSupplyToProperty(
   minQty: number
 ): Promise<void> {
   const supabase = await createClient()
-  await supabase.from('property_supplies').upsert({
+  const { error } = await supabase.from('property_supplies').upsert({
     property_id: propertyId,
     supply_id: supplyId,
     current_qty: 0,
     min_qty: minQty,
   }, { onConflict: 'property_id,supply_id' })
+  if (error) throw new Error(error.message)
   revalidatePath(`/properties/${propertyId}`)
 }
 
 export async function getAllSupplies(): Promise<Supply[]> {
   const supabase = await createClient()
-  const { data } = await supabase.from('supplies').select('*').order('name')
+  const { data, error } = await supabase.from('supplies').select('*').order('name')
+  if (error) throw new Error(error.message)
   return data ?? []
 }
 

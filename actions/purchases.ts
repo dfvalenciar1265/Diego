@@ -12,7 +12,8 @@ export async function getPurchaseRequests(
     .select('*, property:properties(name), supply:supplies(name, unit)')
     .order('created_at', { ascending: false })
   if (status) query = query.eq('status', status)
-  const { data } = await query
+  const { data, error } = await query
+  if (error) throw new Error(error.message)
   return data ?? []
 }
 
