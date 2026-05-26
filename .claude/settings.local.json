@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__plugin_aikido_aikido-mcp__aikido_full_scan",
+      "mcp__plugin_opsera-devsecops_opsera__security-scan",
+      "mcp__plugin_opsera-devsecops_opsera__opsera_report_telemetry"
+    ]
+  }
+}

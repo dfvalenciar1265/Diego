@@ -137,7 +137,6 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
     background-color: var(--bg);
     color: var(--text);
     font-family: 'Inter', sans-serif;

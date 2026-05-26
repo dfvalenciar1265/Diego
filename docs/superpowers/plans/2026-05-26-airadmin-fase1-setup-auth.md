@@ -783,18 +783,18 @@ git commit -m "feat: add Supabase client config and database schema"
 ## Task 5: Autenticación y Middleware
 
 **Files:**
-- Create: `middleware.ts`
+- Create: `proxy.ts`
 - Create: `app/(auth)/login/page.tsx`
 - Create: `hooks/useCurrentUser.ts`
 
-- [ ] **Crear `middleware.ts`**
+- [ ] **Crear `proxy.ts`**
 
 ```typescript
 import { NextResponse, type NextRequest } from 'next/server'
 import { updateSession } from '@/lib/supabase/middleware'
 import { createServerClient } from '@supabase/ssr'
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { supabaseResponse, user } = await updateSession(request)
   const { pathname } = request.nextUrl
 
@@ -956,8 +956,8 @@ Abrir `http://localhost:3000` → debe redirigir a `/login` → ingresar credenc
 - [ ] **Commit**
 
 ```bash
-git add middleware.ts app/\(auth\)/ hooks/useCurrentUser.ts
-git commit -m "feat: add auth login page, middleware and useCurrentUser hook"
+git add proxy.ts app/\(auth\)/ hooks/useCurrentUser.ts
+git commit -m "feat: add auth login page, proxy and useCurrentUser hook"
 ```
 
 ---
