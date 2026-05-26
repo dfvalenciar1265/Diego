@@ -63,6 +63,7 @@ export function TaskCard({ task }: Props) {
 
       {nextStatus && (
         <button onClick={advance} disabled={isPending}
+                aria-label={`${nextStatus === 'in_progress' ? 'Iniciar' : 'Completar'} tarea en ${task.property?.name ?? 'propiedad'}`}
                 className="mt-3 w-full h-10 rounded-lg text-sm font-semibold
                            active:opacity-80 transition-opacity disabled:opacity-50"
                 style={{ backgroundColor: getTaskStatusColor(nextStatus), color: 'white' }}>

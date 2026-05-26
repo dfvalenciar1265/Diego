@@ -42,9 +42,10 @@ export function TaskForm({ open, onClose, properties, teamMembers, defaultProper
         <form onSubmit={handleSubmit} className="space-y-4 pb-6">
           <div>
             <Label>Apartamento *</Label>
-            <select name="property_id" defaultValue={defaultPropertyId}
+            <select name="property_id" defaultValue={defaultPropertyId ?? ''}
                     className="w-full mt-1 rounded-lg border border-[#e2e8f0] p-3 text-sm
                                focus:outline-none focus:ring-2 focus:ring-[#ff385c]" required>
+              <option value="" disabled>Seleccionar apartamento</option>
               {properties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </div>

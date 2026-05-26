@@ -46,10 +46,11 @@ export async function updateTaskStatus(
   status: TaskStatus
 ): Promise<void> {
   const supabase = await createClient()
-  await supabase.from('tasks').update({
+  const { error } = await supabase.from('tasks').update({
     status,
     completed_at: status === 'done' ? new Date().toISOString() : null,
   }).eq('id', id)
+  if (error) throw new Error(error.message)
   revalidatePath('/tasks')
   revalidatePath('/')
 }
