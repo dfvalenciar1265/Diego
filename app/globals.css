@@ -145,3 +145,10 @@
     @apply font-sans;
   }
 }
+
+@layer utilities {
+  /* iOS safe-area inset for devices with Home Indicator */
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+}

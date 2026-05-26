@@ -24,7 +24,8 @@ export function BottomNav() {
             <Link
               key={href}
               href={href}
-              className="flex flex-col items-center gap-0.5 min-w-0 flex-1 py-1"
+              aria-current={isActive ? 'page' : undefined}
+              className="flex flex-col items-center justify-center gap-0.5 min-w-0 flex-1 h-full py-2"
             >
               <Icon
                 size={22}
