@@ -4,7 +4,8 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { createMaintenanceIssue, uploadMaintenancePhoto } from '@/actions/maintenance'
+import { createMaintenanceIssue } from '@/actions/maintenance'
+import { uploadMaintenancePhoto } from '@/lib/upload'
 import type { Property } from '@/lib/types'
 
 interface Props {
@@ -44,7 +45,8 @@ export function IncidenceForm({ open, onClose, properties }: Props) {
       let photoUrl: string | undefined
       if (file) {
         const url = await uploadMaintenancePhoto(file)
-        if (url) photoUrl = url
+        if (!url) { setError('No se pudo subir la foto. Intenta de nuevo.'); return }
+        photoUrl = url
       }
       const result = await createMaintenanceIssue(formData, photoUrl)
       if (!result.success) { setError(result.error ?? 'Error'); return }
