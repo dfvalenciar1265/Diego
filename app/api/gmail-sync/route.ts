@@ -34,11 +34,14 @@ function dayBefore(date: string): string {
 
 async function syncHandler(req: NextRequest, fromCron: boolean) {
   // Auth check
-  const isCron =
-    fromCron &&
+  // A valid CRON_SECRET header is trusted on any method:
+  //   • GET  → Vercel cron scheduler
+  //   • POST → internal server action (syncGmail) — no cookie jar in Node.js fetch
+  const hasValidSecret =
     req.headers.get('authorization') === `Bearer ${process.env.CRON_SECRET}`
 
-  if (!isCron) {
+  if (!hasValidSecret) {
+    // Fallback: accept a logged-in admin session (browser-originated POST)
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -50,7 +53,7 @@ async function syncHandler(req: NextRequest, fromCron: boolean) {
     }
   }
 
-  const triggeredBy = isCron ? 'cron' : 'manual'
+  const triggeredBy = (fromCron && hasValidSecret) ? 'cron' : 'manual'
 
   // Service client for DB writes (bypasses RLS)
   const db = createServiceClient(

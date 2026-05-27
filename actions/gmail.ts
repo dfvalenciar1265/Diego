@@ -19,9 +19,14 @@ export async function syncGmail(): Promise<SyncResult> {
 
   const res = await fetch(`${baseUrl}/api/gmail-sync`, {
     method: 'POST',
-    // No cron secret header → route validates admin session via cookies
-    // The server action runs server-side so cookies are forwarded automatically
-    headers: { 'Content-Type': 'application/json' },
+    // Use CRON_SECRET for internal server-to-server calls.
+    // Server actions run in Node.js and have no cookie jar, so session-based
+    // auth would always fail. The shared secret is safe here because this
+    // code only ever runs on the server, never exposed to the browser.
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${process.env.CRON_SECRET}`,
+    },
   })
 
   const body = await res.json() as SyncResult
