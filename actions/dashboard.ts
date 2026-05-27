@@ -3,6 +3,40 @@ import { format, startOfMonth, endOfMonth } from 'date-fns'
 import type { DashboardKPIs, OccupancyData } from '@/lib/types'
 import { getOccupiedDaysInWeek } from '@/lib/utils'
 
+export interface TodayCheckOut {
+  id: string
+  guest_name: string
+  check_out_time: string   // extracted from notes, e.g. "12:00 p.m."
+  property_name: string
+}
+
+/**
+ * Returns today's confirmed check-outs with property name and the
+ * check-out time extracted from the reservation notes field.
+ * Notes format: "... | Check-out: 12:00 p.m."
+ */
+export async function getTodayCheckOuts(): Promise<TodayCheckOut[]> {
+  const supabase = await createClient()
+  const today = format(new Date(), 'yyyy-MM-dd')
+  const { data } = await supabase
+    .from('reservations')
+    .select('id, guest_name, notes, property:properties(name)')
+    .eq('check_out', today)
+    .eq('status', 'confirmed')
+    .order('guest_name')
+  if (!data) return []
+  return data.map(r => {
+    const match = r.notes?.match(/Check-out:\s*([^\|]+)/i)
+    const checkOutTime = match ? match[1].trim() : '—'
+    return {
+      id: r.id,
+      guest_name: r.guest_name ?? '—',
+      check_out_time: checkOutTime,
+      property_name: (r.property as any)?.name ?? '—',
+    }
+  })
+}
+
 export async function getDashboardKPIs(): Promise<DashboardKPIs> {
   const supabase = await createClient()
   const today = format(new Date(), 'yyyy-MM-dd')
