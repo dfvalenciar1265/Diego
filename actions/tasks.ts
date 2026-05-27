@@ -1,6 +1,7 @@
 'use server'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
+import { createClient as createServiceClient } from '@supabase/supabase-js'
 import type { Task, TaskStatus } from '@/lib/types'
 
 export async function getTasks(filters?: {
@@ -53,4 +54,43 @@ export async function updateTaskStatus(
   if (error) throw new Error(error.message)
   revalidatePath('/tasks')
   revalidatePath('/')
+}
+
+/**
+ * Marks all pending/in-progress tasks whose scheduled date is strictly before
+ * today as "done". Called automatically during each Gmail sync run so the task
+ * list stays clean — past cleaning/preparation tasks no longer show as pending.
+ *
+ * Uses the service-role client so it can run from a cron route (no session).
+ * Returns the number of tasks that were updated.
+ */
+export async function completeOverdueTasks(): Promise<number> {
+  const db = createServiceClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  )
+
+  const today = new Date().toISOString().slice(0, 10) // YYYY-MM-DD
+
+  const { data, error } = await db
+    .from('tasks')
+    .update({
+      status:       'done',
+      completed_at: new Date().toISOString(),
+    })
+    .lt('scheduled_for', today)        // strictly before today
+    .in('status', ['pending', 'in_progress'])
+    .select('id')
+
+  if (error) {
+    console.error('[completeOverdueTasks]', error.message)
+    return 0
+  }
+
+  if ((data?.length ?? 0) > 0) {
+    revalidatePath('/tasks')
+    revalidatePath('/')
+  }
+
+  return data?.length ?? 0
 }

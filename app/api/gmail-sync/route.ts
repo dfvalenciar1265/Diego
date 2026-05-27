@@ -8,6 +8,8 @@
  * For each sync run:
  *   1. Imports new "Reservación confirmada" emails → insert reservations + auto-create tasks
  *   2. Processes "Reservación actualizada" emails → flag existing reservations OR import if missing
+ *   3. Processes "quiere hacer un cambio" emails → notes change request on reservation
+ *   4. Auto-completes tasks whose scheduled date is in the past
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
@@ -17,7 +19,9 @@ import {
   fetchAirbnbEmails,
   fetchConfirmationByCode,
   type ParsedReservation,
+  type ChangeRequestFlag,
 } from '@/lib/gmail-sync'
+import { completeOverdueTasks } from '@/actions/tasks'
 
 // Use a loose type for the service client to avoid complex generic mismatches
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -92,7 +96,7 @@ async function syncHandler(req: NextRequest, fromCron: boolean) {
   const lookbackDays = daysParam ? Math.max(1, Math.min(1825, parseInt(daysParam, 10))) : defaultDays
   const sinceDate = new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000)
 
-  // Fetch all Airbnb emails (confirmadas + actualizadas)
+  // Fetch all Airbnb emails (confirmadas + actualizadas + cambios)
   let emailResult
   try {
     emailResult = await fetchAirbnbEmails(accessToken, sinceDate)
@@ -104,6 +108,7 @@ async function syncHandler(req: NextRequest, fromCron: boolean) {
 
   let newCount = 0
   let updatedCount = 0
+  let changeRequestCount = 0
 
   // ── 1. Import new "Reservación confirmada" emails ────────────────────────
   for (const r of emailResult.confirmed) {
@@ -136,13 +141,25 @@ async function syncHandler(req: NextRequest, fromCron: boolean) {
     }
   }
 
+  // ── 3. Process "[Guest] quiere hacer un cambio" emails ──────────────────
+  for (const req of emailResult.change_requests) {
+    changeRequestCount += await handleChangeRequest(db, req)
+  }
+
+  // ── 4. Auto-complete past tasks ──────────────────────────────────────────
+  // Any cleaning/preparation task whose date has already passed gets marked done
+  // automatically so the task list stays clean.
+  const completedTasks = await completeOverdueTasks()
+
   await db.from('gmail_sync_log').insert({ triggered_by: triggeredBy, new_count: newCount })
 
   return NextResponse.json({
     ok: true,
     new_count: newCount,
     updated_count: updatedCount,
-    emails_parsed: emailResult.confirmed.length + emailResult.updated.length,
+    change_requests: changeRequestCount,
+    completed_tasks: completedTasks,
+    emails_parsed: emailResult.confirmed.length + emailResult.updated.length + emailResult.change_requests.length,
     threads_fetched: emailResult.threads_fetched,
     skipped_no_room: emailResult.skipped_no_room,
     d_empty_text: emailResult.d_empty_text,
@@ -155,6 +172,35 @@ async function syncHandler(req: NextRequest, fromCron: boolean) {
     lookback_days: lookbackDays,
     since_date: sinceDate.toISOString().slice(0, 10),
   })
+}
+
+// ─── Helper: note a change request on the matching reservation ───────────────
+
+async function handleChangeRequest(db: ServiceDb, req: ChangeRequestFlag): Promise<number> {
+  // Find the reservation by matching guest name (partial) and property name (partial).
+  // These emails don't include the confirmation code, so name-matching is the best we can do.
+  const guestFirst = req.guest_name.split(/\s+/)[0].toLowerCase()
+
+  const { data: candidates } = await db
+    .from('reservations')
+    .select('id, notes, guest_name')
+    .ilike('guest_name', `%${guestFirst}%`)
+    .eq('status', 'confirmed')
+
+  if (!candidates?.length) return 0
+
+  // Among matches, flag those not already noted
+  let flagged = 0
+  const marker = `🔄 Cambio solicitado`
+  for (const r of candidates) {
+    if (r.notes?.includes(marker)) continue
+    const addition = ` | ${marker}: ${req.change_description} — ${req.alteration_url}`
+    await db.from('reservations')
+      .update({ notes: (r.notes ?? '') + addition })
+      .eq('id', r.id)
+    flagged++
+  }
+  return flagged
 }
 
 // ─── Helper: insert a reservation if not already present ─────────────────────

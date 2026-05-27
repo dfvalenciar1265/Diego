@@ -25,9 +25,22 @@ export interface UpdatedReservationFlag {
   guest_name: string
 }
 
+/**
+ * From "[Guest] quiere hacer un cambio en su reservación" emails.
+ * These don't include the confirmation code, only the guest name, property
+ * name, and what changed (guest count, dates, etc.).
+ */
+export interface ChangeRequestFlag {
+  guest_name:        string   // first name extracted from subject / body
+  property_name:     string   // e.g. "Palmetto 1001 · Apartamento moderno..."
+  change_description: string  // human-readable summary of what changed
+  alteration_url:    string   // deep-link to approve/reject in Airbnb
+}
+
 export interface SyncEmailResult {
   confirmed: ParsedReservation[]
   updated: UpdatedReservationFlag[]
+  change_requests: ChangeRequestFlag[]
   threads_fetched: number   // total threads seen
   skipped_no_room: number  // emails dropped because room ID not in map
   // debug counters (visible in API response for admin diagnostics)
@@ -396,6 +409,58 @@ export function parseUpdateEmail(text: string): UpdatedReservationFlag | null {
   return { airbnb_code, guest_name }
 }
 
+/**
+ * Parses a "[Guest] quiere hacer un cambio en su reservación" email.
+ * These emails have no confirmation code — the host must act via Airbnb.
+ */
+export function parseChangeRequestEmail(text: string): ChangeRequestFlag | null {
+  const textLc = text.toLowerCase()
+  if (!textLc.includes('quiere hacer un cambio') && !textLc.includes('wants to make a change')) return null
+
+  // ── Guest name ─────────────────────────────────────────────────────────
+  // Subject: "Judah quiere hacer un cambio en su reservación"
+  const nameMatch =
+    text.match(/Subject:\s*([A-ZÁÉÍÓÚÑa-záéíóúñ][^\n]+?)\s+quiere\s+hacer\s+un\s+cambio/i) ??
+    text.match(/^([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ\s]+?)\s+QUIERE\s+HACER\s+UN\s+CAMBIO/m) ??
+    text.match(/([A-ZÁÉÍÓÚÑa-záéíóúñ][^\n]+?)\s+quiere\s+hacer\s+un\s+cambio/i)
+  const guest_name = nameMatch ? nameMatch[1].trim() : 'Desconocido'
+
+  // ── Property name ───────────────────────────────────────────────────────
+  // After the city line ("Cartagena\nPalmetto 1001 · …")
+  const propMatch = text.match(
+    /(?:Cartagena|Medell[ií]n|Bogot[aá]|Barranquilla|Santa\s+Marta)[^\n]*\n+([^\n]+)/i
+  )
+  const property_name = propMatch ? propMatch[1].trim() : ''
+
+  // ── What changed ────────────────────────────────────────────────────────
+  // Guest-count change: "Huéspedes originales\n1 huésped\nHuéspedes solicitados\n3 huéspedes"
+  // Date change: "Fechas originales\nlun, 2 jun – jue, 5 jun\nFechas solicitadas\nmar, 3 jun – vie, 6 jun"
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean)
+
+  function nextNonEmpty(keyword: RegExp): string {
+    const i = lines.findIndex(l => keyword.test(l))
+    return i >= 0 && i + 1 < lines.length ? lines[i + 1] : ''
+  }
+
+  const origGuests = nextNonEmpty(/hu[eé]spedes?\s+originales/i)
+  const reqGuests  = nextNonEmpty(/hu[eé]spedes?\s+solicitados/i)
+  const origDates  = nextNonEmpty(/fechas?\s+originales/i)
+  const reqDates   = nextNonEmpty(/fechas?\s+solicitadas/i)
+
+  let change_description = ''
+  if (origGuests && reqGuests)   change_description += `Huéspedes: ${origGuests} → ${reqGuests}`
+  if (origDates  && reqDates)    change_description += `${change_description ? ' | ' : ''}Fechas: ${origDates} → ${reqDates}`
+  if (!change_description)       change_description = 'Ver solicitud en Airbnb'
+
+  // ── Deep-link to approve/reject ─────────────────────────────────────────
+  const urlMatch = text.match(/airbnb\.com(?:\.co)?\/reservation\/alteration\/(\d+)/i)
+  const alteration_url = urlMatch
+    ? `https://www.airbnb.com.co/reservation/alteration/${urlMatch[1]}`
+    : 'https://www.airbnb.com.co/hosting/reservations'
+
+  return { guest_name, property_name, change_description, alteration_url }
+}
+
 // ─── Main export ──────────────────────────────────────────────────────────────
 
 /**
@@ -411,8 +476,9 @@ export async function fetchAirbnbEmails(
   const dd   = String(sinceDate.getDate()).padStart(2, '0')
   const dateFilter = `after:${yyyy}/${mm}/${dd}`
 
-  const confirmed: ParsedReservation[] = []
-  const updated: UpdatedReservationFlag[] = []
+  const confirmed: ParsedReservation[]    = []
+  const updated:   UpdatedReservationFlag[] = []
+  const change_requests: ChangeRequestFlag[] = []
   let threadsFetched = 0
   let skippedNoRoom = 0
   let dEmptyText = 0
@@ -440,14 +506,18 @@ export async function fetchAirbnbEmails(
 
       // Determine email type by content (case-insensitive — Airbnb uses ALL CAPS in some formats)
       const textLc = text.toLowerCase()
-      const isUpdate = textLc.includes('actualizó la reservación') || textLc.includes('se actualizó')
-      const isConfirm = textLc.includes('código de confirmación') || textLc.includes('confirmation code')
+      const isUpdate        = textLc.includes('actualizó la reservación') || textLc.includes('se actualizó')
+      const isConfirm       = textLc.includes('código de confirmación') || textLc.includes('confirmation code')
+      const isChangeRequest = textLc.includes('quiere hacer un cambio') || textLc.includes('wants to make a change')
 
-      if (!isUpdate && !isConfirm) { dNotAirbnb++; continue }
+      if (!isUpdate && !isConfirm && !isChangeRequest) { dNotAirbnb++; continue }
 
       if (isUpdate) {
         const flag = parseUpdateEmail(text)
         if (flag) updated.push(flag)
+      } else if (isChangeRequest) {
+        const req = parseChangeRequestEmail(text)
+        if (req) change_requests.push(req)
       } else {
         const parsed = parseConfirmationEmail(text)
         if (!parsed) { dParseFail++; continue }
@@ -462,7 +532,7 @@ export async function fetchAirbnbEmails(
   } while (pageToken)
 
   return {
-    confirmed, updated,
+    confirmed, updated, change_requests,
     threads_fetched: threadsFetched,
     skipped_no_room: skippedNoRoom,
     d_empty_text: dEmptyText,
