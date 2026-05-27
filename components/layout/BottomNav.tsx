@@ -6,10 +6,10 @@ import { Home, Calendar, ClipboardList, Wrench, MoreHorizontal } from 'lucide-re
 
 const NAV_ITEMS = [
   { href: '/', label: 'Inicio', icon: Home },
-  { href: '/reservas', label: 'Reservas', icon: Calendar },
-  { href: '/tareas', label: 'Tareas', icon: ClipboardList },
-  { href: '/mantenimiento', label: 'Mantenimiento', icon: Wrench },
-  { href: '/mas', label: 'Más', icon: MoreHorizontal },
+  { href: '/calendar', label: 'Reservas', icon: Calendar },
+  { href: '/tasks', label: 'Tareas', icon: ClipboardList },
+  { href: '/maintenance', label: 'Mant.', icon: Wrench },
+  { href: '/properties', label: 'Props', icon: MoreHorizontal },
 ] as const
 
 export function BottomNav() {
