@@ -3,57 +3,64 @@
 
 -- ──────────────────────────────────────────────────────────────────────────────
 -- 1. Add airbnb_code column to reservations (nullable, unique)
---    Allows idempotent imports: re-syncing skips already-imported reservations
 -- ──────────────────────────────────────────────────────────────────────────────
-alter table public.reservations
-  add column if not exists airbnb_code text unique;
+ALTER TABLE public.reservations
+  ADD COLUMN IF NOT EXISTS airbnb_code TEXT;
+
+ALTER TABLE public.reservations
+  ADD CONSTRAINT IF NOT EXISTS reservations_airbnb_code_key UNIQUE (airbnb_code);
 
 -- Backfill existing reservations: extract code from notes field
 -- Notes format: "... | Código: HMXXXXXX | ..."
-update public.reservations
-set airbnb_code = (
-  regexp_match(notes, 'Código: ([A-Z0-9]+)')
-)[1]
-where airbnb_code is null
-  and notes like '%Código:%';
+UPDATE public.reservations
+SET airbnb_code = (regexp_match(notes, 'Código: ([A-Z0-9]+)'))[1]
+WHERE airbnb_code IS NULL AND notes LIKE '%Código:%';
 
 -- ──────────────────────────────────────────────────────────────────────────────
--- 2. App settings table (key-value store for OAuth tokens and config)
+-- 2. App settings table (key-value for OAuth tokens and config)
 -- ──────────────────────────────────────────────────────────────────────────────
-create table if not exists public.app_settings (
-  key   text primary key,
-  value text not null,
-  updated_at timestamptz not null default now()
+CREATE TABLE IF NOT EXISTS public.app_settings (
+  key        TEXT PRIMARY KEY,
+  value      TEXT NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Only admins can read/write settings
-alter table public.app_settings enable row level security;
+ALTER TABLE public.app_settings ENABLE ROW LEVEL SECURITY;
 
-create policy "admin can manage settings"
-  on public.app_settings for all to authenticated
-  using (
-    exists (
-      select 1 from public.team_members
-      where id = auth.uid() and role = 'admin'
+-- FOR ALL needs both USING (for SELECT/UPDATE/DELETE) and WITH CHECK (for INSERT)
+CREATE POLICY "admin can manage settings"
+  ON public.app_settings FOR ALL TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.team_members
+      WHERE id = auth.uid() AND role = 'admin'
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM public.team_members
+      WHERE id = auth.uid() AND role = 'admin'
     )
   );
 
 -- ──────────────────────────────────────────────────────────────────────────────
--- 3. Sync log table — tracks every sync run for the dashboard
+-- 3. Sync log table
 -- ──────────────────────────────────────────────────────────────────────────────
-create table if not exists public.gmail_sync_log (
-  id           uuid primary key default gen_random_uuid(),
-  triggered_by text not null default 'cron', -- 'cron' | 'manual'
-  new_count    int  not null default 0,
-  error        text,
-  created_at   timestamptz not null default now()
+CREATE TABLE IF NOT EXISTS public.gmail_sync_log (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  triggered_by TEXT NOT NULL DEFAULT 'cron',
+  new_count    INT  NOT NULL DEFAULT 0,
+  error        TEXT,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-alter table public.gmail_sync_log enable row level security;
+ALTER TABLE public.gmail_sync_log ENABLE ROW LEVEL SECURITY;
 
-create policy "authenticated can read sync log"
-  on public.gmail_sync_log for select to authenticated using (true);
+CREATE POLICY "authenticated can read sync log"
+  ON public.gmail_sync_log FOR SELECT TO authenticated
+  USING (true);
 
--- Service role can insert (used by the API route with service key)
-create policy "service role can insert sync log"
-  on public.gmail_sync_log for insert to authenticated using (true);
+-- INSERT policy must use WITH CHECK (not USING)
+CREATE POLICY "authenticated can insert sync log"
+  ON public.gmail_sync_log FOR INSERT TO authenticated
+  WITH CHECK (true);
