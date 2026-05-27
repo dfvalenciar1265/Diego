@@ -8,12 +8,16 @@ import type { Task, TaskStatus } from '@/lib/types'
  * Returns upcoming cleaning tasks (type='cleaning', scheduled_for >= today).
  * Includes property name and assignee name via join.
  */
-export async function getCleaningTasks(): Promise<(Task & { property?: { name: string }; assignee?: { name: string } })[]> {
+export async function getCleaningTasks(): Promise<(Task & {
+  property?: { name: string }
+  assignee?: { name: string }
+  reservation?: { check_in: string; check_out: string; notes: string | null; guest_name: string | null } | null
+})[]> {
   const supabase = await createClient()
   const today = new Date().toISOString().slice(0, 10)
   const { data, error } = await supabase
     .from('tasks')
-    .select('*, property:properties(name), assignee:team_members(name)')
+    .select('*, property:properties(name), assignee:team_members(name), reservation:reservations(check_in, check_out, notes, guest_name)')
     .eq('type', 'cleaning')
     .gte('scheduled_for', today)
     .neq('status', 'done')

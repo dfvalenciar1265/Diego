@@ -4,33 +4,109 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { assignTask, assignAndStartTask } from '@/actions/tasks'
+import { assignAndStartTask, updateTaskNotes } from '@/actions/tasks'
 import { createTeamMember, deactivateTeamMember } from '@/actions/team'
-import { formatDate } from '@/lib/utils'
 import { useUserRole } from '@/lib/user-context'
 import type { Task } from '@/lib/types'
 import type { TeamMember } from '@/lib/types'
-import { UserPlus, ChevronRight, Sparkles } from 'lucide-react'
+import { UserPlus, Sparkles } from 'lucide-react'
 
-type CleaningTask = Task & { property?: { name: string }; assignee?: { name: string } }
+type CleaningTask = Task & {
+  property?: { name: string }
+  assignee?: { name: string }
+  reservation?: {
+    check_in: string
+    check_out: string
+    notes: string | null
+    guest_name: string | null
+  } | null
+}
 
 interface Props {
-  tasks:  CleaningTask[]
-  staff:  TeamMember[]
+  tasks: CleaningTask[]
+  staff: TeamMember[]
 }
 
 // ── Tab ───────────────────────────────────────────────────────────────────────
 
 type Tab = 'limpiezas' | 'personal'
 
+// ── Date helpers ──────────────────────────────────────────────────────────────
+
+function todayStr() {
+  return new Date().toISOString().slice(0, 10)
+}
+
+function tomorrowStr() {
+  const d = new Date()
+  d.setDate(d.getDate() + 1)
+  return d.toISOString().slice(0, 10)
+}
+
+// ── Time helpers (same as PrepTaskCard) ───────────────────────────────────────
+
+/**
+ * Handles "3pm" · "3:00pm" · "3:00 p.m." · "12pm" · "12:00 p.m."
+ */
+function reservationTimeTo24h(notes: string | null, field: 'Check-in' | 'Check-out'): string {
+  if (!notes) return ''
+  const re = new RegExp(`${field}:\\s*(\\d+)(?::(\\d+))?\\s*(a|p)\\.?m?\\.?`, 'i')
+  const m = notes.match(re)
+  if (!m) return ''
+  let h = parseInt(m[1], 10)
+  const mins = m[2] ?? '00'
+  const period = m[3].toLowerCase()
+  if (period === 'p' && h !== 12) h += 12
+  if (period === 'a' && h === 12) h = 0
+  return `${String(h).padStart(2, '0')}:${mins}`
+}
+
+/** "15:00" → "3pm"  |  "15:30" → "3:30pm" */
+function to12h(t: string): string {
+  if (!t) return '—'
+  const [h, m] = t.split(':').map(Number)
+  const suffix = h >= 12 ? 'pm' : 'am'
+  const h12 = h % 12 || 12
+  return m === 0 ? `${h12}${suffix}` : `${h12}:${String(m).padStart(2, '0')}${suffix}`
+}
+
+/** "2026-05-28" → "28 may" */
+function shortDate(iso: string | undefined): string {
+  if (!iso) return '—'
+  const [, mm, dd] = iso.split('-')
+  const months = ['', 'ene', 'feb', 'mar', 'abr', 'may', 'jun',
+    'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
+  return `${parseInt(dd, 10)} ${months[parseInt(mm, 10)]}`
+}
+
+/**
+ * For cleaning tasks we store the edited check-out time in task.notes.
+ * Format: "HH:MM|" (reuses PrepTaskCard annotation format, time only).
+ */
+function parseCoTime(raw: string | null): string {
+  if (!raw) return ''
+  const m = raw.match(/^(\d{2}:\d{2})\|/)
+  if (m) return m[1]
+  return ''
+}
+
+function buildCoAnnotation(time24: string): string {
+  return time24 ? `${time24}|` : ''
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function CleaningView({ tasks, staff }: Props) {
   const [tab, setTab] = useState<Tab>('limpiezas')
-  const [assignSheet, setAssignSheet] = useState<CleaningTask | null>(null)
   const [addStaffOpen, setAddStaffOpen] = useState(false)
   const role = useUserRole()
   const isAdmin = role === 'admin'
+
+  const today    = todayStr()
+  const tomorrow = tomorrowStr()
+
+  const todayTasks    = tasks.filter(t => t.scheduled_for === today)
+  const tomorrowTasks = tasks.filter(t => t.scheduled_for === tomorrow)
 
   return (
     <div className="p-4 space-y-4">
@@ -54,22 +130,50 @@ export function CleaningView({ tasks, staff }: Props) {
 
       {/* ── Limpiezas tab ────────────────────────────────────────────────── */}
       {tab === 'limpiezas' && (
-        <div className="space-y-3">
-          {tasks.length === 0 ? (
+        <div className="space-y-5">
+          {todayTasks.length === 0 && tomorrowTasks.length === 0 ? (
             <div className="text-center py-12">
               <Sparkles className="mx-auto mb-3 text-[#94a3b8]" size={40} />
               <p className="text-[#94a3b8]">No hay limpiezas próximas</p>
             </div>
           ) : (
-            tasks.map(task => (
-              <CleaningTaskCard
-                key={task.id}
-                task={task}
-                staff={staff}
-                isAdmin={isAdmin}
-                onAssign={() => setAssignSheet(task)}
-              />
-            ))
+            <>
+              {/* Hoy */}
+              {todayTasks.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-base">🧹</span>
+                    <span className="text-xs font-semibold text-[#6366f1] uppercase tracking-wide">
+                      Limpieza hoy ({todayTasks.length})
+                    </span>
+                    <div className="flex-1 h-px bg-[#e0e7ff]" />
+                  </div>
+                  <div className="space-y-3">
+                    {todayTasks.map(task => (
+                      <CleaningTaskCard key={task.id} task={task} staff={staff} />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Mañana */}
+              {tomorrowTasks.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-base">📅</span>
+                    <span className="text-xs font-semibold text-[#94a3b8] uppercase tracking-wide">
+                      Limpieza mañana ({tomorrowTasks.length})
+                    </span>
+                    <div className="flex-1 h-px bg-[#e2e8f0]" />
+                  </div>
+                  <div className="space-y-3">
+                    {tomorrowTasks.map(task => (
+                      <CleaningTaskCard key={task.id} task={task} staff={staff} />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}
@@ -101,15 +205,6 @@ export function CleaningView({ tasks, staff }: Props) {
         </div>
       )}
 
-      {/* ── Assign cleaner bottom sheet ───────────────────────────────────── */}
-      {assignSheet && (
-        <AssignSheet
-          task={assignSheet}
-          staff={staff}
-          onClose={() => setAssignSheet(null)}
-        />
-      )}
-
       {/* ── Add staff bottom sheet ────────────────────────────────────────── */}
       {addStaffOpen && (
         <AddStaffSheet onClose={() => setAddStaffOpen(false)} />
@@ -121,16 +216,41 @@ export function CleaningView({ tasks, staff }: Props) {
 // ── Cleaning task card ────────────────────────────────────────────────────────
 
 function CleaningTaskCard({
-  task, staff, isAdmin, onAssign,
+  task,
+  staff,
 }: {
   task: CleaningTask
   staff: TeamMember[]
-  isAdmin: boolean
-  onAssign: () => void
 }) {
+  const res      = task.reservation
+  const resNotes = res?.notes ?? null
+
+  const guestName = res?.guest_name ?? task.assignee?.name ?? '—'
+
+  // Check-in time: read-only from reservation notes
+  const ciTime = reservationTimeTo24h(resNotes, 'Check-in')
+
+  // Check-out time: editable, default from reservation notes, saved to task.notes
+  const defaultCoTime = reservationTimeTo24h(resNotes, 'Check-out')
+  const savedCoTime   = parseCoTime(task.notes)
+
+  const [coTime, setCoTime]         = useState(savedCoTime || defaultCoTime)
+  const [editingCoTime, setEditing] = useState(false)
+  const [pickingPerson, setPicking] = useState(false)
   const [isPending, startTransition] = useTransition()
-  // When pending: shows person selector before starting
-  const [pickingPerson, setPickingPerson] = useState(false)
+
+  function saveCoTime(time: string) {
+    startTransition(async () => {
+      await updateTaskNotes(task.id, buildCoAnnotation(time))
+    })
+  }
+
+  function startWithPerson(memberId: string) {
+    startTransition(async () => {
+      await assignAndStartTask(task.id, memberId)
+      setPicking(false)
+    })
+  }
 
   function complete() {
     startTransition(async () => {
@@ -138,16 +258,6 @@ function CleaningTaskCard({
       await updateTaskStatus(task.id, 'done')
     })
   }
-
-  function startWithPerson(memberId: string) {
-    startTransition(async () => {
-      await assignAndStartTask(task.id, memberId)
-      setPickingPerson(false)
-    })
-  }
-
-  // Extract guest name from notes: "Limpieza post-estadía — Nombre"
-  const guestNote = task.notes?.split('—')[1]?.trim() ?? task.notes ?? ''
 
   const statusColors: Record<string, string> = {
     pending:     '#f97316',
@@ -159,52 +269,88 @@ function CleaningTaskCard({
   }
 
   return (
-    <div className="bg-white rounded-xl border border-[#e2e8f0] shadow-[0_1px_3px_rgba(0,0,0,0.06)] p-4">
-      <div className="flex items-start gap-3">
-        <div className="w-9 h-9 rounded-xl flex items-center justify-center text-lg flex-shrink-0 bg-[#fff0f2]">
+    <div className="bg-white rounded-xl border border-[#bfdbfe] shadow-[0_1px_3px_rgba(0,0,0,0.06)] p-4">
+
+      {/* Header */}
+      <div className="flex items-center gap-3 mb-3">
+        <div className="w-9 h-9 rounded-xl flex items-center justify-center text-lg flex-shrink-0 bg-[#dbeafe]">
           🧹
         </div>
         <div className="flex-1 min-w-0">
-          <p className="font-semibold text-[#0f172a] text-sm">{task.property?.name ?? '—'}</p>
-          <p className="text-xs text-[#64748b] mt-0.5">Check-out: {formatDate(task.scheduled_for)}</p>
-          {guestNote && (
-            <p className="text-xs text-[#94a3b8] mt-0.5 italic">Huésped: {guestNote}</p>
-          )}
-          <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-            <span
-              className="text-[10px] font-medium px-2 py-0.5 rounded-full"
-              style={{
-                background: `${statusColors[task.status]}22`,
-                color:       statusColors[task.status],
-              }}
-            >
-              {statusLabels[task.status]}
-            </span>
-            {task.assignee ? (
-              <span className="text-[10px] text-[#64748b]">👤 {task.assignee.name}</span>
-            ) : (
-              <span className="text-[10px] text-[#f97316]">Sin asignar</span>
+          <p className="font-semibold text-[#0f172a] text-sm leading-tight">{task.property?.name ?? '—'}</p>
+          <p className="text-xs text-[#94a3b8] truncate">{guestName}</p>
+        </div>
+        {/* Status badge */}
+        <span
+          className="text-[10px] font-medium px-2 py-0.5 rounded-full flex-shrink-0"
+          style={{
+            background: `${statusColors[task.status]}22`,
+            color:       statusColors[task.status],
+          }}
+        >
+          {statusLabels[task.status]}
+        </span>
+      </div>
+
+      {/* Dates */}
+      <div className="grid grid-cols-2 gap-2 mb-3">
+
+        {/* Check-in: read-only */}
+        <div className="bg-[#f8fafc] rounded-xl p-2.5">
+          <p className="text-[10px] text-[#94a3b8] font-semibold mb-1.5">CHECK-IN</p>
+          <div className="flex items-baseline gap-1.5 flex-wrap">
+            <span className="text-sm font-bold text-[#0f172a]">{shortDate(res?.check_in)}</span>
+            {ciTime && (
+              <span className="text-xs font-semibold text-[#6366f1]">{to12h(ciTime)}</span>
             )}
           </div>
         </div>
 
-        {isAdmin && (
-          <button
-            onClick={onAssign}
-            className="flex-shrink-0 flex items-center gap-1 text-xs text-[#64748b]
-                       hover:text-[#0f172a] transition-colors"
-          >
-            Asignar <ChevronRight size={14} />
-          </button>
-        )}
+        {/* Check-out: editable time */}
+        <div className="bg-[#f8fafc] rounded-xl p-2.5">
+          <p className="text-[10px] text-[#94a3b8] font-semibold mb-1.5">CHECK-OUT</p>
+          <div className="flex items-baseline gap-1.5 flex-wrap">
+            <span className="text-sm font-bold text-[#0f172a]">{shortDate(res?.check_out)}</span>
+            {editingCoTime ? (
+              <input
+                type="time"
+                autoFocus
+                value={coTime}
+                onChange={e => setCoTime(e.target.value)}
+                onBlur={() => {
+                  setEditing(false)
+                  saveCoTime(coTime)
+                }}
+                className="text-xs border border-[#6366f1] rounded-md px-1 py-0.5
+                           focus:outline-none bg-white w-[90px]"
+              />
+            ) : (
+              <button
+                onClick={() => setEditing(true)}
+                className="text-xs font-semibold text-[#6366f1] flex items-center gap-0.5
+                           active:opacity-60 transition-opacity"
+              >
+                {coTime ? to12h(coTime) : '+ hora'} ✏️
+              </button>
+            )}
+          </div>
+        </div>
       </div>
 
-      {/* Iniciar — shows person picker first */}
+      {/* Assignee — when in progress */}
+      {task.assignee && (
+        <p className="text-xs text-[#64748b] mb-3 flex items-center gap-1.5">
+          <span>👤</span>
+          <span>{task.assignee.name}</span>
+        </p>
+      )}
+
+      {/* Iniciar → person picker */}
       {task.status === 'pending' && !pickingPerson && (
         <button
-          onClick={() => setPickingPerson(true)}
+          onClick={() => setPicking(true)}
           disabled={isPending}
-          className="mt-3 w-full h-9 rounded-lg text-sm font-semibold text-white
+          className="mt-1 w-full h-9 rounded-lg text-sm font-semibold text-white
                      active:opacity-80 transition-opacity disabled:opacity-50"
           style={{ background: '#6366f1' }}
         >
@@ -214,7 +360,7 @@ function CleaningTaskCard({
 
       {/* Inline person selector */}
       {task.status === 'pending' && pickingPerson && (
-        <div className="mt-3 space-y-1.5">
+        <div className="mt-1 space-y-1.5">
           <p className="text-xs font-semibold text-[#64748b] mb-1.5">
             👤 ¿Quién va a limpiar?
           </p>
@@ -239,7 +385,7 @@ function CleaningTaskCard({
             ))
           )}
           <button
-            onClick={() => setPickingPerson(false)}
+            onClick={() => setPicking(false)}
             className="w-full text-xs text-[#94a3b8] py-1 hover:text-[#64748b] transition-colors"
           >
             Cancelar
@@ -247,16 +393,16 @@ function CleaningTaskCard({
         </div>
       )}
 
-      {/* Completar */}
+      {/* Terminar */}
       {task.status === 'in_progress' && (
         <button
           onClick={complete}
           disabled={isPending}
-          className="mt-3 w-full h-9 rounded-lg text-sm font-semibold text-white
+          className="mt-1 w-full h-9 rounded-lg text-sm font-semibold text-white
                      active:opacity-80 transition-opacity disabled:opacity-50"
           style={{ background: '#22c55e' }}
         >
-          {isPending ? '…' : '✓ Completar'}
+          {isPending ? '…' : '✓ Terminar'}
         </button>
       )}
     </div>
@@ -293,67 +439,6 @@ function StaffCard({ member, isAdmin }: { member: TeamMember; isAdmin: boolean }
         </button>
       )}
     </div>
-  )
-}
-
-// ── Assign sheet ──────────────────────────────────────────────────────────────
-
-function AssignSheet({
-  task, staff, onClose,
-}: {
-  task: CleaningTask
-  staff: TeamMember[]
-  onClose: () => void
-}) {
-  const [isPending, startTransition] = useTransition()
-
-  function select(memberId: string | null) {
-    startTransition(async () => {
-      await assignTask(task.id, memberId)
-    })
-    onClose()
-  }
-
-  return (
-    <Sheet open onOpenChange={v => !v && onClose()}>
-      <SheetContent side="bottom" className="rounded-t-2xl">
-        <SheetHeader className="mb-4">
-          <SheetTitle>Asignar limpieza — {task.property?.name ?? ''}</SheetTitle>
-        </SheetHeader>
-        <div className="space-y-2 pb-6">
-          {staff.map(m => (
-            <button
-              key={m.id}
-              onClick={() => select(m.id)}
-              disabled={isPending}
-              className={`w-full flex items-center gap-3 p-3 rounded-xl border transition-colors
-                          ${task.assigned_to === m.id
-                            ? 'border-[#6366f1] bg-[#e0e7ff]'
-                            : 'border-[#e2e8f0] bg-white hover:bg-[#f8fafc]'}`}
-            >
-              <div className="w-9 h-9 rounded-full bg-[#e0e7ff] flex items-center justify-center
-                              text-[#6366f1] font-bold text-sm flex-shrink-0">
-                {m.name.charAt(0).toUpperCase()}
-              </div>
-              <span className="text-sm font-medium text-[#0f172a]">{m.name}</span>
-              {task.assigned_to === m.id && (
-                <span className="ml-auto text-[#6366f1] text-xs font-semibold">✓ Asignado</span>
-              )}
-            </button>
-          ))}
-          {task.assigned_to && (
-            <button
-              onClick={() => select(null)}
-              disabled={isPending}
-              className="w-full p-3 rounded-xl border border-[#e2e8f0] text-sm text-[#ef4444]
-                         hover:bg-[#fef2f2] transition-colors"
-            >
-              Quitar asignación
-            </button>
-          )}
-        </div>
-      </SheetContent>
-    </Sheet>
   )
 }
 
