@@ -32,7 +32,7 @@ export default async function TasksPage() {
           <TasksClient properties={properties} teamMembers={teamMembers ?? []} />
         ) : null}
       />
-      <TasksView tasks={tasks} />
+      <TasksView tasks={tasks} properties={properties} />
     </>
   )
 }
