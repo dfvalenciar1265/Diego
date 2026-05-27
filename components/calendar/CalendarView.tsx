@@ -2,16 +2,15 @@
 import { useState, useMemo } from 'react'
 import {
   format, startOfMonth, endOfMonth, eachDayOfInterval,
-  addMonths, subMonths, isToday, isSameMonth,
+  addMonths, subMonths, isToday, isSameMonth, differenceInDays, parseISO,
 } from 'date-fns'
 import { es } from 'date-fns/locale'
 import type { Property, Reservation } from '@/lib/types'
-import { reservationOverlapsDate } from '@/lib/utils'
 import { ReservationBlock } from './ReservationBlock'
 import { ReservationForm } from './ReservationForm'
 
 // ── Layout constants ──────────────────────────────────────────────────────────
-const PROP_W  = 180   // sticky property-name column width (px)
+const PROP_W  = 90    // sticky property-name column width (px)
 const DAY_W   = 36    // each day column width (px)
 const ROW_H   = 40    // row height (px)
 
@@ -35,7 +34,10 @@ export function CalendarView({ properties, reservations }: Props) {
     end:   endOfMonth(month2),
   })
 
-  // Group reservations by property for O(P×D) lookup
+  const firstDayStr = format(days[0], 'yyyy-MM-dd')
+  const lastDayStr  = format(days[days.length - 1], 'yyyy-MM-dd')
+
+  // Group reservations by property for fast lookup
   const byProp = useMemo(() => {
     const map = new Map<string, Reservation[]>()
     for (const r of reservations) {
@@ -45,11 +47,6 @@ export function CalendarView({ properties, reservations }: Props) {
     }
     return map
   }, [reservations])
-
-  function resForDay(propId: string, day: Date): Reservation | null {
-    const s = format(day, 'yyyy-MM-dd')
-    return (byProp.get(propId) ?? []).find(r => reservationOverlapsDate(r.check_in, r.check_out, s)) ?? null
-  }
 
   function openNew(propertyId: string) {
     setSelectedReservation(null)
@@ -69,11 +66,52 @@ export function CalendarView({ properties, reservations }: Props) {
 
   const totalW = PROP_W + days.length * DAY_W
 
-  // Month segments for the header divider
+  // Month segment labels for the header
   const segments = [month1, month2].map(m => ({
     label: format(m, 'MMMM yyyy', { locale: es }),
     count: eachDayOfInterval({ start: startOfMonth(m), end: endOfMonth(m) }).length,
   }))
+
+  /**
+   * Converts a reservation into absolute pixel coordinates within a property row.
+   *
+   * Returns null if the reservation has no overlap with the visible date range.
+   *
+   * isCI = check-in day is visible → left side gets a 2 px inset + rounded corner
+   * isCO = check-out day falls within the visible range → right side gets a 2 px
+   *        inset + rounded corner; otherwise the bar bleeds to the grid's right edge
+   */
+  function reservationLayout(res: Reservation) {
+    const { check_in: ciStr, check_out: coStr } = res
+
+    // Completely outside the visible range
+    if (coStr <= firstDayStr || ciStr > lastDayStr) return null
+
+    const isCI = ciStr >= firstDayStr   // check-in is visible
+    const isCO = coStr <= lastDayStr    // check-out day is within visible range
+
+    // Day-index offsets (relative to days[0])
+    const startOffset = isCI
+      ? differenceInDays(parseISO(ciStr), parseISO(firstDayStr))
+      : 0
+    const endOffset = isCO
+      ? differenceInDays(parseISO(coStr), parseISO(firstDayStr))
+      : days.length
+
+    const nightCount = endOffset - startOffset
+    if (nightCount <= 0) return null
+
+    // Small insets at visible edges so the bar doesn't touch cell borders
+    const leftInset  = isCI ? 2 : 0
+    const rightInset = isCO ? 2 : 0
+
+    return {
+      left:  PROP_W + startOffset * DAY_W + leftInset,
+      width: nightCount * DAY_W - leftInset - rightInset,
+      isCI,
+      isCO,
+    }
+  }
 
   return (
     <div className="overflow-x-auto pb-4">
@@ -125,10 +163,7 @@ export function CalendarView({ properties, reservations }: Props) {
               >
                 <span
                   className={`w-6 h-6 flex items-center justify-center rounded-full text-[11px] font-medium
-                    ${today
-                      ? 'bg-[#ff385c] text-white'
-                      : 'text-[#94a3b8]'
-                    }`}
+                    ${today ? 'bg-[#ff385c] text-white' : 'text-[#94a3b8]'}`}
                 >
                   {format(day, 'd')}
                 </span>
@@ -138,57 +173,66 @@ export function CalendarView({ properties, reservations }: Props) {
         </div>
 
         {/* Property rows */}
-        {properties.map(property => (
-          <div
-            key={property.id}
-            className="flex items-stretch border-t border-[#f1f5f9]"
-            style={{ height: ROW_H }}
-          >
-            {/* ── Sticky property-name cell ─────────────────────────────── */}
+        {properties.map(property => {
+          const propReservations = byProp.get(property.id) ?? []
+
+          return (
             <div
-              className="flex-shrink-0 flex items-center px-3 bg-white border-r border-[#e2e8f0] sticky left-0 z-10"
-              style={{ width: PROP_W }}
+              key={property.id}
+              className="flex items-stretch border-t border-[#f1f5f9] relative"
+              style={{ height: ROW_H }}
             >
-              <p className="text-xs font-medium text-[#0f172a] leading-tight line-clamp-2">
-                {property.name}
-              </p>
+              {/* ── Sticky property-name cell ─────────────────────────────── */}
+              <div
+                className="flex-shrink-0 flex items-center px-2 bg-white border-r border-[#e2e8f0] sticky left-0 z-10"
+                style={{ width: PROP_W }}
+              >
+                <p className="text-[11px] font-medium text-[#0f172a] leading-tight line-clamp-2">
+                  {property.name}
+                </p>
+              </div>
+
+              {/* ── Day cells — click targets only (empty days open new form) */}
+              {days.map(day => {
+                const today    = isToday(day)
+                const monthSep = day.getDate() === 1 && !isSameMonth(day, month1)
+
+                return (
+                  <div
+                    key={day.toISOString()}
+                    className={[
+                      'flex-shrink-0 border-l cursor-pointer',
+                      today    ? 'bg-[#fff0f2] border-l-[#ff385c] border-l-2' : 'border-[#f1f5f9]',
+                      monthSep ? 'border-l-[#e2e8f0] border-l-2' : '',
+                    ].join(' ')}
+                    style={{ width: DAY_W, height: ROW_H }}
+                    onClick={() => openNew(property.id)}
+                  />
+                )
+              })}
+
+              {/* ── Reservation bars — one element spanning all nights ────── */}
+              {propReservations.map(res => {
+                const layout = reservationLayout(res)
+                if (!layout) return null
+                const { left, width, isCI, isCO } = layout
+
+                return (
+                  <ReservationBlock
+                    key={res.id}
+                    reservation={res}
+                    onClick={openEdit}
+                    style={{
+                      left,
+                      width,
+                      borderRadius: `${isCI ? 4 : 0}px ${isCO ? 4 : 0}px ${isCO ? 4 : 0}px ${isCI ? 4 : 0}px`,
+                    }}
+                  />
+                )
+              })}
             </div>
-
-            {/* ── Day cells ────────────────────────────────────────────── */}
-            {days.map(day => {
-              const res      = resForDay(property.id, day)
-              const dateStr  = format(day, 'yyyy-MM-dd')
-              const isCI     = res?.check_in === dateStr
-              const today    = isToday(day)
-              const monthSep = day.getDate() === 1 && !isSameMonth(day, month1)
-
-              return (
-                <div
-                  key={day.toISOString()}
-                  className={[
-                    'flex-shrink-0 relative cursor-pointer border-l',
-                    today        ? 'bg-[#fff0f2] border-l-[#ff385c] border-l-2' : 'border-[#f1f5f9]',
-                    monthSep     ? 'border-l-[#e2e8f0] border-l-2'              : '',
-                  ].join(' ')}
-                  style={{ width: DAY_W, height: ROW_H }}
-                  onClick={() => res ? openEdit(res) : openNew(property.id)}
-                >
-                  {res && (
-                    <ReservationBlock
-                      reservation={res}
-                      onClick={openEdit}
-                      style={{
-                        borderRadius: isCI ? '4px 0 0 4px' : '0',
-                        left:  isCI ? 2 : 0,
-                        right: 0,
-                      }}
-                    />
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        ))}
+          )
+        })}
 
         {properties.length === 0 && (
           <div className="text-center py-12 text-[#94a3b8] text-sm">
