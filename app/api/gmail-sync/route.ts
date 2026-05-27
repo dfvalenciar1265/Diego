@@ -83,10 +83,19 @@ async function syncHandler(req: NextRequest, fromCron: boolean) {
     return NextResponse.json({ error: msg }, { status: 500 })
   }
 
+  // Determine lookback window:
+  //   • Cron runs    → 7 days  (only needs recent bookings)
+  //   • Manual/POST  → ?days param, default 365 (catch old confirmed emails)
+  const isFromCron = fromCron && hasValidSecret
+  const defaultDays = isFromCron ? 7 : 365
+  const daysParam = req.nextUrl?.searchParams.get('days')
+  const lookbackDays = daysParam ? Math.max(1, Math.min(1825, parseInt(daysParam, 10))) : defaultDays
+  const sinceDate = new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000)
+
   // Fetch all Airbnb emails (confirmadas + actualizadas)
   let emailResult
   try {
-    emailResult = await fetchAirbnbEmails(accessToken)
+    emailResult = await fetchAirbnbEmails(accessToken, sinceDate)
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     await db.from('gmail_sync_log').insert({ triggered_by: triggeredBy, new_count: 0, error: msg })
@@ -133,8 +142,18 @@ async function syncHandler(req: NextRequest, fromCron: boolean) {
     ok: true,
     new_count: newCount,
     updated_count: updatedCount,
-    emails_found: emailResult.confirmed.length + emailResult.updated.length,
+    emails_parsed: emailResult.confirmed.length + emailResult.updated.length,
+    threads_fetched: emailResult.threads_fetched,
+    skipped_no_room: emailResult.skipped_no_room,
+    d_empty_text: emailResult.d_empty_text,
+    d_not_airbnb: emailResult.d_not_airbnb,
+    d_parse_fail: emailResult.d_parse_fail,
+    d_fail_code: emailResult.d_fail_code,
+    d_fail_guest: emailResult.d_fail_guest,
+    d_fail_dates: emailResult.d_fail_dates,
     triggered_by: triggeredBy,
+    lookback_days: lookbackDays,
+    since_date: sinceDate.toISOString().slice(0, 10),
   })
 }
 

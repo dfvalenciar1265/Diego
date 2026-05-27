@@ -1,6 +1,10 @@
 /**
  * Gmail sync library — parses Airbnb emails (both "confirmada" and "actualizada")
  * and returns structured data for the sync route.
+ *
+ * Airbnb now sends HTML-only emails (no text/plain MIME part).  The helpers
+ * below strip HTML to readable text so the same regex parsers work on both
+ * old plaintext and new HTML-only emails.
  */
 
 export interface ParsedReservation {
@@ -24,6 +28,15 @@ export interface UpdatedReservationFlag {
 export interface SyncEmailResult {
   confirmed: ParsedReservation[]
   updated: UpdatedReservationFlag[]
+  threads_fetched: number   // total threads seen
+  skipped_no_room: number  // emails dropped because room ID not in map
+  // debug counters (visible in API response for admin diagnostics)
+  d_empty_text: number     // getMessagePlaintext returned empty
+  d_not_airbnb: number     // email is from Airbnb but not a reservation/update type
+  d_parse_fail: number     // parseConfirmationEmail returned null
+  d_fail_code: number      // └─ code regex failed
+  d_fail_guest: number     // └─ guest name regex failed
+  d_fail_dates: number     // └─ fewer than 2 dates found
 }
 
 // ─── Airbnb room ID → internal property UUID ─────────────────────────────────
@@ -34,6 +47,56 @@ const ROOM_TO_PROPERTY: Record<string, string> = {
   '772410685942787007': '823591d2-e4a9-4893-bd01-f1394a38545d', // Marina Rey 1104
   '857001462739188238': 'b73c70dd-204b-42f1-a1e1-674de53eca84', // Conquistador 1821
   '675576989308773376': '4b10f347-cf1b-4b89-81b6-b73c41d697a3', // Apto 1303
+}
+
+// ─── HTML helpers ─────────────────────────────────────────────────────────────
+
+/**
+ * Strips HTML to readable plain text.
+ * - Inserts newlines at block-level closing tags (p, div, td, tr, h1-h6, li, br)
+ * - Preserves href URLs inline so URL-based parsers still work
+ * - Decodes common HTML entities
+ */
+function stripHtml(html: string): string {
+  return html
+    // Keep href URLs as plain text (update emails extract the code from the URL)
+    .replace(/href="([^"]+)"/gi, 'href="$1" $1 ')
+    // Newline at block-level closing tags
+    .replace(/<\/(?:p|div|td|tr|h[1-6]|li)\b[^>]*>/gi, '\n')
+    .replace(/<br\s*\/?>/gi, '\n')
+    // Strip all remaining tags
+    .replace(/<[^>]+>/g, ' ')
+    // Decode entities
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&#(\d+);/g, (_, n: string) => String.fromCharCode(parseInt(n, 10)))
+    .replace(/&[a-z]+;/gi, ' ')
+    // Normalise whitespace
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n[ \t]+/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+/**
+ * Recursively searches a MIME part tree for the first part of the given type.
+ * Returns the decoded UTF-8 string, or null if not found.
+ */
+function findMimePart(parts: GmailMessagePart[], mimeType: string): string | null {
+  for (const part of parts) {
+    if (part.mimeType === mimeType && part.body.data) {
+      // Gmail uses base64url; convert to standard base64 before decoding
+      const b64 = part.body.data.replace(/-/g, '+').replace(/_/g, '/')
+      return Buffer.from(b64, 'base64').toString('utf-8')
+    }
+    if (part.mimeType?.startsWith('multipart/') && part.parts) {
+      const found = findMimePart(part.parts, mimeType)
+      if (found) return found
+    }
+  }
+  return null
 }
 
 // ─── Google OAuth token exchange ─────────────────────────────────────────────
@@ -61,9 +124,17 @@ export async function getAccessToken(refreshToken: string): Promise<string> {
 // ─── Gmail API helpers ────────────────────────────────────────────────────────
 
 interface GmailThread { id: string }
-interface GmailMessagePart { mimeType: string; body: { data?: string } }
+
+interface GmailMessagePart {
+  mimeType: string
+  body: { data?: string }
+  parts?: GmailMessagePart[]   // present for multipart/* parts
+}
+
 interface GmailMessage {
   payload?: {
+    headers?: Array<{ name: string; value: string }>
+    mimeType?: string
     parts?: GmailMessagePart[]
     body?: { data?: string }
   }
@@ -84,6 +155,17 @@ async function gmailSearch(
   return res.json() as Promise<{ threads: GmailThread[]; nextPageToken?: string }>
 }
 
+/**
+ * Fetches a message's readable body.
+ *
+ * Priority:
+ *   1. text/plain MIME part  (older Airbnb emails)
+ *   2. text/html MIME part stripped to plain text  (current Airbnb emails)
+ *   3. Top-level body field (HTML stripped if needed)
+ *
+ * The email Subject header is prepended so parsers can extract the full
+ * guest name from "Reservación confirmada: Nombre Apellido llega el X".
+ */
 export async function getMessagePlaintext(
   accessToken: string,
   messageId: string
@@ -95,13 +177,33 @@ export async function getMessagePlaintext(
   if (!res.ok) return ''
   const msg = await res.json() as GmailMessage
 
-  for (const part of msg.payload?.parts ?? []) {
-    if (part.mimeType === 'text/plain' && part.body.data) {
-      return Buffer.from(part.body.data, 'base64').toString('utf-8')
+  // Extract subject so parsers can get the full guest name from it
+  const subject =
+    msg.payload?.headers?.find(h => h.name.toLowerCase() === 'subject')?.value ?? ''
+
+  const parts = msg.payload?.parts ?? []
+  let body = ''
+
+  const plain = findMimePart(parts, 'text/plain')
+  if (plain) {
+    body = plain
+  } else {
+    const html = findMimePart(parts, 'text/html')
+    if (html) {
+      body = stripHtml(html)
+    } else {
+      // Fallback: top-level body (may be HTML)
+      const data = msg.payload?.body?.data
+      if (data) {
+        const b64 = data.replace(/-/g, '+').replace(/_/g, '/')
+        const decoded = Buffer.from(b64, 'base64').toString('utf-8')
+        body = decoded.trimStart().startsWith('<') ? stripHtml(decoded) : decoded
+      }
     }
   }
-  const data = msg.payload?.body?.data
-  return data ? Buffer.from(data, 'base64').toString('utf-8') : ''
+
+  // Prepend subject line so guest-name regex can use it
+  return subject ? `Subject: ${subject}\n\n${body}` : body
 }
 
 /** Fetches first message ID from a thread */
@@ -113,91 +215,6 @@ async function getFirstMessageId(accessToken: string, threadId: string): Promise
   if (!res.ok) return null
   const t = await res.json() as { messages?: Array<{ id: string }> }
   return t.messages?.[0]?.id ?? null
-}
-
-// ─── Email parsers ────────────────────────────────────────────────────────────
-
-/**
- * Parses a "Reservación confirmada" plaintext body.
- * Returns null if the email can't be parsed or is a cancellation.
- */
-export function parseConfirmationEmail(text: string): Omit<ParsedReservation, 'property_id'> | null {
-  if (!text.includes('Código de confirmación') && !text.includes('Confirmation code')) return null
-  if (text.includes('cancelada') || text.includes('cancelled')) return null
-
-  // Airbnb code
-  const codeMatch = text.match(/(?:Código de confirmación|Confirmation code)[:\s]+([A-Z0-9]{8,12})/i)
-  if (!codeMatch) return null
-  const airbnb_code = codeMatch[1]
-
-  // Guest name
-  const guestMatch =
-    text.match(/(?:Huésped|Guest)[:\s]+([^\n]+)/i) ??
-    text.match(/([A-Z][a-záéíóúñ]+(?:\s[A-Z][a-záéíóúñ]+)+)\s+ha reservado/i)
-  if (!guestMatch) return null
-  const guest_name = guestMatch[1].trim()
-
-  // Dates — format: "6 jun. 2026" or "6 de junio de 2026"
-  const datePattern = /(\d{1,2})\s+(?:de\s+)?([a-záéíóúñ]+)\.?\s+(?:de\s+)?(\d{4})/gi
-  const dates: Date[] = []
-  let match: RegExpExecArray | null
-
-  while ((match = datePattern.exec(text)) !== null) {
-    const d = parseSpanishDate(match[1], match[2], match[3])
-    if (d) dates.push(d)
-  }
-
-  if (dates.length < 2) return null
-  dates.sort((a, b) => a.getTime() - b.getTime())
-  const check_in  = toISODate(dates[0])
-  const check_out = toISODate(dates[dates.length - 1])
-
-  // Amount
-  const amountMatch = text.match(/(?:Total|Cobro del anfitrión|Host payout)[:\s]+\$?([\d.,]+)/i)
-  const amount = amountMatch
-    ? parseFloat(amountMatch[1].replace(/\./g, '').replace(',', '.'))
-    : 0
-
-  // Guest count
-  const guestsMatch = text.match(/(\d+)\s+(?:huéspedes?|guests?)/i)
-  const guestCount = guestsMatch?.[1] ?? '?'
-
-  // Cancellation policy
-  const cancelMatch = text.match(/(?:Política de cancelación|Cancellation policy)[:\s]+([^\n]+)/i)
-  const cancelPolicy = cancelMatch ? cancelMatch[1].trim() : 'No especificada'
-
-  // Times
-  const ciTimeMatch = text.match(/(?:Check-in|Llegada)[:\s]+(\d{1,2}(?::\d{2})?\s*[ap]m)/i)
-  const coTimeMatch = text.match(/(?:Check-out|Salida)[:\s]+(\d{1,2}(?::\d{2})?\s*[ap]m)/i)
-
-  const notes = [
-    `Huéspedes: ${guestCount}`,
-    `Cancelación: ${cancelPolicy}`,
-    `Código: ${airbnb_code}`,
-    ciTimeMatch ? `Check-in: ${ciTimeMatch[1]}` : 'Check-in: 3pm',
-    coTimeMatch ? `Check-out: ${coTimeMatch[1]}` : 'Check-out: 12pm',
-  ].join(' | ')
-
-  return { airbnb_code, guest_name, check_in, check_out, amount, notes, source: 'airbnb', status: 'confirmed' }
-}
-
-/**
- * Parses a "Reservación actualizada" plaintext body.
- * These emails don't contain dates — only the code (in the URL) and guest name.
- */
-export function parseUpdateEmail(text: string): UpdatedReservationFlag | null {
-  if (!text.includes('SE ACTUALIZÓ') && !text.includes('actualizó la reservación')) return null
-
-  // Code from the "Accede al itinerario" URL
-  const codeMatch = text.match(/reservations\/details\/([A-Z0-9]{8,12})/i)
-  if (!codeMatch) return null
-  const airbnb_code = codeMatch[1]
-
-  // Guest name from "SE ACTUALIZÓ LA RESERVACIÓN CON [NAME]"
-  const nameMatch = text.match(/SE ACTUALIZÓ LA RESERVACIÓN CON ([^\n]+)/i)
-  const guest_name = nameMatch ? nameMatch[1].trim() : 'Desconocido'
-
-  return { airbnb_code, guest_name }
 }
 
 // ─── Date utilities ───────────────────────────────────────────────────────────
@@ -227,8 +244,156 @@ function toISODate(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
+/**
+ * When HTML-stripped emails omit the year, infer it:
+ *   - Month ≥ current month → current year  (upcoming)
+ *   - Month < current month by ≤ 3 → current year  (recent past)
+ *   - Month < current month by > 3 → next year  (far-future booking)
+ */
+function inferReservationYear(month: number): number {
+  const now = new Date()
+  const currentYear  = now.getFullYear()
+  const currentMonth = now.getMonth() + 1
+  if (month >= currentMonth) return currentYear
+  return currentMonth - month > 3 ? currentYear + 1 : currentYear
+}
+
 function getRoomId(text: string): string | null {
   return text.match(/airbnb\.com(?:\.co)?\/rooms\/(\d+)/i)?.[1] ?? null
+}
+
+// ─── Email parsers ────────────────────────────────────────────────────────────
+
+// Internal step-failure counters — populated by parseConfirmationEmail, consumed by fetchAirbnbEmails.
+// Not exported; only mutated within a single call stack (not concurrent-safe, but good enough for
+// debug diagnostics in this single-tenant app).
+let _stepCounters = { failCode: 0, failGuest: 0, failDates: 0 }
+
+/**
+ * Parses a "Reservación confirmada" email body (plaintext OR HTML-stripped).
+ * Returns null if the email can't be parsed or is a cancellation.
+ */
+export function parseConfirmationEmail(text: string): Omit<ParsedReservation, 'property_id'> | null {
+  // Case-insensitive guard — Airbnb now sends ALL-CAPS headers ("CÓDIGO DE CONFIRMACIÓN")
+  const textLc = text.toLowerCase()
+  if (!textLc.includes('código de confirmación') && !textLc.includes('confirmation code')) return null
+
+  // Skip actual cancellation emails.
+  // IMPORTANT: Do NOT use a broad .includes('cancelada') — every confirmation email's
+  // cancellation-policy section says "noches canceladas" which would false-positive here.
+  // Only match phrases that appear exclusively in cancellation notification emails.
+  const isCancelled =
+    /reservaci[oó]n\s+cancelada\b/i.test(text) ||    // "Reservación cancelada"
+    /booking\s+cancell/i.test(text) ||                // "booking cancelled/cancellation"
+    /\bha\s+cancelado\s+su\s+reserva/i.test(text) || // "ha cancelado su reserva"
+    /your\s+reservation\s+has\s+been\s+cancell/i.test(text)
+  if (isCancelled) return null
+
+  // ── Airbnb confirmation code ──────────────────────────────────────────────
+  // Old plaintext: "Código de confirmación: HMXXXXXX"
+  // New HTML:      "Código de confirmación\nHMXXXXXX" (code on next line)
+  const codeMatch =
+    text.match(/(?:Código de confirmación|Confirmation code)[:\s]+([A-Z0-9]{8,12})/i) ??
+    text.match(/(?:Código de confirmación|Confirmation code)\s*\n\s*([A-Z0-9]{8,12})/i)
+  if (!codeMatch) { _stepCounters.failCode++; return null }
+  const airbnb_code = codeMatch[1]
+
+  // ── Guest name ────────────────────────────────────────────────────────────
+  // Priority order (most reliable → least):
+  //   1. Subject line: "Reservación confirmada: Nombre Apellido llega el X"
+  //      (most reliable — full name, always present)
+  //   2. Plaintext label: "Huésped: Nombre" or "Guest: Nombre"
+  //      (require colon so "EL HUÉSPED PAGÓ" doesn't match as "name = PAGÓ")
+  //   3. Body: "Nombre Apellido ha reservado"
+  const guestMatch =
+    text.match(/(?:Reservaci[oó]n\s+confirmada|Nueva\s+reservaci[oó]n)[:\s!*]+([A-ZÁÉÍÓÚÑa-záéíóúñ][^\n:]+?)\s+llega/i) ??
+    text.match(/(?:Huésped|Guest):\s*([^\n]+)/i) ??
+    text.match(/([A-Z][a-záéíóúñ]+(?:\s[A-Z][a-záéíóúñ]+)+)\s+ha reservado/i)
+  if (!guestMatch) { _stepCounters.failGuest++; return null }
+  const guest_name = guestMatch[1].trim()
+
+  // ── Dates ─────────────────────────────────────────────────────────────────
+  // Format 1 (plaintext): "6 jun. 2026" or "6 de junio de 2026"
+  // Format 2 (HTML-stripped): "mar, 26 may" or "jue, 28 may" (no year → infer)
+  const dates: Date[] = []
+  let match: RegExpExecArray | null
+
+  const fullDatePattern = /(\d{1,2})\s+(?:de\s+)?([a-záéíóúñ]+)\.?\s+(?:de\s+)?(\d{4})/gi
+  while ((match = fullDatePattern.exec(text)) !== null) {
+    const d = parseSpanishDate(match[1], match[2], match[3])
+    if (d) dates.push(d)
+  }
+
+  if (dates.length < 2) {
+    // Try HTML short format: "día-semana, DD MMM"
+    dates.length = 0
+    const shortDatePattern =
+      /(?:lun|mar|mi[eé]|jue|vie|s[aá]b|dom|mon|tue|wed|thu|fri|sat|sun)[,.]?\s*(\d{1,2})\s+([a-záéíóúñ]+)/gi
+    while ((match = shortDatePattern.exec(text)) !== null) {
+      const m = MONTH_MAP[match[2].toLowerCase()]
+      if (!m) continue
+      const year = inferReservationYear(m)
+      dates.push(new Date(year, m - 1, Number(match[1])))
+    }
+  }
+
+  if (dates.length < 2) { _stepCounters.failDates++; return null }
+  dates.sort((a, b) => a.getTime() - b.getTime())
+  const check_in  = toISODate(dates[0])
+  const check_out = toISODate(dates[dates.length - 1])
+
+  // ── Amount (host payout) ──────────────────────────────────────────────────
+  // Prefer "GANAS $X" (net host payout after Airbnb fees) in the new email format.
+  // Fallback to "Total" or "Cobro al/del anfitrión" for older format.
+  const amountMatch =
+    text.match(/GANAS\s+\$?([\d.,]+)/i) ??
+    text.match(/(?:Total|Cobro\s+(?:del|al)\s+anfitri[oó]n|Host\s+payout)[^\d$\n]*(?:\n[^\d$\n]*)?\$?([\d.,]+)/i)
+  const amount = amountMatch
+    ? parseFloat(amountMatch[1].replace(/\./g, '').replace(',', '.'))
+    : 0
+
+  // ── Guest count ───────────────────────────────────────────────────────────
+  const guestsMatch = text.match(/(\d+)\s+(?:huéspedes?|guests?|viajeros?)/i)
+  const guestCount = guestsMatch?.[1] ?? '?'
+
+  // ── Cancellation policy ───────────────────────────────────────────────────
+  const cancelMatch = text.match(/(?:Política de cancelación|Cancellation policy)[:\s]+([^\n]+)/i)
+  const cancelPolicy = cancelMatch ? cancelMatch[1].trim() : 'No especificada'
+
+  // ── Times ─────────────────────────────────────────────────────────────────
+  // Allow "3:00 p.m." (with dots) as well as "3pm"
+  const ciTimeMatch = text.match(/(?:Check-in|Llegada)[:\s\n]+(\d{1,2}(?::\d{2})?\s*[ap]\.?m\.?)/i)
+  const coTimeMatch = text.match(/(?:Check-out|Salida)[:\s\n]+(\d{1,2}(?::\d{2})?\s*[ap]\.?m\.?)/i)
+
+  const notes = [
+    `Huéspedes: ${guestCount}`,
+    `Cancelación: ${cancelPolicy}`,
+    `Código: ${airbnb_code}`,
+    ciTimeMatch ? `Check-in: ${ciTimeMatch[1]}` : 'Check-in: 3pm',
+    coTimeMatch ? `Check-out: ${coTimeMatch[1]}` : 'Check-out: 12pm',
+  ].join(' | ')
+
+  return { airbnb_code, guest_name, check_in, check_out, amount, notes, source: 'airbnb', status: 'confirmed' }
+}
+
+/**
+ * Parses a "Reservación actualizada" email body (plaintext OR HTML-stripped).
+ * These emails don't contain dates — only the code (in the URL) and guest name.
+ */
+export function parseUpdateEmail(text: string): UpdatedReservationFlag | null {
+  const textLc = text.toLowerCase()
+  if (!textLc.includes('actualizó la reservación') && !textLc.includes('se actualizó')) return null
+
+  // Code from the "Accede al itinerario" URL (preserved by stripHtml via href extraction)
+  const codeMatch = text.match(/reservations\/details\/([A-Z0-9]{8,12})/i)
+  if (!codeMatch) return null
+  const airbnb_code = codeMatch[1]
+
+  // Guest name: "SE ACTUALIZÓ LA RESERVACIÓN CON [Name]"
+  const nameMatch = text.match(/(?:SE ACTUALIZÓ|se actualizó|actualizó)\s+la\s+reservaci[oó]n\s+con\s+([^\n]+)/i)
+  const guest_name = nameMatch ? nameMatch[1].trim().split(/\s{2,}/)[0] : 'Desconocido'
+
+  return { airbnb_code, guest_name }
 }
 
 // ─── Main export ──────────────────────────────────────────────────────────────
@@ -248,49 +413,70 @@ export async function fetchAirbnbEmails(
 
   const confirmed: ParsedReservation[] = []
   const updated: UpdatedReservationFlag[] = []
+  let threadsFetched = 0
+  let skippedNoRoom = 0
+  let dEmptyText = 0
+  let dNotAirbnb = 0
+  let dParseFail = 0
+  // Reset step-level counters for this run
+  _stepCounters = { failCode: 0, failGuest: 0, failDates: 0 }
 
-  // Search for both types simultaneously with OR
-  const query = `from:automated@airbnb.com {subject:confirmación subject:actualizada} ${dateFilter}`
+  // Broad search: all emails from Airbnb's automated sender.
+  // Subject filters miss HTML-only emails with different wording; content parsing filters.
+  const query = `from:automated@airbnb.com ${dateFilter}`
 
   let pageToken: string | undefined
   do {
     const { threads = [], nextPageToken } = await gmailSearch(accessToken, query, pageToken)
     pageToken = nextPageToken
+    threadsFetched += threads.length
 
     for (const thread of threads) {
       const msgId = await getFirstMessageId(accessToken, thread.id)
       if (!msgId) continue
 
       const text = await getMessagePlaintext(accessToken, msgId)
-      if (!text) continue
+      if (!text) { dEmptyText++; continue }
 
-      // Determine email type by content
-      if (text.includes('SE ACTUALIZÓ') || text.includes('actualizó la reservación')) {
-        // "Reservación actualizada" — extract code for flagging
+      // Determine email type by content (case-insensitive — Airbnb uses ALL CAPS in some formats)
+      const textLc = text.toLowerCase()
+      const isUpdate = textLc.includes('actualizó la reservación') || textLc.includes('se actualizó')
+      const isConfirm = textLc.includes('código de confirmación') || textLc.includes('confirmation code')
+
+      if (!isUpdate && !isConfirm) { dNotAirbnb++; continue }
+
+      if (isUpdate) {
         const flag = parseUpdateEmail(text)
         if (flag) updated.push(flag)
       } else {
-        // "Reservación confirmada" — parse fully
         const parsed = parseConfirmationEmail(text)
-        if (!parsed) continue
+        if (!parsed) { dParseFail++; continue }
 
         const roomId = getRoomId(text)
         const property_id = roomId ? ROOM_TO_PROPERTY[roomId] : undefined
-        if (!property_id) continue
+        if (!property_id) { skippedNoRoom++; continue }
 
         confirmed.push({ ...parsed, property_id })
       }
     }
   } while (pageToken)
 
-  return { confirmed, updated }
+  return {
+    confirmed, updated,
+    threads_fetched: threadsFetched,
+    skipped_no_room: skippedNoRoom,
+    d_empty_text: dEmptyText,
+    d_not_airbnb: dNotAirbnb,
+    d_parse_fail: dParseFail,
+    d_fail_code: _stepCounters.failCode,
+    d_fail_guest: _stepCounters.failGuest,
+    d_fail_dates: _stepCounters.failDates,
+  }
 }
 
 /**
  * Given an airbnb_code from an "actualizada" email, searches Gmail for the
  * original confirmation email and parses it. Returns null if not found.
- *
- * Used when an "actualizada" arrives for a reservation not yet in the DB.
  */
 export async function fetchConfirmationByCode(
   accessToken: string,
@@ -305,7 +491,6 @@ export async function fetchConfirmationByCode(
     const text = await getMessagePlaintext(accessToken, msgId)
     if (!text) continue
 
-    // Must be a confirmation email containing this exact code
     if (!text.includes(code)) continue
     if (text.includes('SE ACTUALIZÓ') || text.includes('actualizó')) continue
 
