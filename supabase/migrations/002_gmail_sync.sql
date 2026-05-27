@@ -7,8 +7,17 @@
 ALTER TABLE public.reservations
   ADD COLUMN IF NOT EXISTS airbnb_code TEXT;
 
-ALTER TABLE public.reservations
-  ADD CONSTRAINT IF NOT EXISTS reservations_airbnb_code_key UNIQUE (airbnb_code);
+-- Add unique constraint only if it doesn't already exist
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'reservations_airbnb_code_key'
+  ) THEN
+    ALTER TABLE public.reservations
+      ADD CONSTRAINT reservations_airbnb_code_key UNIQUE (airbnb_code);
+  END IF;
+END $$;
 
 -- Backfill existing reservations: extract code from notes field
 -- Notes format: "... | Código: HMXXXXXX | ..."
