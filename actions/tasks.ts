@@ -46,7 +46,7 @@ export async function getTasks(filters?: {
   const supabase = await createClient()
   let query = supabase
     .from('tasks')
-    .select('*, property:properties(name), assignee:team_members(name)')
+    .select('*, property:properties(name), assignee:team_members(name), reservation:reservations(check_in, check_out, notes, guest_name)')
     .order('scheduled_for', { ascending: true })
 
   if (filters?.date) query = query.eq('scheduled_for', filters.date)
@@ -56,6 +56,22 @@ export async function getTasks(filters?: {
   const { data, error } = await query
   if (error) throw new Error(error.message)
   return data ?? []
+}
+
+/** Updates the notes field of a task (used for check-in time annotation). */
+export async function updateTaskNotes(
+  taskId: string,
+  notes: string
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient()
+  const { error } = await supabase
+    .from('tasks')
+    .update({ notes })
+    .eq('id', taskId)
+  if (error) return { success: false, error: error.message }
+  revalidatePath('/')
+  revalidatePath('/tasks')
+  return { success: true }
 }
 
 export async function createTask(

@@ -7,6 +7,7 @@ import { getPurchaseRequests } from '@/actions/purchases'
 import { KPICard } from '@/components/dashboard/KPICard'
 import { StockAlert } from '@/components/dashboard/StockAlert'
 import { TaskCard } from '@/components/tasks/TaskCard'
+import { PrepTaskCard } from '@/components/tasks/PrepTaskCard'
 import { ResolvePurchaseButton } from '@/components/dashboard/ResolvePurchaseButton'
 import { canDo } from '@/lib/permissions'
 import { format } from 'date-fns'
@@ -59,14 +60,14 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      {/* KPIs — scroll horizontal (sin Ingresos) */}
+      {/* KPIs — próximos 7 días */}
       <div className="flex gap-3 px-4 pt-4 overflow-x-auto pb-1 scrollbar-none">
         <KPICard label="Check-ins"  value={kpis.checkInsToday}
-                 color="#ff385c" subtitle="hoy" icon="🏠" />
+                 color="#ff385c" subtitle="próx. 7 días" icon="🏠" />
         <KPICard label="Check-outs" value={kpis.checkOutsToday}
-                 color="#22c55e" subtitle="hoy" icon="🚪" />
+                 color="#22c55e" subtitle="próx. 7 días" icon="🚪" />
         <KPICard label="Tareas"     value={kpis.pendingTasks}
-                 color="#f97316" subtitle="pendientes" icon="✅" />
+                 color="#f97316" subtitle="próx. 7 días" icon="✅" />
       </div>
 
       <div className="px-4 pt-4 space-y-4">
@@ -146,7 +147,7 @@ export default async function DashboardPage() {
                 </div>
               )}
 
-              {/* Preparación */}
+              {/* Preparación — tarjeta especial con datos de reserva */}
               {prepTasks.length > 0 && (
                 <div>
                   <div className="flex items-center gap-2 mb-2">
@@ -157,7 +158,7 @@ export default async function DashboardPage() {
                     <div className="flex-1 h-px bg-[#ffe4e8]" />
                   </div>
                   <div className="space-y-3">
-                    {prepTasks.map((t: Task) => <TaskCard key={t.id} task={t} />)}
+                    {prepTasks.map((t: Task) => <PrepTaskCard key={t.id} task={t as any} />)}
                   </div>
                 </div>
               )}

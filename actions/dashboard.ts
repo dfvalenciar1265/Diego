@@ -40,16 +40,21 @@ export async function getTodayCheckOuts(): Promise<TodayCheckOut[]> {
 export async function getDashboardKPIs(): Promise<DashboardKPIs> {
   const supabase = await createClient()
   const today = format(new Date(), 'yyyy-MM-dd')
+  const in7days = format(new Date(Date.now() + 7 * 86400000), 'yyyy-MM-dd')
   const monthStart = format(startOfMonth(new Date()), 'yyyy-MM-dd')
   const monthEnd = format(endOfMonth(new Date()), 'yyyy-MM-dd')
 
   const [checkIns, checkOuts, pendingTasks, monthlyRevenue] = await Promise.all([
+    // Check-ins in the next 7 days (today inclusive)
     supabase.from('reservations').select('id', { count: 'exact', head: true })
-      .eq('check_in', today).eq('status', 'confirmed'),
+      .gte('check_in', today).lte('check_in', in7days).eq('status', 'confirmed'),
+    // Check-outs in the next 7 days (today inclusive)
     supabase.from('reservations').select('id', { count: 'exact', head: true })
-      .eq('check_out', today).eq('status', 'confirmed'),
+      .gte('check_out', today).lte('check_out', in7days).eq('status', 'confirmed'),
+    // Pending tasks in the next 7 days
     supabase.from('tasks').select('id', { count: 'exact', head: true })
-      .in('status', ['pending', 'in_progress']),
+      .in('status', ['pending', 'in_progress'])
+      .gte('scheduled_for', today).lte('scheduled_for', in7days),
     supabase.from('reservations').select('amount')
       .gte('check_in', monthStart).lte('check_in', monthEnd)
       .eq('status', 'confirmed'),
