@@ -1,11 +1,10 @@
 'use client'
 import { useState, useTransition } from 'react'
-import { updateTaskStatus, updateTaskNotes } from '@/actions/tasks'
+import { updateTaskNotes } from '@/actions/tasks'
 import type { Task } from '@/lib/types'
 
 type PrepTask = Task & {
   property?: { name: string }
-  assignee?: { name: string }
   reservation?: {
     check_in: string
     check_out: string
@@ -14,140 +13,156 @@ type PrepTask = Task & {
   } | null
 }
 
-interface Props {
-  task: PrepTask
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+/** "3:00 p.m." → "15:00"  |  "12:00 p.m." → "12:00"  |  "" → "" */
+function reservationTimeTo24h(notes: string | null, field: 'Check-in' | 'Check-out'): string {
+  if (!notes) return ''
+  const m = notes.match(new RegExp(`${field}:\\s*(\\d+):(\\d+)\\s*(a|p)\\.m\\.`, 'i'))
+  if (!m) return ''
+  let h = parseInt(m[1], 10)
+  const mins = m[2]
+  const period = m[3].toLowerCase()
+  if (period === 'p' && h !== 12) h += 12
+  if (period === 'a' && h === 12) h = 0
+  return `${String(h).padStart(2, '0')}:${mins}`
 }
 
-/** Parses reservation notes to extract a field value.
- *  Notes format: "Huéspedes: 4 | Cancelación: Moderada | Check-in: 3:00 p.m. | Check-out: 12:00 p.m."
- */
-function parseNote(notes: string | null | undefined, key: string): string {
-  if (!notes) return '—'
-  const match = notes.match(new RegExp(`${key}:\\s*([^|]+)`, 'i'))
-  return match ? match[1].trim() : '—'
+/** "15:00" → "3:00 pm" */
+function to12h(t: string): string {
+  if (!t) return '—'
+  const [h, m] = t.split(':').map(Number)
+  const suffix = h >= 12 ? 'pm' : 'am'
+  const h12 = h % 12 || 12
+  return m === 0 ? `${h12}${suffix}` : `${h12}:${String(m).padStart(2, '0')}${suffix}`
 }
 
-function formatDateShort(iso: string | undefined): string {
+/** "2026-05-28" → "28 may" */
+function shortDate(iso: string | undefined): string {
   if (!iso) return '—'
   const [, mm, dd] = iso.split('-')
   const months = ['', 'ene', 'feb', 'mar', 'abr', 'may', 'jun',
-                  'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
+    'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
   return `${parseInt(dd, 10)} ${months[parseInt(mm, 10)]}`
 }
 
-export function PrepTaskCard({ task }: Props) {
-  const [isPending, startTransition] = useTransition()
-  const [noteValue, setNoteValue] = useState(task.notes ?? '')
-  const [saved, setSaved] = useState(false)
+/** Parse task notes → { time24, note }
+ *  Storage format: "HH:MM|freetext"
+ *  Legacy (auto-generated): "Preparación para …" → ignored, start fresh
+ */
+function parseAnnotation(raw: string | null): { time24: string; note: string } {
+  if (!raw) return { time24: '', note: '' }
+  const m = raw.match(/^(\d{2}:\d{2})\|(.*)$/)
+  if (m) return { time24: m[1], note: m[2] }
+  if (raw.startsWith('Preparación para')) return { time24: '', note: '' }
+  return { time24: '', note: raw }
+}
 
+function buildAnnotation(time24: string, note: string): string {
+  return time24 ? `${time24}|${note}` : note
+}
+
+// ── Component ─────────────────────────────────────────────────────────────────
+
+interface Props { task: PrepTask }
+
+export function PrepTaskCard({ task }: Props) {
   const res = task.reservation
   const resNotes = res?.notes ?? null
-  const guests    = parseNote(resNotes, 'Huéspedes')
-  const ciTime    = parseNote(resNotes, 'Check-in')
-  const checkIn   = res?.check_in
-  const checkOut  = res?.check_out
-  const guestName = res?.guest_name ?? task.property?.name ?? '—'
 
-  const isDone = task.status === 'done'
+  const guestName = res?.guest_name ?? '—'
+  const guests    = resNotes?.match(/Huéspedes:\s*(\d+)/i)?.[1] ?? '?'
 
-  function complete() {
-    startTransition(async () => { await updateTaskStatus(task.id, 'done') })
-  }
+  // Default times from reservation
+  const defaultCiTime = reservationTimeTo24h(resNotes, 'Check-in')
+  const defaultCoTime = reservationTimeTo24h(resNotes, 'Check-out')
 
-  function saveNote() {
-    startTransition(async () => {
-      await updateTaskNotes(task.id, noteValue)
-      setSaved(true)
-      setTimeout(() => setSaved(false), 2000)
-    })
+  const { time24: savedTime, note: savedNote } = parseAnnotation(task.notes)
+
+  const [editingTime, setEditingTime] = useState(false)
+  const [ciTime, setCiTime]           = useState(savedTime || defaultCiTime)
+  const [noteText, setNoteText]       = useState(savedNote)
+  const [, startTransition]           = useTransition()
+
+  function saveAnnotation(time: string, note: string) {
+    const content = buildAnnotation(time, note)
+    startTransition(async () => { await updateTaskNotes(task.id, content) })
   }
 
   return (
-    <div className={`bg-white rounded-xl border shadow-[0_1px_3px_rgba(0,0,0,0.06)] p-4
-                     ${isDone ? 'border-[#22c55e] opacity-70' : 'border-[#ff385c33]'}`}>
+    <div className="bg-white rounded-xl border border-[#ff385c22] shadow-[0_1px_3px_rgba(0,0,0,0.06)] p-4">
 
-      {/* Header row */}
-      <div className="flex items-start gap-3">
+      {/* Header */}
+      <div className="flex items-center gap-3 mb-3">
         <div className="w-9 h-9 rounded-xl flex items-center justify-center text-lg flex-shrink-0 bg-[#fff0f2]">
           🛏️
         </div>
-        <div className="flex-1 min-w-0">
+        <div className="min-w-0">
           <p className="font-semibold text-[#0f172a] text-sm leading-tight">
             {task.property?.name ?? '—'}
           </p>
-          <p className="text-xs text-[#94a3b8] mt-0.5 truncate">{guestName}</p>
+          <p className="text-xs text-[#94a3b8] truncate">{guestName}</p>
         </div>
-        {isDone && (
-          <span className="text-xs font-semibold text-[#22c55e] flex-shrink-0">✓ Listo</span>
-        )}
       </div>
 
-      {/* Reservation details grid */}
-      <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-        <div className="bg-[#f8fafc] rounded-lg p-2.5">
-          <p className="text-[#94a3b8] font-medium mb-0.5">Check-in</p>
-          <p className="font-semibold text-[#0f172a]">{formatDateShort(checkIn)}</p>
-          <p className="text-[#64748b]">{ciTime}</p>
+      {/* Dates row */}
+      <div className="grid grid-cols-2 gap-2 mb-3">
+
+        {/* Check-in — tap time to edit */}
+        <div className="bg-[#f8fafc] rounded-xl p-2.5">
+          <p className="text-[10px] text-[#94a3b8] font-semibold mb-1">CHECK-IN</p>
+          <p className="text-sm font-bold text-[#0f172a]">{shortDate(res?.check_in)}</p>
+          {editingTime ? (
+            <input
+              type="time"
+              autoFocus
+              value={ciTime}
+              onChange={e => setCiTime(e.target.value)}
+              onBlur={() => {
+                setEditingTime(false)
+                saveAnnotation(ciTime, noteText)
+              }}
+              className="mt-1 text-xs border border-[#ff385c] rounded-md px-1 py-0.5
+                         focus:outline-none w-full bg-white"
+            />
+          ) : (
+            <button
+              onClick={() => setEditingTime(true)}
+              className="mt-1 text-xs font-medium text-[#ff385c] flex items-center gap-1 hover:underline"
+            >
+              {ciTime ? to12h(ciTime) : '+ hora'} ✏️
+            </button>
+          )}
         </div>
-        <div className="bg-[#f8fafc] rounded-lg p-2.5">
-          <p className="text-[#94a3b8] font-medium mb-0.5">Check-out</p>
-          <p className="font-semibold text-[#0f172a]">{formatDateShort(checkOut)}</p>
-          <p className="text-[#64748b]">12:00 p.m.</p>
+
+        {/* Check-out — display only, smaller */}
+        <div className="bg-[#f8fafc] rounded-xl p-2.5">
+          <p className="text-[10px] text-[#94a3b8] font-semibold mb-1">CHECK-OUT</p>
+          <p className="text-sm font-bold text-[#0f172a]">{shortDate(res?.check_out)}</p>
+          <p className="mt-1 text-[10px] text-[#64748b]">
+            {defaultCoTime ? to12h(defaultCoTime) : '12:00 pm'}
+          </p>
         </div>
       </div>
 
       {/* Guests */}
-      <div className="mt-2 flex items-center gap-1.5 text-xs text-[#64748b]">
+      <p className="text-xs text-[#64748b] mb-3 flex items-center gap-1.5">
         <span>👥</span>
         <span>{guests} huésped{guests !== '1' ? 'es' : ''}</span>
-      </div>
+      </p>
 
-      {/* Editable check-in time note */}
-      {!isDone && (
-        <div className="mt-3">
-          <p className="text-[10px] font-semibold text-[#94a3b8] uppercase tracking-wide mb-1">
-            ✏️ Hora de llegada / Nota
-          </p>
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={noteValue}
-              onChange={e => setNoteValue(e.target.value)}
-              placeholder="Ej: llegarán a las 4pm, llevan mascota…"
-              className="flex-1 text-xs border border-[#e2e8f0] rounded-lg px-3 py-2
-                         focus:outline-none focus:ring-1 focus:ring-[#ff385c] bg-[#fafafa]"
-            />
-            <button
-              onClick={saveNote}
-              disabled={isPending || noteValue === task.notes}
-              className="text-xs px-3 py-2 rounded-lg font-medium transition-colors
-                         disabled:opacity-40"
-              style={{ background: saved ? '#22c55e' : '#6366f1', color: 'white' }}
-            >
-              {saved ? '✓' : isPending ? '…' : 'OK'}
-            </button>
-          </div>
-        </div>
-      )}
+      {/* Note field — just the text, no label header */}
+      <textarea
+        rows={2}
+        value={noteText}
+        onChange={e => setNoteText(e.target.value)}
+        onBlur={() => saveAnnotation(ciTime, noteText)}
+        placeholder="Nota: mascota, llegada tardía, llave…"
+        className="w-full text-xs border border-[#e2e8f0] rounded-xl px-3 py-2
+                   focus:outline-none focus:ring-1 focus:ring-[#ff385c] bg-[#fafafa]
+                   resize-none placeholder:text-[#c4c9d4]"
+      />
 
-      {/* Completar button — no Iniciar for prep tasks */}
-      {!isDone && (
-        <button
-          onClick={complete}
-          disabled={isPending}
-          className="mt-3 w-full h-9 rounded-lg text-sm font-semibold text-white
-                     active:opacity-80 transition-opacity disabled:opacity-50"
-          style={{ background: '#22c55e' }}
-        >
-          {isPending ? '…' : '✓ Marcar como lista'}
-        </button>
-      )}
-
-      {isDone && task.completed_at && (
-        <p className="mt-2 text-xs text-[#22c55e] text-center">
-          ✅ Completado
-        </p>
-      )}
     </div>
   )
 }

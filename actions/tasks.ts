@@ -58,6 +58,23 @@ export async function getTasks(filters?: {
   return data ?? []
 }
 
+/** Assigns a cleaner and sets status to in_progress in one round-trip. */
+export async function assignAndStartTask(
+  taskId: string,
+  memberId: string,
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient()
+  const { error } = await supabase
+    .from('tasks')
+    .update({ assigned_to: memberId, status: 'in_progress' })
+    .eq('id', taskId)
+  if (error) return { success: false, error: error.message }
+  revalidatePath('/cleaning')
+  revalidatePath('/tasks')
+  revalidatePath('/')
+  return { success: true }
+}
+
 /** Updates the notes field of a task (used for check-in time annotation). */
 export async function updateTaskNotes(
   taskId: string,

@@ -4,7 +4,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { assignTask } from '@/actions/tasks'
+import { assignTask, assignAndStartTask } from '@/actions/tasks'
 import { createTeamMember, deactivateTeamMember } from '@/actions/team'
 import { formatDate } from '@/lib/utils'
 import { useUserRole } from '@/lib/user-context'
@@ -65,6 +65,7 @@ export function CleaningView({ tasks, staff }: Props) {
               <CleaningTaskCard
                 key={task.id}
                 task={task}
+                staff={staff}
                 isAdmin={isAdmin}
                 onAssign={() => setAssignSheet(task)}
               />
@@ -120,19 +121,28 @@ export function CleaningView({ tasks, staff }: Props) {
 // ── Cleaning task card ────────────────────────────────────────────────────────
 
 function CleaningTaskCard({
-  task, isAdmin, onAssign,
+  task, staff, isAdmin, onAssign,
 }: {
   task: CleaningTask
+  staff: TeamMember[]
   isAdmin: boolean
   onAssign: () => void
 }) {
   const [isPending, startTransition] = useTransition()
+  // When pending: shows person selector before starting
+  const [pickingPerson, setPickingPerson] = useState(false)
 
-  function advance() {
-    const next = task.status === 'pending' ? 'in_progress' as const : 'done' as const
+  function complete() {
     startTransition(async () => {
       const { updateTaskStatus } = await import('@/actions/tasks')
-      await updateTaskStatus(task.id, next)
+      await updateTaskStatus(task.id, 'done')
+    })
+  }
+
+  function startWithPerson(memberId: string) {
+    startTransition(async () => {
+      await assignAndStartTask(task.id, memberId)
+      setPickingPerson(false)
     })
   }
 
@@ -189,15 +199,64 @@ function CleaningTaskCard({
         )}
       </div>
 
-      {task.status !== 'done' && (
+      {/* Iniciar — shows person picker first */}
+      {task.status === 'pending' && !pickingPerson && (
         <button
-          onClick={advance}
+          onClick={() => setPickingPerson(true)}
           disabled={isPending}
           className="mt-3 w-full h-9 rounded-lg text-sm font-semibold text-white
                      active:opacity-80 transition-opacity disabled:opacity-50"
-          style={{ background: task.status === 'pending' ? '#6366f1' : '#22c55e' }}
+          style={{ background: '#6366f1' }}
         >
-          {isPending ? '…' : task.status === 'pending' ? '▶ Iniciar' : '✓ Completar'}
+          ▶ Iniciar
+        </button>
+      )}
+
+      {/* Inline person selector */}
+      {task.status === 'pending' && pickingPerson && (
+        <div className="mt-3 space-y-1.5">
+          <p className="text-xs font-semibold text-[#64748b] mb-1.5">
+            👤 ¿Quién va a limpiar?
+          </p>
+          {staff.length === 0 ? (
+            <p className="text-xs text-[#94a3b8]">No hay personal registrado</p>
+          ) : (
+            staff.map(m => (
+              <button
+                key={m.id}
+                onClick={() => startWithPerson(m.id)}
+                disabled={isPending}
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl
+                           border border-[#e0e7ff] bg-[#f5f3ff] active:bg-[#e0e7ff]
+                           transition-colors disabled:opacity-50"
+              >
+                <div className="w-7 h-7 rounded-full bg-[#6366f1] flex items-center justify-center
+                                text-white font-bold text-xs flex-shrink-0">
+                  {m.name.charAt(0).toUpperCase()}
+                </div>
+                <span className="text-sm font-medium text-[#0f172a]">{m.name}</span>
+              </button>
+            ))
+          )}
+          <button
+            onClick={() => setPickingPerson(false)}
+            className="w-full text-xs text-[#94a3b8] py-1 hover:text-[#64748b] transition-colors"
+          >
+            Cancelar
+          </button>
+        </div>
+      )}
+
+      {/* Completar */}
+      {task.status === 'in_progress' && (
+        <button
+          onClick={complete}
+          disabled={isPending}
+          className="mt-3 w-full h-9 rounded-lg text-sm font-semibold text-white
+                     active:opacity-80 transition-opacity disabled:opacity-50"
+          style={{ background: '#22c55e' }}
+        >
+          {isPending ? '…' : '✓ Completar'}
         </button>
       )}
     </div>
