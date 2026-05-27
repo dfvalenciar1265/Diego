@@ -2,9 +2,9 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getTasks } from '@/actions/tasks'
 import { getProperties } from '@/actions/properties'
-import { TaskCard } from '@/components/tasks/TaskCard'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { TasksClient } from '@/components/tasks/TasksClient'
+import { TasksView } from '@/components/tasks/TasksView'
 
 export default async function TasksPage() {
   const supabase = await createClient()
@@ -32,16 +32,7 @@ export default async function TasksPage() {
           <TasksClient properties={properties} teamMembers={teamMembers ?? []} />
         ) : null}
       />
-      <div className="p-4 space-y-3">
-        {tasks.length === 0 ? (
-          <div className="text-center py-12">
-            <p className="text-4xl mb-3">✅</p>
-            <p className="text-[#94a3b8]">No hay tareas pendientes</p>
-          </div>
-        ) : (
-          tasks.map(t => <TaskCard key={t.id} task={t} />)
-        )}
-      </div>
+      <TasksView tasks={tasks} />
     </>
   )
 }
