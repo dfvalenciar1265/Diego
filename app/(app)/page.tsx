@@ -60,14 +60,14 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      {/* KPIs — próximos 7 días, grid 3 columnas iguales */}
+      {/* KPIs — hoy, grid 3 columnas iguales */}
       <div className="grid grid-cols-3 gap-2 px-4 pt-4">
         <KPICard label="Check-ins"  value={kpis.checkInsToday}
-                 color="#ff385c" subtitle="próx. 7 días" icon="🏠" />
+                 color="#ff385c" subtitle="hoy" icon="🏠" />
         <KPICard label="Check-outs" value={kpis.checkOutsToday}
-                 color="#22c55e" subtitle="próx. 7 días" icon="🚪" />
+                 color="#22c55e" subtitle="hoy" icon="🚪" />
         <KPICard label="Tareas"     value={kpis.pendingTasks}
-                 color="#f97316" subtitle="próx. 7 días" icon="✅" />
+                 color="#f97316" subtitle="hoy" icon="✅" />
       </div>
 
       <div className="px-4 pt-4 space-y-4">

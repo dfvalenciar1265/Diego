@@ -15,20 +15,25 @@ type PrepTask = Task & {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-/** "3:00 p.m." → "15:00"  |  "12:00 p.m." → "12:00"  |  "" → "" */
+/**
+ * Handles all formats from DB:
+ *   "3pm" · "3:00pm" · "3:00 p.m." · "12pm" · "12:00 p.m."
+ */
 function reservationTimeTo24h(notes: string | null, field: 'Check-in' | 'Check-out'): string {
   if (!notes) return ''
-  const m = notes.match(new RegExp(`${field}:\\s*(\\d+):(\\d+)\\s*(a|p)\\.m\\.`, 'i'))
+  // Optional minutes, flexible am/pm suffix
+  const re = new RegExp(`${field}:\\s*(\\d+)(?::(\\d+))?\\s*(a|p)\\.?m?\\.?`, 'i')
+  const m = notes.match(re)
   if (!m) return ''
   let h = parseInt(m[1], 10)
-  const mins = m[2]
+  const mins = m[2] ?? '00'
   const period = m[3].toLowerCase()
   if (period === 'p' && h !== 12) h += 12
   if (period === 'a' && h === 12) h = 0
   return `${String(h).padStart(2, '0')}:${mins}`
 }
 
-/** "15:00" → "3:00 pm" */
+/** "15:00" → "3pm"  |  "15:30" → "3:30pm" */
 function to12h(t: string): string {
   if (!t) return '—'
   const [h, m] = t.split(':').map(Number)
@@ -46,20 +51,24 @@ function shortDate(iso: string | undefined): string {
   return `${parseInt(dd, 10)} ${months[parseInt(mm, 10)]}`
 }
 
-/** Parse task notes → { time24, note }
- *  Storage format: "HH:MM|freetext"
- *  Legacy (auto-generated): "Preparación para …" → ignored, start fresh
+/**
+ * Parse task.notes:
+ *   "HH:MM|free text" → { time24, note }
+ *   "Preparación para …" (auto-generated legacy) → { '', '' }
+ *   anything else → { '', raw }
  */
 function parseAnnotation(raw: string | null): { time24: string; note: string } {
   if (!raw) return { time24: '', note: '' }
-  const m = raw.match(/^(\d{2}:\d{2})\|(.*)$/)
+  const m = raw.match(/^(\d{2}:\d{2})\|(.*)$/s)
   if (m) return { time24: m[1], note: m[2] }
   if (raw.startsWith('Preparación para')) return { time24: '', note: '' }
   return { time24: '', note: raw }
 }
 
 function buildAnnotation(time24: string, note: string): string {
-  return time24 ? `${time24}|${note}` : note
+  if (time24 && note) return `${time24}|${note}`
+  if (time24) return `${time24}|`
+  return note
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -67,13 +76,14 @@ function buildAnnotation(time24: string, note: string): string {
 interface Props { task: PrepTask }
 
 export function PrepTaskCard({ task }: Props) {
-  const res = task.reservation
+  const res     = task.reservation
   const resNotes = res?.notes ?? null
 
   const guestName = res?.guest_name ?? '—'
-  const guests    = resNotes?.match(/Huéspedes:\s*(\d+)/i)?.[1] ?? '?'
+  // Guests: match digits or "?" from notes
+  const guestsRaw = resNotes?.match(/Huéspedes:\s*([^\s|]+)/i)?.[1] ?? null
 
-  // Default times from reservation
+  // Times from reservation notes (pre-populated)
   const defaultCiTime = reservationTimeTo24h(resNotes, 'Check-in')
   const defaultCoTime = reservationTimeTo24h(resNotes, 'Check-out')
 
@@ -85,8 +95,9 @@ export function PrepTaskCard({ task }: Props) {
   const [, startTransition]           = useTransition()
 
   function saveAnnotation(time: string, note: string) {
-    const content = buildAnnotation(time, note)
-    startTransition(async () => { await updateTaskNotes(task.id, content) })
+    startTransition(async () => {
+      await updateTaskNotes(task.id, buildAnnotation(time, note))
+    })
   }
 
   return (
@@ -98,66 +109,71 @@ export function PrepTaskCard({ task }: Props) {
           🛏️
         </div>
         <div className="min-w-0">
-          <p className="font-semibold text-[#0f172a] text-sm leading-tight">
-            {task.property?.name ?? '—'}
-          </p>
+          <p className="font-semibold text-[#0f172a] text-sm leading-tight">{task.property?.name ?? '—'}</p>
           <p className="text-xs text-[#94a3b8] truncate">{guestName}</p>
         </div>
       </div>
 
-      {/* Dates row */}
+      {/* Dates — date + time on same row */}
       <div className="grid grid-cols-2 gap-2 mb-3">
 
-        {/* Check-in — tap time to edit */}
+        {/* Check-in: date · [editable time] */}
         <div className="bg-[#f8fafc] rounded-xl p-2.5">
-          <p className="text-[10px] text-[#94a3b8] font-semibold mb-1">CHECK-IN</p>
-          <p className="text-sm font-bold text-[#0f172a]">{shortDate(res?.check_in)}</p>
-          {editingTime ? (
-            <input
-              type="time"
-              autoFocus
-              value={ciTime}
-              onChange={e => setCiTime(e.target.value)}
-              onBlur={() => {
-                setEditingTime(false)
-                saveAnnotation(ciTime, noteText)
-              }}
-              className="mt-1 text-xs border border-[#ff385c] rounded-md px-1 py-0.5
-                         focus:outline-none w-full bg-white"
-            />
-          ) : (
-            <button
-              onClick={() => setEditingTime(true)}
-              className="mt-1 text-xs font-medium text-[#ff385c] flex items-center gap-1 hover:underline"
-            >
-              {ciTime ? to12h(ciTime) : '+ hora'} ✏️
-            </button>
-          )}
+          <p className="text-[10px] text-[#94a3b8] font-semibold mb-1.5">CHECK-IN</p>
+          <div className="flex items-baseline gap-1.5 flex-wrap">
+            <span className="text-sm font-bold text-[#0f172a]">{shortDate(res?.check_in)}</span>
+            {editingTime ? (
+              <input
+                type="time"
+                autoFocus
+                value={ciTime}
+                onChange={e => setCiTime(e.target.value)}
+                onBlur={() => {
+                  setEditingTime(false)
+                  saveAnnotation(ciTime, noteText)
+                }}
+                className="text-xs border border-[#ff385c] rounded-md px-1 py-0.5
+                           focus:outline-none bg-white w-[90px]"
+              />
+            ) : (
+              <button
+                onClick={() => setEditingTime(true)}
+                className="text-xs font-semibold text-[#ff385c] flex items-center gap-0.5
+                           active:opacity-60 transition-opacity"
+              >
+                {ciTime ? to12h(ciTime) : '+ hora'} ✏️
+              </button>
+            )}
+          </div>
         </div>
 
-        {/* Check-out — display only, smaller */}
+        {/* Check-out: date · time (display only, muted) */}
         <div className="bg-[#f8fafc] rounded-xl p-2.5">
-          <p className="text-[10px] text-[#94a3b8] font-semibold mb-1">CHECK-OUT</p>
-          <p className="text-sm font-bold text-[#0f172a]">{shortDate(res?.check_out)}</p>
-          <p className="mt-1 text-[10px] text-[#64748b]">
-            {defaultCoTime ? to12h(defaultCoTime) : '12:00 pm'}
-          </p>
+          <p className="text-[10px] text-[#94a3b8] font-semibold mb-1.5">CHECK-OUT</p>
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-sm font-bold text-[#0f172a]">{shortDate(res?.check_out)}</span>
+            <span className="text-[11px] text-[#94a3b8]">
+              {defaultCoTime ? to12h(defaultCoTime) : '12pm'}
+            </span>
+          </div>
         </div>
       </div>
 
-      {/* Guests */}
-      <p className="text-xs text-[#64748b] mb-3 flex items-center gap-1.5">
-        <span>👥</span>
-        <span>{guests} huésped{guests !== '1' ? 'es' : ''}</span>
-      </p>
+      {/* Guests — only if known */}
+      {guestsRaw && guestsRaw !== '?' && (
+        <p className="text-xs text-[#64748b] mb-3 flex items-center gap-1.5">
+          <span>👥</span>
+          <span>{guestsRaw} huésped{guestsRaw !== '1' ? 'es' : ''}</span>
+        </p>
+      )}
 
-      {/* Note field — just the text, no label header */}
+      {/* Note — blank if nothing, editable */}
       <textarea
         rows={2}
         value={noteText}
         onChange={e => setNoteText(e.target.value)}
         onBlur={() => saveAnnotation(ciTime, noteText)}
-        placeholder="Nota: mascota, llegada tardía, llave…"
+        placeholder="Nota adicional…"
         className="w-full text-xs border border-[#e2e8f0] rounded-xl px-3 py-2
                    focus:outline-none focus:ring-1 focus:ring-[#ff385c] bg-[#fafafa]
                    resize-none placeholder:text-[#c4c9d4]"
