@@ -3,7 +3,9 @@
     "allow": [
       "mcp__plugin_aikido_aikido-mcp__aikido_full_scan",
       "mcp__plugin_opsera-devsecops_opsera__security-scan",
-      "mcp__plugin_opsera-devsecops_opsera__opsera_report_telemetry"
+      "mcp__plugin_opsera-devsecops_opsera__opsera_report_telemetry",
+      "mcp__4b4c8b39-e281-430e-a8bf-4bbe19609d78__search_threads",
+      "mcp__4b4c8b39-e281-430e-a8bf-4bbe19609d78__get_thread"
     ]
   }
 }
