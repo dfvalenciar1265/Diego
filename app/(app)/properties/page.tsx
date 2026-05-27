@@ -1,10 +1,15 @@
 import { getProperties } from '@/actions/properties'
+import { getTeamMembers } from '@/actions/team'
 import { PropertyCard } from '@/components/properties/PropertyCard'
+import { StaffSection } from '@/components/properties/StaffSection'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { AddPropertyButton } from '@/components/properties/AddPropertyButton'
 
 export default async function PropertiesPage() {
-  const properties = await getProperties()
+  const [properties, staff] = await Promise.all([
+    getProperties(),
+    getTeamMembers('cleaning'),
+  ])
 
   return (
     <>
@@ -18,6 +23,9 @@ export default async function PropertiesPage() {
         ) : (
           properties.map(p => <PropertyCard key={p.id} property={p} />)
         )}
+
+        {/* Personal de limpieza */}
+        <StaffSection staff={staff} />
       </div>
     </>
   )
