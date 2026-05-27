@@ -4,6 +4,40 @@ import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import type { Task, TaskStatus } from '@/lib/types'
 
+/**
+ * Returns upcoming cleaning tasks (type='cleaning', scheduled_for >= today).
+ * Includes property name and assignee name via join.
+ */
+export async function getCleaningTasks(): Promise<(Task & { property?: { name: string }; assignee?: { name: string } })[]> {
+  const supabase = await createClient()
+  const today = new Date().toISOString().slice(0, 10)
+  const { data, error } = await supabase
+    .from('tasks')
+    .select('*, property:properties(name), assignee:team_members(name)')
+    .eq('type', 'cleaning')
+    .gte('scheduled_for', today)
+    .neq('status', 'done')
+    .order('scheduled_for', { ascending: true })
+  if (error) throw new Error(error.message)
+  return data ?? []
+}
+
+/** Assigns a task to a team member (or unassigns if memberId is null). */
+export async function assignTask(
+  taskId: string,
+  memberId: string | null
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient()
+  const { error } = await supabase
+    .from('tasks')
+    .update({ assigned_to: memberId })
+    .eq('id', taskId)
+  if (error) return { success: false, error: error.message }
+  revalidatePath('/cleaning')
+  revalidatePath('/tasks')
+  return { success: true }
+}
+
 export async function getTasks(filters?: {
   date?: string
   assignedTo?: string

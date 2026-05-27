@@ -5,7 +5,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { createReservation, updateReservation, deleteReservation } from '@/actions/reservations'
-import type { Property, Reservation } from '@/lib/types'
+import { useUserRole } from '@/lib/user-context'
+import type { Property, Reservation, ReservationSource } from '@/lib/types'
 
 interface Props {
   open: boolean
@@ -13,11 +14,17 @@ interface Props {
   reservation?: Reservation
   propertyId?: string
   properties: Property[]
+  /** Pre-selects the source dropdown when creating a new reservation */
+  defaultSource?: ReservationSource
 }
 
-export function ReservationForm({ open, onClose, reservation, propertyId, properties }: Props) {
+export function ReservationForm({
+  open, onClose, reservation, propertyId, properties, defaultSource,
+}: Props) {
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState('')
+  const role = useUserRole()
+  const canSeeFinances = role === 'admin' || role === 'maintenance'
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -41,38 +48,63 @@ export function ReservationForm({ open, onClose, reservation, propertyId, proper
     })
   }
 
+  const isNew    = !reservation
+  const isAirbnb = (reservation?.source ?? defaultSource ?? 'direct') === 'airbnb'
+  const title    = isNew
+    ? (defaultSource === 'airbnb' ? 'Nueva reserva Airbnb' : 'Nueva reserva directa')
+    : 'Editar reserva'
+
   return (
     <Sheet open={open} onOpenChange={v => !v && onClose()} key={reservation?.id ?? 'new'}>
       <SheetContent side="bottom" className="rounded-t-2xl max-h-[90vh] overflow-y-auto">
         <SheetHeader className="mb-4">
-          <SheetTitle>{reservation ? 'Editar reserva' : 'Nueva reserva'}</SheetTitle>
+          <SheetTitle>{title}</SheetTitle>
         </SheetHeader>
+
         <form onSubmit={handleSubmit} className="space-y-4 pb-6">
+
+          {/* Apartamento */}
           <div>
             <Label>Apartamento *</Label>
-            <select name="property_id"
-                    defaultValue={reservation?.property_id ?? propertyId}
-                    className="w-full mt-1 rounded-lg border border-[#e2e8f0] p-3 text-sm
-                               focus:outline-none focus:ring-2 focus:ring-[#ff385c]" required>
+            <select
+              name="property_id"
+              defaultValue={reservation?.property_id ?? propertyId}
+              className="w-full mt-1 rounded-lg border border-[#e2e8f0] p-3 text-sm
+                         focus:outline-none focus:ring-2 focus:ring-[#ff385c]"
+              required
+            >
               {properties.map(p => (
                 <option key={p.id} value={p.id}>{p.name}</option>
               ))}
             </select>
           </div>
+
+          {/* Tipo (Airbnb / Directa) */}
           <div>
             <Label>Tipo</Label>
-            <select name="source" defaultValue={reservation?.source ?? 'airbnb'}
-                    className="w-full mt-1 rounded-lg border border-[#e2e8f0] p-3 text-sm
-                               focus:outline-none focus:ring-2 focus:ring-[#ff385c]">
-              <option value="airbnb">Airbnb</option>
+            <select
+              name="source"
+              defaultValue={reservation?.source ?? defaultSource ?? 'direct'}
+              className="w-full mt-1 rounded-lg border border-[#e2e8f0] p-3 text-sm
+                         focus:outline-none focus:ring-2 focus:ring-[#ff385c]"
+            >
               <option value="direct">Reserva directa</option>
+              <option value="airbnb">Airbnb</option>
             </select>
           </div>
+
+          {/* Huésped */}
           <div>
             <Label>Nombre del huésped</Label>
-            <Input name="guest_name" defaultValue={reservation?.guest_name}
-                   placeholder="María García" className="mt-1" />
+            <Input
+              name="guest_name"
+              defaultValue={reservation?.guest_name}
+              placeholder="María García"
+              className="mt-1"
+            />
           </div>
+
+          {/* Fechas */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label>Check-in *</Label>
@@ -85,24 +117,64 @@ export function ReservationForm({ open, onClose, reservation, propertyId, proper
                      defaultValue={reservation?.check_out} className="mt-1" />
             </div>
           </div>
-          <div>
-            <Label>Monto (COP)</Label>
-            <Input name="amount" type="number" min={0}
-                   defaultValue={reservation?.amount ?? 0} className="mt-1" />
-          </div>
+
+          {/* Código Airbnb — visible cuando el tipo es airbnb */}
+          {(reservation?.source === 'airbnb' || defaultSource === 'airbnb') && (
+            <div>
+              <Label>Código Airbnb</Label>
+              <Input
+                name="airbnb_code"
+                defaultValue={reservation?.notes?.match(/Código:\s*(\S+)/)?.[1]}
+                placeholder="HM12345678"
+                className="mt-1"
+              />
+            </div>
+          )}
+
+          {/* Monto — solo visible para admin y mantenimiento */}
+          {canSeeFinances && (
+            <div>
+              <Label>Monto (COP)</Label>
+              <Input
+                name="amount"
+                type="number"
+                min={0}
+                defaultValue={reservation?.amount ?? 0}
+                className="mt-1"
+              />
+            </div>
+          )}
+
+          {/* Notas */}
           <div>
             <Label>Notas</Label>
-            <Input name="notes" defaultValue={reservation?.notes}
-                   placeholder="Llegada tardía, mascota, etc." className="mt-1" />
+            <Input
+              name="notes"
+              defaultValue={reservation?.notes}
+              placeholder="Llegada tardía, mascota, etc."
+              className="mt-1"
+            />
           </div>
+
           {error && <p className="text-sm text-[#ef4444]">{error}</p>}
-          <Button type="submit" disabled={isPending}
-                  className="w-full h-12" style={{ background: '#ff385c' }}>
-            {isPending ? 'Guardando...' : reservation ? 'Guardar cambios' : 'Crear reserva'}
+
+          <Button
+            type="submit"
+            disabled={isPending}
+            className="w-full h-12"
+            style={{ background: isAirbnb ? '#ff385c' : '#6366f1' }}
+          >
+            {isPending ? 'Guardando...' : isNew ? 'Crear reserva' : 'Guardar cambios'}
           </Button>
-          {reservation && (
-            <Button type="button" variant="outline" onClick={handleDelete}
-                    disabled={isPending} className="w-full h-10 text-[#ef4444] border-[#ef4444]">
+
+          {reservation && role === 'admin' && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleDelete}
+              disabled={isPending}
+              className="w-full h-10 text-[#ef4444] border-[#ef4444]"
+            >
               Eliminar reserva
             </Button>
           )}

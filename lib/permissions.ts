@@ -17,6 +17,7 @@ type Action =
   | 'purchases:create'
   | 'purchases:resolve'
   | 'team:manage'
+  | 'finances:view'   // amounts, revenue, payouts — hidden from cleaning staff
 
 const ROLE_PERMISSIONS: Record<UserRole, Action[]> = {
   admin: [
@@ -28,14 +29,16 @@ const ROLE_PERMISSIONS: Record<UserRole, Action[]> = {
     'supplies:view', 'supplies:update_stock',
     'purchases:create', 'purchases:resolve',
     'team:manage',
+    'finances:view',
   ],
   cleaning: [
     'reservations:view',
-    'tasks:view_own', 'tasks:update_status',
+    'tasks:view_own', 'tasks:view_all', 'tasks:update_status',
     'maintenance:report',
     'properties:view',
     'supplies:view', 'supplies:update_stock',
     'purchases:create',
+    // NOTE: no 'finances:view' — amounts/revenue are hidden for cleaning staff
   ],
   maintenance: [
     'reservations:view',
@@ -44,6 +47,7 @@ const ROLE_PERMISSIONS: Record<UserRole, Action[]> = {
     'properties:view',
     'supplies:view',
     'purchases:create',
+    'finances:view',
   ],
 }
 
