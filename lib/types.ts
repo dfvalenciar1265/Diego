@@ -32,6 +32,7 @@ export interface Reservation {
   check_in: string        // ISO date YYYY-MM-DD
   check_out: string       // ISO date YYYY-MM-DD
   amount: number
+  guests: number | null
   notes: string
   status: ReservationStatus
   created_at: string

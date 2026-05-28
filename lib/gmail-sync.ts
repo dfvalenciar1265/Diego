@@ -14,6 +14,7 @@ export interface ParsedReservation {
   check_in: string   // YYYY-MM-DD
   check_out: string  // YYYY-MM-DD
   amount: number
+  guests: number | null
   notes: string
   source: 'airbnb'
   status: 'confirmed'
@@ -398,8 +399,12 @@ export function parseConfirmationEmail(text: string): Omit<ParsedReservation, 'p
   })()
 
   // ── Guest count ───────────────────────────────────────────────────────────
-  const guestsMatch = text.match(/(\d+)\s+(?:huéspedes?|guests?|viajeros?)/i)
-  const guestCount = guestsMatch?.[1] ?? '?'
+  // Try multiple patterns: "2 huéspedes", "Viajeros: 2", "Adultos: 2 niños: 1"
+  const guestsMatch =
+    text.match(/(\d+)\s+(?:huéspedes?|guests?|viajeros?)/i) ??
+    text.match(/(?:viajeros?|huéspedes?|guests?)[:\s]+(\d+)/i) ??
+    text.match(/(?:adultos?)[:\s]+(\d+)/i)
+  const guests: number | null = guestsMatch ? parseInt(guestsMatch[1], 10) : null
 
   // ── Cancellation policy ───────────────────────────────────────────────────
   const cancelMatch = text.match(/(?:Política de cancelación|Cancellation policy)[:\s]+([^\n]+)/i)
@@ -411,14 +416,14 @@ export function parseConfirmationEmail(text: string): Omit<ParsedReservation, 'p
   const coTimeMatch = text.match(/(?:Check-out|Salida)[:\s\n]+(\d{1,2}(?::\d{2})?\s*[ap]\.?m\.?)/i)
 
   const notes = [
-    `Huéspedes: ${guestCount}`,
+    `Huéspedes: ${guests ?? '?'}`,
     `Cancelación: ${cancelPolicy}`,
     `Código: ${airbnb_code}`,
     ciTimeMatch ? `Check-in: ${ciTimeMatch[1]}` : 'Check-in: 3pm',
     coTimeMatch ? `Check-out: ${coTimeMatch[1]}` : 'Check-out: 12pm',
   ].join(' | ')
 
-  return { airbnb_code, guest_name, check_in, check_out, amount, notes, source: 'airbnb', status: 'confirmed' }
+  return { airbnb_code, guest_name, check_in, check_out, amount, guests, notes, source: 'airbnb', status: 'confirmed' }
 }
 
 /**

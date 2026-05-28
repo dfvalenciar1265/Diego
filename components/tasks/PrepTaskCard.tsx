@@ -10,6 +10,7 @@ type PrepTask = Task & {
     check_out: string
     notes: string | null
     guest_name: string | null
+    guests: number | null
   } | null
 }
 
@@ -80,8 +81,7 @@ export function PrepTaskCard({ task }: Props) {
   const resNotes = res?.notes ?? null
 
   const guestName = res?.guest_name ?? '—'
-  // Guests: match digits or "?" from notes
-  const guestsRaw = resNotes?.match(/Huéspedes:\s*([^\s|]+)/i)?.[1] ?? null
+  const guestsCount = res?.guests ?? null
 
   // Times from reservation notes (pre-populated)
   const defaultCiTime = reservationTimeTo24h(resNotes, 'Check-in')
@@ -160,10 +160,10 @@ export function PrepTaskCard({ task }: Props) {
       </div>
 
       {/* Guests — only if known */}
-      {guestsRaw && guestsRaw !== '?' && (
+      {guestsCount != null && (
         <p className="text-xs text-[#64748b] mb-3 flex items-center gap-1.5">
           <span>👥</span>
-          <span>{guestsRaw} huésped{guestsRaw !== '1' ? 'es' : ''}</span>
+          <span>{guestsCount} huésped{guestsCount !== 1 ? 'es' : ''}</span>
         </p>
       )}
 

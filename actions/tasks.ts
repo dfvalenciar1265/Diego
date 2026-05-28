@@ -11,7 +11,7 @@ import type { Task, TaskStatus } from '@/lib/types'
 export async function getCleaningTasks(): Promise<(Task & {
   property?: { name: string }
   assignee?: { name: string }
-  reservation?: { check_in: string; check_out: string; notes: string | null; guest_name: string | null } | null
+  reservation?: { check_in: string; check_out: string; notes: string | null; guest_name: string | null; guests: number | null } | null
 })[]> {
   const supabase = await createClient()
   const today   = new Date().toISOString().slice(0, 10)
@@ -20,7 +20,7 @@ export async function getCleaningTasks(): Promise<(Task & {
   // Active tasks: today and forward
   const activeQ = supabase
     .from('tasks')
-    .select('*, property:properties(name), assignee:team_members(name), reservation:reservations(check_in, check_out, notes, guest_name)')
+    .select('*, property:properties(name), assignee:team_members(name), reservation:reservations(check_in, check_out, notes, guest_name, guests)')
     .eq('type', 'cleaning')
     .gte('scheduled_for', today)
     .neq('status', 'done')
@@ -29,7 +29,7 @@ export async function getCleaningTasks(): Promise<(Task & {
   // Done tasks: last 30 days
   const doneQ = supabase
     .from('tasks')
-    .select('*, property:properties(name), assignee:team_members(name), reservation:reservations(check_in, check_out, notes, guest_name)')
+    .select('*, property:properties(name), assignee:team_members(name), reservation:reservations(check_in, check_out, notes, guest_name, guests)')
     .eq('type', 'cleaning')
     .eq('status', 'done')
     .gte('scheduled_for', ago30)
@@ -65,7 +65,7 @@ export async function getTasks(filters?: {
   const supabase = await createClient()
   let query = supabase
     .from('tasks')
-    .select('*, property:properties(name), assignee:team_members(name), reservation:reservations(check_in, check_out, notes, guest_name)')
+    .select('*, property:properties(name), assignee:team_members(name), reservation:reservations(check_in, check_out, notes, guest_name, guests)')
     .order('scheduled_for', { ascending: true })
 
   if (filters?.date) query = query.eq('scheduled_for', filters.date)

@@ -14,6 +14,7 @@ type CleaningTask = Task & {
     check_out: string
     notes: string | null
     guest_name: string | null
+    guests: number | null
   } | null
 }
 
@@ -391,13 +392,21 @@ function CleaningTaskCard({
         </div>
       </div>
 
-      {/* Assignee */}
-      {task.assignee && (
-        <p className="text-xs text-[#64748b] mb-3 flex items-center gap-1.5">
-          <span>👤</span>
-          <span>{task.assignee.name}</span>
-        </p>
-      )}
+      {/* Guests + Assignee */}
+      <div className="flex items-center gap-3 mb-3">
+        {res?.guests != null && (
+          <p className="text-xs text-[#64748b] flex items-center gap-1">
+            <span>👥</span>
+            <span>{res.guests} huésped{res.guests !== 1 ? 'es' : ''}</span>
+          </p>
+        )}
+        {task.assignee && (
+          <p className="text-xs text-[#64748b] flex items-center gap-1">
+            <span>👤</span>
+            <span>{task.assignee.name}</span>
+          </p>
+        )}
+      </div>
 
       {/* Iniciar → person picker */}
       {task.status === 'pending' && !pickingPerson && (
