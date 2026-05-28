@@ -23,14 +23,18 @@ async function getCallerRole(): Promise<UserRole | null> {
  */
 export async function getReservations(month?: string): Promise<Reservation[]> {
   const supabase = await createClient()
-  let query = supabase.from('reservations').select('*').order('check_in')
+  let query = supabase
+    .from('reservations')
+    .select('*')
+    .neq('status', 'cancelled')   // never show cancelled reservations
+    .order('check_in')
   if (month) {
     const [year, mon] = month.split('-').map(Number)
     const nextMonthYear = mon === 12 ? year + 1 : year
     const nextMonth = `${nextMonthYear}-${String(mon === 12 ? 1 : mon + 1).padStart(2, '0')}-01`
     query = query
-      .gte('check_out', `${month}-01`)   // sale después de que empieza el mes
-      .lt('check_in', nextMonth)          // entra antes de que termine el mes
+      .gte('check_out', `${month}-01`)
+      .lt('check_in', nextMonth)
   }
   const { data, error } = await query
   if (error) throw new Error(error.message)
@@ -95,9 +99,24 @@ export async function deleteReservation(
     return { success: false, error: 'No autorizado' }
   }
   const supabase = await createClient()
-  const { error } = await supabase.from('reservations').delete().eq('id', id)
+  // Soft-delete: mark as cancelled instead of physically deleting.
+  // If the reservation came from Airbnb, a hard delete would cause the Gmail
+  // sync to re-insert it on the next run (the email still exists in Gmail).
+  const { error } = await supabase
+    .from('reservations')
+    .update({ status: 'cancelled' })
+    .eq('id', id)
   if (error) return { success: false, error: error.message }
+
+  // Also cancel any pending/in-progress tasks linked to this reservation
+  await supabase
+    .from('tasks')
+    .delete()
+    .eq('reservation_id', id)
+    .in('status', ['pending', 'in_progress'])
+
   revalidatePath('/calendar')
   revalidatePath('/')
+  revalidatePath('/tasks')
   return { success: true }
 }
