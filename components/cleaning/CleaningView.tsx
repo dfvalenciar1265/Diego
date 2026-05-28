@@ -93,8 +93,11 @@ export function CleaningView({ tasks, staff }: Props) {
   const today    = todayStr()
   const tomorrow = tomorrowStr()
 
-  const [tab,      setTab]      = useState<Tab>('pending')
-  const [donePage, setDonePage] = useState(1)
+  const [tab,          setTab]          = useState<Tab>('pending')
+  const [todayPage,    setTodayPage]    = useState(1)
+  const [tomorrowPage, setTomorrowPage] = useState(1)
+  const [laterPage,    setLaterPage]    = useState(1)
+  const [donePage,     setDonePage]     = useState(1)
 
   // Pending = not done
   const activeTasks  = tasks.filter(t => t.status !== 'done')
@@ -107,8 +110,11 @@ export function CleaningView({ tasks, staff }: Props) {
     .filter(t => t.status === 'done')
     .sort((a, b) => (b.completed_at ?? '').localeCompare(a.completed_at ?? ''))
 
-  const donePages = pageCount(doneTasks.length, PAGE_SIZE)
-  const pagedDone = paginate(doneTasks, donePage, PAGE_SIZE)
+  const pagedToday    = paginate(todayTasks,    todayPage,    PAGE_SIZE)
+  const pagedTomorrow = paginate(tomorrowTasks, tomorrowPage, PAGE_SIZE)
+  const pagedLater    = paginate(laterTasks,    laterPage,    PAGE_SIZE)
+  const donePages     = pageCount(doneTasks.length, PAGE_SIZE)
+  const pagedDone     = paginate(doneTasks, donePage, PAGE_SIZE)
 
   return (
     <div className="p-4 space-y-3">
@@ -171,17 +177,33 @@ export function CleaningView({ tasks, staff }: Props) {
             <>
               {todayTasks.length > 0 && (
                 <Section label="Limpieza hoy" emoji="🧹" count={todayTasks.length} accent="#6366f1" line="#e0e7ff">
-                  {todayTasks.map(t => <CleaningTaskCard key={t.id} task={t} staff={staff} />)}
+                  {pagedToday.map(t => <CleaningTaskCard key={t.id} task={t} staff={staff} />)}
+                  <Pagination
+                    page={todayPage}
+                    total={pageCount(todayTasks.length, PAGE_SIZE)}
+                    onChange={setTodayPage}
+                    accent="#6366f1"
+                  />
                 </Section>
               )}
               {tomorrowTasks.length > 0 && (
                 <Section label="Limpieza mañana" emoji="📅" count={tomorrowTasks.length} accent="#94a3b8" line="#e2e8f0">
-                  {tomorrowTasks.map(t => <CleaningTaskCard key={t.id} task={t} staff={staff} />)}
+                  {pagedTomorrow.map(t => <CleaningTaskCard key={t.id} task={t} staff={staff} />)}
+                  <Pagination
+                    page={tomorrowPage}
+                    total={pageCount(tomorrowTasks.length, PAGE_SIZE)}
+                    onChange={setTomorrowPage}
+                  />
                 </Section>
               )}
               {laterTasks.length > 0 && (
                 <Section label="Próximas" emoji="📆" count={laterTasks.length} accent="#94a3b8" line="#e2e8f0">
-                  {laterTasks.map(t => <CleaningTaskCard key={t.id} task={t} staff={staff} />)}
+                  {pagedLater.map(t => <CleaningTaskCard key={t.id} task={t} staff={staff} />)}
+                  <Pagination
+                    page={laterPage}
+                    total={pageCount(laterTasks.length, PAGE_SIZE)}
+                    onChange={setLaterPage}
+                  />
                 </Section>
               )}
             </>
