@@ -14,7 +14,7 @@ export default async function MaintenancePage() {
 
   const [issues, properties, teamMembers] = await Promise.all([
     getMaintenance(),
-    getProperties(true),
+    getProperties(),      // all properties, including inactive
     getTeamMembers(),
   ])
 
