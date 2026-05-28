@@ -45,6 +45,7 @@ export async function createReservation(
     return { success: false, error: 'No autorizado' }
   }
   const supabase = await createClient()
+  const guestsRaw = formData.get('guests') as string
   const { error } = await supabase.from('reservations').insert({
     property_id: formData.get('property_id') as string,
     source: formData.get('source') as string,
@@ -52,6 +53,7 @@ export async function createReservation(
     check_in: formData.get('check_in') as string,
     check_out: formData.get('check_out') as string,
     amount: Number(formData.get('amount')) || 0,
+    guests: guestsRaw ? Math.max(1, parseInt(guestsRaw, 10)) : null,
     notes: formData.get('notes') as string,
     status: 'confirmed',
   })
@@ -69,11 +71,13 @@ export async function updateReservation(
     return { success: false, error: 'No autorizado' }
   }
   const supabase = await createClient()
+  const guestsRaw = formData.get('guests') as string
   const { error } = await supabase.from('reservations').update({
     guest_name: formData.get('guest_name') as string,
     check_in: formData.get('check_in') as string,
     check_out: formData.get('check_out') as string,
     amount: Number(formData.get('amount')) || 0,
+    guests: guestsRaw ? Math.max(1, parseInt(guestsRaw, 10)) : null,
     notes: formData.get('notes') as string,
     source: formData.get('source') as string,
   }).eq('id', id)

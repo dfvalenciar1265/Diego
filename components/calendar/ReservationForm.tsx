@@ -93,15 +93,29 @@ export function ReservationForm({
             </select>
           </div>
 
-          {/* Huésped */}
-          <div>
-            <Label>Nombre del huésped</Label>
-            <Input
-              name="guest_name"
-              defaultValue={reservation?.guest_name}
-              placeholder="María García"
-              className="mt-1"
-            />
+          {/* Huésped + Número de huéspedes */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2">
+              <Label>Nombre del huésped</Label>
+              <Input
+                name="guest_name"
+                defaultValue={reservation?.guest_name}
+                placeholder="María García"
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <Label>N.° de huéspedes</Label>
+              <Input
+                name="guests"
+                type="number"
+                min={1}
+                max={20}
+                defaultValue={reservation?.guests ?? undefined}
+                placeholder="2"
+                className="mt-1"
+              />
+            </div>
           </div>
 
           {/* Fechas */}
