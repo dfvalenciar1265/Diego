@@ -6,7 +6,7 @@ import { GmailSyncButton } from '@/components/calendar/GmailSyncButton'
 
 export default async function CalendarPage() {
   const [properties, reservations] = await Promise.all([
-    getProperties(),
+    getProperties(true),   // active only
     getReservations(),
   ])
 

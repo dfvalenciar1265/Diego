@@ -57,7 +57,7 @@ export default async function ReportsPage() {
       .not('cost', 'is', null)
       .order('completed_at', { ascending: false }),
 
-    getProperties(),
+    getProperties(true),
     getTeamMembers(),
     getIncomeReport(currentYear, currentMonth),
     getCleaningCostReport(currentYear, currentMonth),

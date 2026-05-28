@@ -19,7 +19,7 @@ export default async function TasksPage() {
   const filters = member?.role !== 'admin' ? { assignedTo: user!.id } : {}
   const [tasks, properties, teamMembers] = await Promise.all([
     getTasks(filters),
-    getProperties(),
+    getProperties(true),
     getTeamMembers(),
   ])
 

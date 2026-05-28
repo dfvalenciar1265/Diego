@@ -17,12 +17,11 @@ async function getCallerRole(): Promise<string | null> {
   return data?.role ?? null
 }
 
-export async function getProperties(): Promise<Property[]> {
+export async function getProperties(onlyActive = false): Promise<Property[]> {
   const supabase = await createClient()
-  const { data, error } = await supabase
-    .from('properties')
-    .select('*')
-    .order('name')
+  let query = supabase.from('properties').select('*').order('name')
+  if (onlyActive) query = query.eq('active', true)
+  const { data, error } = await query
   if (error) throw new Error(error.message)
   return data ?? []
 }
