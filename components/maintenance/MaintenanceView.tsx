@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import { IncidenceCard } from './IncidenceCard'
 import { ScheduledCard } from './ScheduledCard'
+import { Pagination, paginate, pageCount } from '@/components/ui/Pagination'
 import type { MaintenanceIssue, Property, TeamMember } from '@/lib/types'
 
 type IssueWithJoins = MaintenanceIssue & {
@@ -17,17 +18,30 @@ interface Props {
 }
 
 type Tab = 'open' | 'resolved'
+const PS = 5  // page size
 
 export function MaintenanceView({ issues, properties, teamMembers }: Props) {
   const [tab,        setTab]        = useState<Tab>('open')
   const [filterProp, setFilterProp] = useState('')
+
+  // Pagination state per section
+  const [schedPage, setSchedPage]   = useState(1)
+  const [openPage,  setOpenPage]    = useState(1)
+  const [resPage,   setResPage]     = useState(1)
+
+  function changeFilter(prop: string) {
+    setFilterProp(prop)
+    setSchedPage(1)
+    setOpenPage(1)
+    setResPage(1)
+  }
 
   const filtered = issues.filter(i => {
     if (filterProp && i.property_id !== filterProp) return false
     return true
   })
 
-  // Scheduled (programmed) — separate from incidences
+  // Scheduled — sorted by next date
   const scheduled = filtered
     .filter(i => i.priority === 'scheduled' && i.status !== 'resolved')
     .sort((a, b) => {
@@ -35,10 +49,15 @@ export function MaintenanceView({ issues, properties, teamMembers }: Props) {
       return getNext(a.description).localeCompare(getNext(b.description))
     })
 
-  // Incidences (non-scheduled)
+  // Incidences
   const incidences = filtered.filter(i => i.priority !== 'scheduled')
   const open       = incidences.filter(i => i.status !== 'resolved')
   const resolved   = incidences.filter(i => i.status === 'resolved')
+
+  // Paginated slices
+  const pagedSched   = paginate(scheduled, schedPage, PS)
+  const pagedOpen    = paginate(open,      openPage,  PS)
+  const pagedResolved = paginate(resolved, resPage,   PS)
 
   const dropdownStyle = {
     backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`,
@@ -52,7 +71,7 @@ export function MaintenanceView({ issues, properties, teamMembers }: Props) {
       {/* ── Filtro de apartamento ─────────────────────────────────────────── */}
       <select
         value={filterProp}
-        onChange={e => setFilterProp(e.target.value)}
+        onChange={e => changeFilter(e.target.value)}
         className="w-full text-sm text-[#0f172a] bg-white border border-[#e2e8f0]
                    rounded-xl px-3 py-2.5 focus:outline-none focus:ring-1
                    focus:ring-[#ef4444] appearance-none"
@@ -120,7 +139,7 @@ export function MaintenanceView({ issues, properties, teamMembers }: Props) {
             </div>
           ) : (
             <>
-              {/* Scheduled */}
+              {/* ── Programados ───────────────────────────────────────────── */}
               {scheduled.length > 0 && (
                 <section>
                   <div className="flex items-center gap-2 mb-3">
@@ -131,12 +150,18 @@ export function MaintenanceView({ issues, properties, teamMembers }: Props) {
                     <div className="flex-1 h-px bg-[#e0e7ff]" />
                   </div>
                   <div className="space-y-3">
-                    {scheduled.map(i => <ScheduledCard key={i.id} issue={i} />)}
+                    {pagedSched.map(i => <ScheduledCard key={i.id} issue={i} />)}
                   </div>
+                  <Pagination
+                    page={schedPage}
+                    total={pageCount(scheduled.length, PS)}
+                    onChange={setSchedPage}
+                    accent="#6366f1"
+                  />
                 </section>
               )}
 
-              {/* Open incidences */}
+              {/* ── Incidencias abiertas ───────────────────────────────────── */}
               {open.length > 0 && (
                 <section>
                   <div className="flex items-center gap-2 mb-3">
@@ -147,10 +172,16 @@ export function MaintenanceView({ issues, properties, teamMembers }: Props) {
                     <div className="flex-1 h-px bg-[#fee2e2]" />
                   </div>
                   <div className="space-y-3">
-                    {open.map(i => (
+                    {pagedOpen.map(i => (
                       <IncidenceCard key={i.id} issue={i} teamMembers={teamMembers} />
                     ))}
                   </div>
+                  <Pagination
+                    page={openPage}
+                    total={pageCount(open.length, PS)}
+                    onChange={setOpenPage}
+                    accent="#ef4444"
+                  />
                 </section>
               )}
             </>
@@ -167,9 +198,20 @@ export function MaintenanceView({ issues, properties, teamMembers }: Props) {
               <p className="text-[#94a3b8]">No hay incidencias resueltas</p>
             </div>
           ) : (
-            resolved.map(i => (
-              <IncidenceCard key={i.id} issue={i} teamMembers={teamMembers} />
-            ))
+            <>
+              {pagedResolved.map(i => (
+                <IncidenceCard key={i.id} issue={i} teamMembers={teamMembers} />
+              ))}
+              <Pagination
+                page={resPage}
+                total={pageCount(resolved.length, PS)}
+                onChange={setResPage}
+                accent="#22c55e"
+              />
+              <p className="text-center text-xs text-[#c4c9d4]">
+                {resolved.length} incidencia{resolved.length !== 1 ? 's' : ''} resuelta{resolved.length !== 1 ? 's' : ''}
+              </p>
+            </>
           )}
         </div>
       )}

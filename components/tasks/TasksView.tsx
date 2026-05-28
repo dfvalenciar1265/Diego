@@ -1,6 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { OtherTaskCard } from './OtherTaskCard'
+import { Pagination, paginate, pageCount } from '@/components/ui/Pagination'
 import type { Task, Property, TeamMember } from '@/lib/types'
 
 type ExtendedTask = Task & { property?: { name: string }; assignee?: { name: string } }
@@ -13,35 +14,6 @@ interface Props {
 
 type Tab = 'pending' | 'done'
 const PAGE_SIZE = 5
-
-// ── Pagination helper ─────────────────────────────────────────────────────────
-
-function Pagination({
-  page, total, onChange,
-}: { page: number; total: number; onChange: (p: number) => void }) {
-  if (total <= 1) return null
-  return (
-    <div className="flex items-center justify-between pt-2">
-      <button
-        onClick={() => onChange(Math.max(1, page - 1))}
-        disabled={page === 1}
-        className="text-sm font-medium text-[#ff385c]
-                   disabled:text-[#c4c9d4] active:opacity-70 transition-opacity"
-      >
-        ‹ Anterior
-      </button>
-      <span className="text-xs text-[#94a3b8]">{page} / {total}</span>
-      <button
-        onClick={() => onChange(Math.min(total, page + 1))}
-        disabled={page === total}
-        className="text-sm font-medium text-[#ff385c]
-                   disabled:text-[#c4c9d4] active:opacity-70 transition-opacity"
-      >
-        Siguiente ›
-      </button>
-    </div>
-  )
-}
 
 // ── Main component ────────────────────────────────────────────────────────────
 
@@ -68,11 +40,11 @@ export function TasksView({ tasks, properties, teamMembers }: Props) {
       return dateB.localeCompare(dateA)
     })
 
-  const pendPages = Math.max(1, Math.ceil(pendingTasks.length / PAGE_SIZE))
-  const donePages = Math.max(1, Math.ceil(doneTasks.length  / PAGE_SIZE))
+  const pendPages = pageCount(pendingTasks.length, PAGE_SIZE)
+  const donePages = pageCount(doneTasks.length,   PAGE_SIZE)
 
-  const pagedPending = pendingTasks.slice((pendPage - 1) * PAGE_SIZE, pendPage * PAGE_SIZE)
-  const pagedDone    = doneTasks.slice((donePage  - 1) * PAGE_SIZE, donePage  * PAGE_SIZE)
+  const pagedPending = paginate(pendingTasks, pendPage, PAGE_SIZE)
+  const pagedDone    = paginate(doneTasks,    donePage, PAGE_SIZE)
 
   const dropdownStyle = {
     backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`,
@@ -163,7 +135,7 @@ export function TasksView({ tasks, properties, teamMembers }: Props) {
               {pagedPending.map(t => (
                 <OtherTaskCard key={t.id} task={t} teamMembers={teamMembers} />
               ))}
-              <Pagination page={pendPage} total={pendPages} onChange={setPendPage} />
+              <Pagination page={pendPage} total={pendPages} onChange={setPendPage} accent="#ff385c" />
               <p className="text-center text-xs text-[#c4c9d4]">
                 {pendingTasks.length} tarea{pendingTasks.length !== 1 ? 's' : ''} pendiente{pendingTasks.length !== 1 ? 's' : ''}
               </p>
@@ -185,7 +157,7 @@ export function TasksView({ tasks, properties, teamMembers }: Props) {
               {pagedDone.map(t => (
                 <OtherTaskCard key={t.id} task={t} teamMembers={teamMembers} />
               ))}
-              <Pagination page={donePage} total={donePages} onChange={setDonePage} />
+              <Pagination page={donePage} total={donePages} onChange={setDonePage} accent="#ff385c" />
               <p className="text-center text-xs text-[#c4c9d4]">
                 {doneTasks.length} tarea{doneTasks.length !== 1 ? 's' : ''} completada{doneTasks.length !== 1 ? 's' : ''}
               </p>

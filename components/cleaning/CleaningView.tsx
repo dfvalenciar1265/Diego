@@ -1,6 +1,7 @@
 'use client'
 import { useState, useTransition } from 'react'
 import { assignAndStartTask, updateTaskNotes, updateTaskStatus } from '@/actions/tasks'
+import { Pagination, paginate, pageCount } from '@/components/ui/Pagination'
 import type { Task } from '@/lib/types'
 import type { TeamMember } from '@/lib/types'
 import { Sparkles } from 'lucide-react'
@@ -86,33 +87,6 @@ function buildCoAnnotation(time24: string): string {
   return time24 ? `${time24}|` : ''
 }
 
-// ── Pagination helper ─────────────────────────────────────────────────────────
-
-function Pagination({ page, total, onChange }: {
-  page: number; total: number; onChange: (p: number) => void
-}) {
-  if (total <= 1) return null
-  return (
-    <div className="flex items-center justify-between pt-2">
-      <button
-        onClick={() => onChange(Math.max(1, page - 1))}
-        disabled={page === 1}
-        className="text-sm font-medium text-[#6366f1] disabled:text-[#c4c9d4] active:opacity-70"
-      >
-        ‹ Anterior
-      </button>
-      <span className="text-xs text-[#94a3b8]">{page} / {total}</span>
-      <button
-        onClick={() => onChange(Math.min(total, page + 1))}
-        disabled={page === total}
-        className="text-sm font-medium text-[#6366f1] disabled:text-[#c4c9d4] active:opacity-70"
-      >
-        Siguiente ›
-      </button>
-    </div>
-  )
-}
-
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function CleaningView({ tasks, staff }: Props) {
@@ -133,8 +107,8 @@ export function CleaningView({ tasks, staff }: Props) {
     .filter(t => t.status === 'done')
     .sort((a, b) => (b.completed_at ?? '').localeCompare(a.completed_at ?? ''))
 
-  const donePages = Math.max(1, Math.ceil(doneTasks.length / PAGE_SIZE))
-  const pagedDone = doneTasks.slice((donePage - 1) * PAGE_SIZE, donePage * PAGE_SIZE)
+  const donePages = pageCount(doneTasks.length, PAGE_SIZE)
+  const pagedDone = paginate(doneTasks, donePage, PAGE_SIZE)
 
   return (
     <div className="p-4 space-y-3">

@@ -1,5 +1,6 @@
 'use client'
 import { useState } from 'react'
+import { Pagination, paginate, pageCount } from '@/components/ui/Pagination'
 import type { Task, Property, TeamMember, MaintenanceIssue } from '@/lib/types'
 
 type CleaningRow = Task & { property?: { name: string }; assignee?: { name: string } }
@@ -36,9 +37,13 @@ export function ReportsView({
   properties,
   teamMembers,
 }: Props) {
-  const [tab,         setTab]         = useState<Tab>('cleaning')
-  const [filterProp,  setFilterProp]  = useState('')
+  const [tab,          setTab]          = useState<Tab>('cleaning')
+  const [filterProp,   setFilterProp]   = useState('')
   const [filterPerson, setFilterPerson] = useState('')
+  const [cleanPage,    setCleanPage]    = useState(1)
+  const [expPage,      setExpPage]      = useState(1)
+
+  const PS = 5
 
   const dropdownStyle = {
     backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`,
@@ -52,6 +57,7 @@ export function ReportsView({
     if (filterPerson && t.assigned_to !== filterPerson) return false
     return true
   })
+  const pagedCleaning = paginate(filteredCleaning, cleanPage, PS)
 
   // ── Expense report ─────────────────────────────────────────────────────────
   type ExpenseRow = {
@@ -91,6 +97,7 @@ export function ReportsView({
   })
 
   const totalExpenses = filteredExpenses.reduce((s, r) => s + r.cost, 0)
+  const pagedExpenses = paginate(filteredExpenses, expPage, PS)
 
   return (
     <div className="p-4 space-y-4">
@@ -99,7 +106,7 @@ export function ReportsView({
       <div className="grid grid-cols-2 gap-2">
         <select
           value={filterProp}
-          onChange={e => setFilterProp(e.target.value)}
+          onChange={e => { setFilterProp(e.target.value); setCleanPage(1); setExpPage(1) }}
           className="w-full text-sm text-[#0f172a] bg-white border border-[#e2e8f0]
                      rounded-xl px-3 py-2.5 focus:outline-none appearance-none"
           style={dropdownStyle}
@@ -113,7 +120,7 @@ export function ReportsView({
         {tab === 'cleaning' && (
           <select
             value={filterPerson}
-            onChange={e => setFilterPerson(e.target.value)}
+            onChange={e => { setFilterPerson(e.target.value); setCleanPage(1) }}
             className="w-full text-sm text-[#0f172a] bg-white border border-[#e2e8f0]
                        rounded-xl px-3 py-2.5 focus:outline-none appearance-none"
             style={dropdownStyle}
@@ -137,7 +144,7 @@ export function ReportsView({
       {/* ── Tabs ──────────────────────────────────────────────────────────── */}
       <div className="flex rounded-xl overflow-hidden border border-[#e2e8f0]">
         <button
-          onClick={() => setTab('cleaning')}
+          onClick={() => { setTab('cleaning'); setCleanPage(1) }}
           className="flex-1 py-2.5 text-sm font-medium transition-colors"
           style={{
             background: tab === 'cleaning' ? '#6366f1' : 'white',
@@ -147,7 +154,7 @@ export function ReportsView({
           🧹 Limpiezas
         </button>
         <button
-          onClick={() => setTab('expenses')}
+          onClick={() => { setTab('expenses'); setExpPage(1) }}
           className="flex-1 py-2.5 text-sm font-medium transition-colors"
           style={{
             background: tab === 'expenses' ? '#6366f1' : 'white',
@@ -175,7 +182,7 @@ export function ReportsView({
                 <div className="px-3 py-2 text-[10px] font-bold text-[#94a3b8] uppercase tracking-wide text-right">Costo</div>
               </div>
 
-              {filteredCleaning.map((t, i) => (
+              {pagedCleaning.map((t, i) => (
                 <div
                   key={t.id}
                   className={`grid grid-cols-[1fr_1fr_auto] gap-0 border-b border-[#f1f5f9] last:border-0
@@ -196,11 +203,11 @@ export function ReportsView({
                 </div>
               ))}
 
-              {/* Footer totals */}
+              {/* Footer totals (across all pages) */}
               <div className="grid grid-cols-[1fr_1fr_auto] bg-[#f0fdf4] border-t border-[#bbf7d0]">
                 <div className="px-3 py-2 col-span-2">
                   <span className="text-xs font-bold text-[#16a34a]">
-                    {filteredCleaning.length} limpiezas
+                    {filteredCleaning.length} limpiezas en total
                   </span>
                 </div>
                 <div className="px-3 py-2 text-right">
@@ -211,6 +218,12 @@ export function ReportsView({
               </div>
             </div>
           )}
+          <Pagination
+            page={cleanPage}
+            total={pageCount(filteredCleaning.length, PS)}
+            onChange={setCleanPage}
+            accent="#6366f1"
+          />
         </div>
       )}
 
@@ -231,7 +244,7 @@ export function ReportsView({
                 <div className="px-3 py-2 text-[10px] font-bold text-[#94a3b8] uppercase tracking-wide text-right">Costo</div>
               </div>
 
-              {filteredExpenses.map((r, i) => (
+              {pagedExpenses.map((r, i) => (
                 <div
                   key={i}
                   className={`grid grid-cols-[1fr_1fr_auto] border-b border-[#f1f5f9] last:border-0
@@ -251,11 +264,11 @@ export function ReportsView({
                 </div>
               ))}
 
-              {/* Footer totals */}
+              {/* Footer totals (across all pages) */}
               <div className="grid grid-cols-[1fr_1fr_auto] bg-[#fff5f5] border-t border-[#fecaca]">
                 <div className="px-3 py-2 col-span-2">
                   <span className="text-xs font-bold text-[#ef4444]">
-                    Total gastos ({filteredExpenses.length} ítems)
+                    Total ({filteredExpenses.length} ítems)
                   </span>
                 </div>
                 <div className="px-3 py-2 text-right">
@@ -266,6 +279,12 @@ export function ReportsView({
               </div>
             </div>
           )}
+          <Pagination
+            page={expPage}
+            total={pageCount(filteredExpenses.length, PS)}
+            onChange={setExpPage}
+            accent="#6366f1"
+          />
         </div>
       )}
     </div>
