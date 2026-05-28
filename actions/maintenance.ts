@@ -46,14 +46,18 @@ export async function createMaintenanceIssue(
 export async function updateMaintenanceStatus(
   id: string,
   status: MaintenanceStatus,
-  notes?: string
+  options?: { notes?: string; assignedTo?: string | null; cost?: number | null }
 ): Promise<void> {
   const supabase = await createClient()
-  const { error } = await supabase.from('maintenance').update({
+  const update: Record<string, unknown> = {
     status,
     resolved_at: status === 'resolved' ? new Date().toISOString() : null,
-    notes: notes ?? '',
-  }).eq('id', id)
+  }
+  if (options?.notes      !== undefined) update.notes       = options.notes
+  if (options?.assignedTo !== undefined) update.assigned_to = options.assignedTo
+  if (options?.cost       !== undefined) update.cost        = options.cost
+
+  const { error } = await supabase.from('maintenance').update(update).eq('id', id)
   if (error) throw new Error(error.message)
   revalidatePath('/maintenance')
   revalidatePath('/')

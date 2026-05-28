@@ -112,6 +112,28 @@ export async function deactivateTeamMember(
   return { success: true }
 }
 
+/**
+ * Looks up the email address of a team member by their display name.
+ * Used on the login page so users can log in with their name instead of email.
+ * Returns null if not found (caller shows a friendly error).
+ */
+export async function lookupEmailByName(
+  name: string
+): Promise<{ email: string } | null> {
+  // Uses service client so it works without a session (login page context)
+  const db = createServiceClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  )
+  const { data } = await db
+    .from('team_members')
+    .select('email')
+    .ilike('name', name.trim())
+    .eq('active', true)
+    .single()
+  return data ? { email: data.email } : null
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function generateTempPassword(): string {

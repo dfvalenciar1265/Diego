@@ -1,4 +1,4 @@
-export type UserRole = 'admin' | 'cleaning' | 'maintenance'
+export type UserRole = 'admin' | 'cleaning' | 'maintenance' | 'anfitrion'
 
 export interface TeamMember {
   id: string
@@ -17,6 +17,7 @@ export interface Property {
   instructions: string
   capacity: number
   photos: string[]
+  active: boolean                // whether property is shown in the app
   created_at: string
 }
 
@@ -50,6 +51,7 @@ export interface Task {
   notes: string
   photo_url: string | null
   completed_at: string | null
+  cost: number | null            // optional cost (e.g. for misc tasks)
   created_at: string
 }
 

@@ -1,6 +1,6 @@
 'use client'
 import { useState, useTransition } from 'react'
-import { assignAndStartTask, updateTaskNotes } from '@/actions/tasks'
+import { assignAndStartTask, updateTaskNotes, updateTaskStatus } from '@/actions/tasks'
 import type { Task } from '@/lib/types'
 import type { TeamMember } from '@/lib/types'
 import { Sparkles } from 'lucide-react'
@@ -20,6 +20,9 @@ interface Props {
   tasks: CleaningTask[]
   staff: TeamMember[]
 }
+
+type Tab = 'pending' | 'done'
+const PAGE_SIZE = 5
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
 
@@ -64,6 +67,14 @@ function shortDate(iso: string | undefined): string {
   return `${parseInt(dd, 10)} ${months[parseInt(mm, 10)]}`
 }
 
+function fmtDatetime(iso: string | null): string {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  const months = ['ene', 'feb', 'mar', 'abr', 'may', 'jun',
+    'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
+  return `${d.getDate()} ${months[d.getMonth()]} · ${to12h(`${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`)}`
+}
+
 function parseCoTime(raw: string | null): string {
   if (!raw) return ''
   const m = raw.match(/^(\d{2}:\d{2})\|/)
@@ -75,66 +86,201 @@ function buildCoAnnotation(time24: string): string {
   return time24 ? `${time24}|` : ''
 }
 
+// ── Pagination helper ─────────────────────────────────────────────────────────
+
+function Pagination({ page, total, onChange }: {
+  page: number; total: number; onChange: (p: number) => void
+}) {
+  if (total <= 1) return null
+  return (
+    <div className="flex items-center justify-between pt-2">
+      <button
+        onClick={() => onChange(Math.max(1, page - 1))}
+        disabled={page === 1}
+        className="text-sm font-medium text-[#6366f1] disabled:text-[#c4c9d4] active:opacity-70"
+      >
+        ‹ Anterior
+      </button>
+      <span className="text-xs text-[#94a3b8]">{page} / {total}</span>
+      <button
+        onClick={() => onChange(Math.min(total, page + 1))}
+        disabled={page === total}
+        className="text-sm font-medium text-[#6366f1] disabled:text-[#c4c9d4] active:opacity-70"
+      >
+        Siguiente ›
+      </button>
+    </div>
+  )
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function CleaningView({ tasks, staff }: Props) {
   const today    = todayStr()
   const tomorrow = tomorrowStr()
 
-  const todayTasks    = tasks.filter(t => t.scheduled_for === today)
-  const tomorrowTasks = tasks.filter(t => t.scheduled_for === tomorrow)
+  const [tab,      setTab]      = useState<Tab>('pending')
+  const [donePage, setDonePage] = useState(1)
+
+  // Pending = not done
+  const activeTasks  = tasks.filter(t => t.status !== 'done')
+  const todayTasks   = activeTasks.filter(t => t.scheduled_for === today)
+  const tomorrowTasks = activeTasks.filter(t => t.scheduled_for === tomorrow)
+  const laterTasks   = activeTasks.filter(t => t.scheduled_for > tomorrow)
+
+  // Done = last 30 days (already filtered in the server action)
+  const doneTasks = tasks
+    .filter(t => t.status === 'done')
+    .sort((a, b) => (b.completed_at ?? '').localeCompare(a.completed_at ?? ''))
+
+  const donePages = Math.max(1, Math.ceil(doneTasks.length / PAGE_SIZE))
+  const pagedDone = doneTasks.slice((donePage - 1) * PAGE_SIZE, donePage * PAGE_SIZE)
 
   return (
-    <div className="p-4 space-y-5">
-      {todayTasks.length === 0 && tomorrowTasks.length === 0 ? (
-        <div className="text-center py-12">
-          <Sparkles className="mx-auto mb-3 text-[#94a3b8]" size={40} />
-          <p className="text-[#94a3b8]">No hay limpiezas próximas</p>
-        </div>
-      ) : (
-        <>
-          {/* Hoy */}
-          {todayTasks.length > 0 && (
-            <div>
-              <div className="flex items-center gap-2 mb-3">
-                <span className="text-base">🧹</span>
-                <span className="text-xs font-semibold text-[#6366f1] uppercase tracking-wide">
-                  Limpieza hoy ({todayTasks.length})
-                </span>
-                <div className="flex-1 h-px bg-[#e0e7ff]" />
-              </div>
-              <div className="space-y-3">
-                {todayTasks.map(task => (
-                  <CleaningTaskCard key={task.id} task={task} staff={staff} />
-                ))}
-              </div>
-            </div>
-          )}
+    <div className="p-4 space-y-3">
 
-          {/* Mañana */}
-          {tomorrowTasks.length > 0 && (
-            <div>
-              <div className="flex items-center gap-2 mb-3">
-                <span className="text-base">📅</span>
-                <span className="text-xs font-semibold text-[#94a3b8] uppercase tracking-wide">
-                  Limpieza mañana ({tomorrowTasks.length})
-                </span>
-                <div className="flex-1 h-px bg-[#e2e8f0]" />
-              </div>
-              <div className="space-y-3">
-                {tomorrowTasks.map(task => (
-                  <CleaningTaskCard key={task.id} task={task} staff={staff} />
-                ))}
-              </div>
-            </div>
+      {/* ── Tabs ──────────────────────────────────────────────────────────── */}
+      <div className="flex rounded-xl overflow-hidden border border-[#e2e8f0]">
+        <button
+          onClick={() => setTab('pending')}
+          className="flex-1 py-2.5 text-sm font-medium transition-colors"
+          style={{
+            background: tab === 'pending' ? '#6366f1' : 'white',
+            color:      tab === 'pending' ? 'white'   : '#64748b',
+          }}
+        >
+          Pendientes
+          {activeTasks.length > 0 && (
+            <span
+              className="ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+              style={{
+                background: tab === 'pending' ? 'rgba(255,255,255,0.25)' : '#e0e7ff',
+                color:      tab === 'pending' ? 'white' : '#6366f1',
+              }}
+            >
+              {activeTasks.length}
+            </span>
           )}
-        </>
+        </button>
+        <button
+          onClick={() => setTab('done')}
+          className="flex-1 py-2.5 text-sm font-medium transition-colors"
+          style={{
+            background: tab === 'done' ? '#6366f1' : 'white',
+            color:      tab === 'done' ? 'white'   : '#64748b',
+          }}
+        >
+          Terminadas
+          {doneTasks.length > 0 && (
+            <span
+              className="ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+              style={{
+                background: tab === 'done' ? 'rgba(255,255,255,0.25)' : '#dcfce7',
+                color:      tab === 'done' ? 'white' : '#16a34a',
+              }}
+            >
+              {doneTasks.length}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {/* ── Pendientes tab ────────────────────────────────────────────────── */}
+      {tab === 'pending' && (
+        <div className="space-y-5">
+          {todayTasks.length === 0 && tomorrowTasks.length === 0 && laterTasks.length === 0 ? (
+            <div className="text-center py-12">
+              <Sparkles className="mx-auto mb-3 text-[#94a3b8]" size={40} />
+              <p className="text-[#94a3b8]">No hay limpiezas pendientes</p>
+            </div>
+          ) : (
+            <>
+              {todayTasks.length > 0 && (
+                <Section label="Limpieza hoy" emoji="🧹" count={todayTasks.length} accent="#6366f1" line="#e0e7ff">
+                  {todayTasks.map(t => <CleaningTaskCard key={t.id} task={t} staff={staff} />)}
+                </Section>
+              )}
+              {tomorrowTasks.length > 0 && (
+                <Section label="Limpieza mañana" emoji="📅" count={tomorrowTasks.length} accent="#94a3b8" line="#e2e8f0">
+                  {tomorrowTasks.map(t => <CleaningTaskCard key={t.id} task={t} staff={staff} />)}
+                </Section>
+              )}
+              {laterTasks.length > 0 && (
+                <Section label="Próximas" emoji="📆" count={laterTasks.length} accent="#94a3b8" line="#e2e8f0">
+                  {laterTasks.map(t => <CleaningTaskCard key={t.id} task={t} staff={staff} />)}
+                </Section>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ── Terminadas tab ────────────────────────────────────────────────── */}
+      {tab === 'done' && (
+        <div className="space-y-3">
+          {doneTasks.length === 0 ? (
+            <div className="text-center py-12">
+              <p className="text-4xl mb-3">✅</p>
+              <p className="text-[#94a3b8]">No hay limpiezas terminadas recientes</p>
+            </div>
+          ) : (
+            <>
+              {pagedDone.map(t => <DoneCleaningCard key={t.id} task={t} />)}
+              <Pagination page={donePage} total={donePages} onChange={setDonePage} />
+              <p className="text-center text-xs text-[#c4c9d4]">
+                {doneTasks.length} limpieza{doneTasks.length !== 1 ? 's' : ''} terminada{doneTasks.length !== 1 ? 's' : ''} (últimos 30 días)
+              </p>
+            </>
+          )}
+        </div>
       )}
     </div>
   )
 }
 
-// ── Cleaning task card ────────────────────────────────────────────────────────
+// ── Section wrapper ───────────────────────────────────────────────────────────
+
+function Section({
+  label, emoji, count, accent, line, children,
+}: {
+  label: string; emoji: string; count: number
+  accent: string; line: string; children: React.ReactNode
+}) {
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-3">
+        <span className="text-base">{emoji}</span>
+        <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: accent }}>
+          {label} ({count})
+        </span>
+        <div className="flex-1 h-px" style={{ background: line }} />
+      </div>
+      <div className="space-y-3">{children}</div>
+    </div>
+  )
+}
+
+// ── Done cleaning card (compact) ──────────────────────────────────────────────
+
+function DoneCleaningCard({ task }: { task: CleaningTask }) {
+  return (
+    <div className="bg-white rounded-xl border border-[#e2e8f0] shadow-[0_1px_3px_rgba(0,0,0,0.06)] p-4 opacity-80">
+      <div className="flex items-center gap-3">
+        <div className="w-9 h-9 rounded-xl flex items-center justify-center text-lg flex-shrink-0 bg-[#dcfce7]">
+          ✅
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold text-[#0f172a] text-sm leading-tight">{task.property?.name ?? '—'}</p>
+          <p className="text-xs text-[#94a3b8]">
+            {task.assignee?.name ?? 'Sin asignar'} · {fmtDatetime(task.completed_at)}
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Active cleaning task card ─────────────────────────────────────────────────
 
 function CleaningTaskCard({
   task,
@@ -146,8 +292,8 @@ function CleaningTaskCard({
   const res      = task.reservation
   const resNotes = res?.notes ?? null
 
-  const guestName    = res?.guest_name ?? '—'
-  const ciTime       = reservationTimeTo24h(resNotes, 'Check-in')
+  const guestName     = res?.guest_name ?? '—'
+  const ciTime        = reservationTimeTo24h(resNotes, 'Check-in')
   const defaultCoTime = reservationTimeTo24h(resNotes, 'Check-out')
   const savedCoTime   = parseCoTime(task.notes)
 
@@ -171,7 +317,6 @@ function CleaningTaskCard({
 
   function complete() {
     startTransition(async () => {
-      const { updateTaskStatus } = await import('@/actions/tasks')
       await updateTaskStatus(task.id, 'done')
     })
   }
@@ -210,8 +355,6 @@ function CleaningTaskCard({
 
       {/* Dates */}
       <div className="grid grid-cols-2 gap-2 mb-3">
-
-        {/* Check-in: read-only */}
         <div className="bg-[#f8fafc] rounded-xl p-2.5">
           <p className="text-[10px] text-[#94a3b8] font-semibold mb-1.5">CHECK-IN</p>
           <div className="flex items-baseline gap-1.5 flex-wrap">
@@ -222,7 +365,6 @@ function CleaningTaskCard({
           </div>
         </div>
 
-        {/* Check-out: editable time */}
         <div className="bg-[#f8fafc] rounded-xl p-2.5">
           <p className="text-[10px] text-[#94a3b8] font-semibold mb-1.5">CHECK-OUT</p>
           <div className="flex items-baseline gap-1.5 flex-wrap">
@@ -253,7 +395,7 @@ function CleaningTaskCard({
         </div>
       </div>
 
-      {/* Assignee — when in progress */}
+      {/* Assignee */}
       {task.assignee && (
         <p className="text-xs text-[#64748b] mb-3 flex items-center gap-1.5">
           <span>👤</span>
@@ -274,7 +416,6 @@ function CleaningTaskCard({
         </button>
       )}
 
-      {/* Inline person selector */}
       {task.status === 'pending' && pickingPerson && (
         <div className="mt-1 space-y-1.5">
           <p className="text-xs font-semibold text-[#64748b] mb-1.5">

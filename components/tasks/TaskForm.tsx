@@ -49,16 +49,8 @@ export function TaskForm({ open, onClose, properties, teamMembers, defaultProper
               {properties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </div>
-          <div>
-            <Label>Tipo *</Label>
-            <select name="type" defaultValue="cleaning"
-                    className="w-full mt-1 rounded-lg border border-[#e2e8f0] p-3 text-sm
-                               focus:outline-none focus:ring-2 focus:ring-[#ff385c]">
-              <option value="cleaning">🧹 Limpieza</option>
-              <option value="preparation">🛏️ Preparación</option>
-              <option value="other">📋 Otro</option>
-            </select>
-          </div>
+          {/* Type is fixed to 'other' on the tasks page */}
+          <input type="hidden" name="type" value="other" />
           <div>
             <Label>Asignar a</Label>
             <select name="assigned_to"
@@ -75,8 +67,12 @@ export function TaskForm({ open, onClose, properties, teamMembers, defaultProper
                    className="mt-1" />
           </div>
           <div>
-            <Label>Notas</Label>
-            <Input name="notes" placeholder="Instrucciones especiales..." className="mt-1" />
+            <Label>Descripción</Label>
+            <Input name="notes" placeholder="¿Qué hay que hacer?" className="mt-1" />
+          </div>
+          <div>
+            <Label>Costo estimado ($)</Label>
+            <Input name="cost" type="number" min="0" step="0.01" placeholder="Opcional" className="mt-1" />
           </div>
           {error && <p className="text-sm text-[#ef4444]">{error}</p>}
           <Button type="submit" disabled={isPending}

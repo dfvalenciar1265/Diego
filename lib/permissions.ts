@@ -49,6 +49,15 @@ const ROLE_PERMISSIONS: Record<UserRole, Action[]> = {
     'purchases:create',
     'finances:view',
   ],
+  anfitrion: [
+    'dashboard:view',
+    'reservations:view',
+    'tasks:view_own', 'tasks:view_all', 'tasks:update_status',
+    'maintenance:report',
+    'properties:view',
+    'supplies:view',
+    'purchases:create',
+  ],
 }
 
 export function canDo(role: UserRole, action: Action): boolean {

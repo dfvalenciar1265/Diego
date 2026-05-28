@@ -2,9 +2,10 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Home, Calendar, Sparkles, ClipboardList, Wrench, Building2 } from 'lucide-react'
+import { Home, Calendar, Sparkles, ClipboardList, Wrench, Building2, BarChart2 } from 'lucide-react'
+import { useUserRole } from '@/lib/user-context'
 
-const NAV_ITEMS = [
+const BASE_ITEMS = [
   { href: '/',            label: 'Inicio',    icon: Home },
   { href: '/calendar',   label: 'Reservas',  icon: Calendar },
   { href: '/cleaning',   label: 'Limpieza',  icon: Sparkles },
@@ -13,13 +14,21 @@ const NAV_ITEMS = [
   { href: '/properties', label: 'Props',     icon: Building2 },
 ] as const
 
+const ADMIN_ITEM = { href: '/reports', label: 'Reportes', icon: BarChart2 } as const
+
 export function BottomNav() {
   const pathname = usePathname()
+  const role     = useUserRole()
+  const isAdmin  = role === 'admin'
+
+  const items = isAdmin
+    ? [...BASE_ITEMS, ADMIN_ITEM]
+    : BASE_ITEMS
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-[var(--card)] border-t border-[var(--border)] pb-safe">
       <div className="flex items-center justify-around h-16 max-w-lg mx-auto px-1">
-        {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
+        {items.map(({ href, label, icon: Icon }) => {
           const isActive = href === '/' ? pathname === '/' : pathname.startsWith(href)
           return (
             <Link

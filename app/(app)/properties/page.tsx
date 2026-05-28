@@ -8,7 +8,7 @@ import { AddPropertyButton } from '@/components/properties/AddPropertyButton'
 export default async function PropertiesPage() {
   const [properties, staff] = await Promise.all([
     getProperties(),
-    getTeamMembers('cleaning'),
+    getTeamMembers(),   // all roles: admin + cleaning + anfitrion + maintenance
   ])
 
   return (
@@ -24,7 +24,7 @@ export default async function PropertiesPage() {
           properties.map(p => <PropertyCard key={p.id} property={p} />)
         )}
 
-        {/* Personal de limpieza */}
+        {/* Personal por roles */}
         <StaffSection staff={staff} />
       </div>
     </>

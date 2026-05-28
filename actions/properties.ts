@@ -60,6 +60,26 @@ export async function createProperty(
   return { success: true }
 }
 
+/** Activates or hides a property (active=false hides it from the app). */
+export async function togglePropertyActive(
+  id: string,
+  active: boolean
+): Promise<{ success: boolean; error?: string }> {
+  const role = await getCallerRole()
+  if (!role || !canDo(role as 'admin' | 'cleaning' | 'maintenance' | 'anfitrion', 'properties:edit')) {
+    return { success: false, error: 'No autorizado' }
+  }
+  const supabase = await createClient()
+  const { error } = await supabase
+    .from('properties')
+    .update({ active })
+    .eq('id', id)
+  if (error) return { success: false, error: error.message }
+  revalidatePath('/properties')
+  revalidatePath('/')
+  return { success: true }
+}
+
 export async function updateProperty(
   id: string,
   formData: FormData

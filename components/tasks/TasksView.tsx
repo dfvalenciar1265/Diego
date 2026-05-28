@@ -1,25 +1,18 @@
 'use client'
 import { useState } from 'react'
-import { TaskCard } from './TaskCard'
-import type { Task, Property } from '@/lib/types'
+import { OtherTaskCard } from './OtherTaskCard'
+import type { Task, Property, TeamMember } from '@/lib/types'
 
 type ExtendedTask = Task & { property?: { name: string }; assignee?: { name: string } }
 
 interface Props {
-  tasks:      ExtendedTask[]
-  properties: Property[]
+  tasks:       ExtendedTask[]
+  properties:  Property[]
+  teamMembers: TeamMember[]
 }
 
 type Tab = 'pending' | 'done'
-
 const PAGE_SIZE = 5
-
-const TYPE_OPTIONS = [
-  { value: '',            label: 'Todos los tipos' },
-  { value: 'cleaning',    label: '🧹 Limpieza'     },
-  { value: 'preparation', label: '🛏️ Preparación'  },
-  { value: 'other',       label: '📋 Otra'          },
-]
 
 // ── Pagination helper ─────────────────────────────────────────────────────────
 
@@ -32,7 +25,7 @@ function Pagination({
       <button
         onClick={() => onChange(Math.max(1, page - 1))}
         disabled={page === 1}
-        className="text-sm font-medium text-[#6366f1]
+        className="text-sm font-medium text-[#ff385c]
                    disabled:text-[#c4c9d4] active:opacity-70 transition-opacity"
       >
         ‹ Anterior
@@ -41,7 +34,7 @@ function Pagination({
       <button
         onClick={() => onChange(Math.min(total, page + 1))}
         disabled={page === total}
-        className="text-sm font-medium text-[#6366f1]
+        className="text-sm font-medium text-[#ff385c]
                    disabled:text-[#c4c9d4] active:opacity-70 transition-opacity"
       >
         Siguiente ›
@@ -52,17 +45,17 @@ function Pagination({
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export function TasksView({ tasks, properties }: Props) {
+export function TasksView({ tasks, properties, teamMembers }: Props) {
   const [tab,        setTab]        = useState<Tab>('pending')
   const [pendPage,   setPendPage]   = useState(1)
   const [donePage,   setDonePage]   = useState(1)
   const [filterProp, setFilterProp] = useState('')
-  const [filterType, setFilterType] = useState('')
 
-  // ── Apply filters ─────────────────────────────────────────────────────────
-  const filtered = tasks.filter(t => {
+  // Only show 'other' type tasks (misc tasks managed here)
+  const otherTasks = tasks.filter(t => t.type === 'other')
+
+  const filtered = otherTasks.filter(t => {
     if (filterProp && t.property_id !== filterProp) return false
-    if (filterType && t.type       !== filterType)  return false
     return true
   })
 
@@ -75,20 +68,20 @@ export function TasksView({ tasks, properties }: Props) {
       return dateB.localeCompare(dateA)
     })
 
-  // ── Pagination ────────────────────────────────────────────────────────────
   const pendPages = Math.max(1, Math.ceil(pendingTasks.length / PAGE_SIZE))
   const donePages = Math.max(1, Math.ceil(doneTasks.length  / PAGE_SIZE))
 
   const pagedPending = pendingTasks.slice((pendPage - 1) * PAGE_SIZE, pendPage * PAGE_SIZE)
   const pagedDone    = doneTasks.slice((donePage  - 1) * PAGE_SIZE, donePage  * PAGE_SIZE)
 
-  function switchTab(t: Tab) {
-    setTab(t)
+  const dropdownStyle = {
+    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`,
+    backgroundRepeat: 'no-repeat' as const,
+    backgroundPosition: 'right 12px center',
   }
 
-  function handleFilterChange(prop: string, type: string) {
+  function changeFilter(prop: string) {
     setFilterProp(prop)
-    setFilterType(type)
     setPendPage(1)
     setDonePage(1)
   }
@@ -96,40 +89,25 @@ export function TasksView({ tasks, properties }: Props) {
   return (
     <div className="p-4 space-y-3">
 
-      {/* ── Filtros ───────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 gap-2">
-        <select
-          value={filterProp}
-          onChange={e => handleFilterChange(e.target.value, filterType)}
-          className="w-full text-sm text-[#0f172a] bg-white border border-[#e2e8f0]
-                     rounded-xl px-3 py-2.5 focus:outline-none focus:ring-1
-                     focus:ring-[#ff385c] appearance-none"
-          style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center' }}
-        >
-          <option value="">Todos los apts.</option>
-          {properties.map(p => (
-            <option key={p.id} value={p.id}>{p.name}</option>
-          ))}
-        </select>
-
-        <select
-          value={filterType}
-          onChange={e => handleFilterChange(filterProp, e.target.value)}
-          className="w-full text-sm text-[#0f172a] bg-white border border-[#e2e8f0]
-                     rounded-xl px-3 py-2.5 focus:outline-none focus:ring-1
-                     focus:ring-[#ff385c] appearance-none"
-          style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center' }}
-        >
-          {TYPE_OPTIONS.map(o => (
-            <option key={o.value} value={o.value}>{o.label}</option>
-          ))}
-        </select>
-      </div>
+      {/* ── Filtro de apartamento ─────────────────────────────────────────── */}
+      <select
+        value={filterProp}
+        onChange={e => changeFilter(e.target.value)}
+        className="w-full text-sm text-[#0f172a] bg-white border border-[#e2e8f0]
+                   rounded-xl px-3 py-2.5 focus:outline-none focus:ring-1
+                   focus:ring-[#ff385c] appearance-none"
+        style={dropdownStyle}
+      >
+        <option value="">Todos los apartamentos</option>
+        {properties.map(p => (
+          <option key={p.id} value={p.id}>{p.name}</option>
+        ))}
+      </select>
 
       {/* ── Tabs ──────────────────────────────────────────────────────────── */}
       <div className="flex rounded-xl overflow-hidden border border-[#e2e8f0]">
         <button
-          onClick={() => switchTab('pending')}
+          onClick={() => setTab('pending')}
           className="flex-1 py-2.5 text-sm font-medium transition-colors"
           style={{
             background: tab === 'pending' ? '#ff385c' : 'white',
@@ -150,7 +128,7 @@ export function TasksView({ tasks, properties }: Props) {
           )}
         </button>
         <button
-          onClick={() => switchTab('done')}
+          onClick={() => setTab('done')}
           className="flex-1 py-2.5 text-sm font-medium transition-colors"
           style={{
             background: tab === 'done' ? '#ff385c' : 'white',
@@ -182,7 +160,9 @@ export function TasksView({ tasks, properties }: Props) {
             </div>
           ) : (
             <>
-              {pagedPending.map(t => <TaskCard key={t.id} task={t} />)}
+              {pagedPending.map(t => (
+                <OtherTaskCard key={t.id} task={t} teamMembers={teamMembers} />
+              ))}
               <Pagination page={pendPage} total={pendPages} onChange={setPendPage} />
               <p className="text-center text-xs text-[#c4c9d4]">
                 {pendingTasks.length} tarea{pendingTasks.length !== 1 ? 's' : ''} pendiente{pendingTasks.length !== 1 ? 's' : ''}
@@ -202,7 +182,9 @@ export function TasksView({ tasks, properties }: Props) {
             </div>
           ) : (
             <>
-              {pagedDone.map(t => <TaskCard key={t.id} task={t} />)}
+              {pagedDone.map(t => (
+                <OtherTaskCard key={t.id} task={t} teamMembers={teamMembers} />
+              ))}
               <Pagination page={donePage} total={donePages} onChange={setDonePage} />
               <p className="text-center text-xs text-[#c4c9d4]">
                 {doneTasks.length} tarea{doneTasks.length !== 1 ? 's' : ''} completada{doneTasks.length !== 1 ? 's' : ''}
