@@ -114,7 +114,7 @@ export function GmailSettingsClient({ connected, lastSync, lastNewCount }: Props
             <div className="bg-[var(--bg)] rounded-lg p-2 font-mono text-xs space-y-1">
               <p>GOOGLE_CLIENT_ID=...</p>
               <p>GOOGLE_CLIENT_SECRET=...</p>
-              <p>NEXT_PUBLIC_APP_URL=https://tu-app.vercel.app</p>
+              <p>NEXT_PUBLIC_APP_URL=https://diegoprueba.vercel.app</p>
               <p>CRON_SECRET=cadena-aleatoria-segura</p>
             </div>
             <p>2. En Google Cloud Console → APIs &amp; Services → Credentials,
