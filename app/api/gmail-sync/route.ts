@@ -210,8 +210,16 @@ async function insertReservationIfNew(
   r: ParsedReservation
 ): Promise<boolean> {
   const { data: existing } = await db
-    .from('reservations').select('id').eq('airbnb_code', r.airbnb_code).single()
-  if (existing) return false
+    .from('reservations').select('id, amount').eq('airbnb_code', r.airbnb_code).single()
+
+  if (existing) {
+    // Fix previously mis-parsed amounts: if stored value is < 5000 (clearly wrong
+    // for any real COP reservation) and the re-parsed value is larger, update it.
+    if (existing.amount < 5000 && r.amount >= 1000) {
+      await db.from('reservations').update({ amount: r.amount }).eq('id', existing.id)
+    }
+    return false
+  }
 
   const { data: inserted, error } = await db
     .from('reservations').insert(r).select('id').single()

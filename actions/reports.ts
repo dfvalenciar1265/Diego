@@ -1,0 +1,142 @@
+'use server'
+import { createClient } from '@/lib/supabase/server'
+import { CLEANING_PRICES } from '@/lib/cleaning-prices'
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+export interface IncomeRow {
+  id:            string
+  property_id:   string
+  property_name: string
+  guest_name:    string
+  check_in:      string
+  check_out:     string
+  total_amount:  number
+  total_nights:  number
+  p1_nights:     number   // nights in days 1-15 of the month
+  p2_nights:     number   // nights in days 16-end of the month
+  p1_amount:     number   // proportional income for Q1
+  p2_amount:     number   // proportional income for Q2
+}
+
+export interface CleaningCostRow {
+  id:            string
+  property_id:   string
+  property_name: string
+  completed_at:  string
+  period:        1 | 2
+  fixed_price:   number
+  actual_cost:   number
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function pad(n: number): string {
+  return String(n).padStart(2, '0')
+}
+
+function lastDayOfMonth(year: number, month: number): number {
+  return new Date(year, month, 0).getDate()
+}
+
+// ── Income report ─────────────────────────────────────────────────────────────
+
+/**
+ * Returns all confirmed reservations that have at least one night in the given
+ * month, with Q1 (days 1-15) and Q2 (days 16-end) proportional amounts.
+ */
+export async function getIncomeReport(year: number, month: number): Promise<IncomeRow[]> {
+  const supabase = await createClient()
+
+  const firstDay = `${year}-${pad(month)}-01`
+  const lastDay  = `${year}-${pad(month)}-${pad(lastDayOfMonth(year, month))}`
+
+  const { data } = await supabase
+    .from('reservations')
+    .select('*, property:properties(name)')
+    .eq('status', 'confirmed')
+    .lte('check_in', lastDay)   // reservation starts on or before last day of month
+    .gt('check_out', firstDay)  // reservation ends after first day of month
+    .order('check_in')
+
+  if (!data) return []
+
+  const result: IncomeRow[] = []
+
+  for (const r of data) {
+    const checkIn  = new Date(r.check_in  + 'T12:00:00')
+    const checkOut = new Date(r.check_out + 'T12:00:00')
+    const totalNights = Math.round((checkOut.getTime() - checkIn.getTime()) / 86400000)
+    if (totalNights <= 0) continue
+
+    // Count nights that fall in Q1 and Q2 of the selected month
+    let p1 = 0
+    let p2 = 0
+    const cur = new Date(checkIn)
+    while (cur < checkOut) {
+      if (cur.getFullYear() === year && cur.getMonth() + 1 === month) {
+        cur.getDate() <= 15 ? p1++ : p2++
+      }
+      cur.setDate(cur.getDate() + 1)
+    }
+
+    if (p1 + p2 === 0) continue  // no nights in this month (shouldn't happen, but guard)
+
+    result.push({
+      id:            r.id,
+      property_id:   r.property_id,
+      property_name: r.property?.name ?? '—',
+      guest_name:    r.guest_name,
+      check_in:      r.check_in,
+      check_out:     r.check_out,
+      total_amount:  r.amount,
+      total_nights:  totalNights,
+      p1_nights:     p1,
+      p2_nights:     p2,
+      p1_amount:     Math.round((p1 / totalNights) * r.amount),
+      p2_amount:     Math.round((p2 / totalNights) * r.amount),
+    })
+  }
+
+  return result
+}
+
+// ── Cleaning cost report ──────────────────────────────────────────────────────
+
+/**
+ * Returns all done cleaning tasks in the given month.
+ * Cost = task.cost if set, otherwise the fixed price for the property.
+ */
+export async function getCleaningCostReport(year: number, month: number): Promise<CleaningCostRow[]> {
+  const supabase = await createClient()
+
+  const firstDay = `${year}-${pad(month)}-01`
+  const lastDay  = `${year}-${pad(month)}-${pad(lastDayOfMonth(year, month))}`
+
+  const { data } = await supabase
+    .from('tasks')
+    .select('*, property:properties(name)')
+    .eq('type', 'cleaning')
+    .eq('status', 'done')
+    .gte('completed_at', `${firstDay}T00:00:00`)
+    .lte('completed_at', `${lastDay}T23:59:59`)
+    .order('completed_at')
+
+  if (!data) return []
+
+  return data.map(t => {
+    const day        = new Date(t.completed_at).getDate()
+    const propName   = t.property?.name ?? ''
+    const fixedPrice = CLEANING_PRICES[propName] ?? 0
+
+    return {
+      id:            t.id,
+      property_id:   t.property_id,
+      property_name: propName,
+      completed_at:  t.completed_at,
+      period:        day <= 15 ? 1 : 2,
+      fixed_price:   fixedPrice,
+      actual_cost:   t.cost ?? fixedPrice,
+    }
+  })
+}

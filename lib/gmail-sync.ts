@@ -361,9 +361,41 @@ export function parseConfirmationEmail(text: string): Omit<ParsedReservation, 'p
   const amountMatch =
     text.match(/GANAS\s+\$?([\d.,]+)/i) ??
     text.match(/(?:Total|Cobro\s+(?:del|al)\s+anfitri[oó]n|Host\s+payout)[^\d$\n]*(?:\n[^\d$\n]*)?\$?([\d.,]+)/i)
-  const amount = amountMatch
-    ? parseFloat(amountMatch[1].replace(/\./g, '').replace(',', '.'))
-    : 0
+
+  // Parse COP amount — handle all separator conventions:
+  //   1,221,443.11   (US multi-comma: comma=thou, dot=dec)  → 1221443
+  //   1,220,000      (US multi-comma: comma=thou)            → 1220000
+  //   992,851.85     (US single-comma + dot: X,XXX.XX)      → 992852
+  //   1.220.000      (EU multi-dot: dot=thou)                → 1220000
+  //   335.352,59     (EU: X.XXX,XX → dot=thou, comma=dec)   → 335352.59
+  //   509,73         (EU decimal: comma=dec, 2 digits)       → 509.73
+  const amount = (() => {
+    if (!amountMatch) return 0
+    const raw = amountMatch[1]
+    const commas = (raw.match(/,/g) ?? []).length
+    const dots   = (raw.match(/\./g) ?? []).length
+
+    // Multiple commas → US thousands separators: 1,221,443.11 or 1,220,000
+    if (commas > 1) {
+      return Math.round(parseFloat(raw.replace(/,/g, ''))) || 0
+    }
+    // Multiple dots → EU thousands separators: 1.220.000
+    if (dots > 1) {
+      return parseInt(raw.replace(/[.,]/g, ''), 10) || 0
+    }
+    // Single comma followed by exactly 3 digits then dot or end → US thousands
+    // e.g. 992,851.85 or 509,733
+    if (/,\d{3}(\.|$)/.test(raw)) {
+      return Math.round(parseFloat(raw.replace(/,/g, ''))) || 0
+    }
+    // Single dot followed by exactly 3 digits then comma or end → EU thousands
+    // e.g. 335.352,59
+    if (/\.\d{3}(,|$)/.test(raw)) {
+      return parseFloat(raw.replace(/\./g, '').replace(',', '.')) || 0
+    }
+    // Ambiguous or simple decimal: 509,73 (EU) → 509.73
+    return parseFloat(raw.replace(/\./g, '').replace(',', '.')) || 0
+  })()
 
   // ── Guest count ───────────────────────────────────────────────────────────
   const guestsMatch = text.match(/(\d+)\s+(?:huéspedes?|guests?|viajeros?)/i)
