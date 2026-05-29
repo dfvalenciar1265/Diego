@@ -114,15 +114,14 @@ export async function deleteReservation(
     .eq('id', id)
   if (error) return { success: false, error: error.message }
 
-  // Delete pending/in-progress tasks linked via reservation_id
+  // Delete ALL tasks linked to this reservation (any status — done tasks also removed)
   await supabase
     .from('tasks')
     .delete()
     .eq('reservation_id', id)
-    .in('status', ['pending', 'in_progress'])
 
   // Also delete orphan tasks (reservation_id = null) for same property + guest name
-  // These can be created when auto-task creation runs before the reservation_id is set
+  // These appear when auto-task creation runs before the reservation_id FK is set
   if (reservation?.guest_name && reservation?.property_id) {
     await supabase
       .from('tasks')
@@ -130,7 +129,6 @@ export async function deleteReservation(
       .is('reservation_id', null)
       .eq('property_id', reservation.property_id)
       .ilike('notes', `%${reservation.guest_name}%`)
-      .in('status', ['pending', 'in_progress'])
   }
 
   revalidatePath('/calendar')

@@ -123,11 +123,8 @@ async function syncHandler(req: NextRequest, fromCron: boolean) {
       .from('reservations').select('id, status').eq('airbnb_code', code).single()
     if (existing && existing.status !== 'cancelled') {
       await db.from('reservations').update({ status: 'cancelled' }).eq('id', existing.id)
-      // Delete pending/in-progress tasks for this reservation
-      await db.from('tasks')
-        .delete()
-        .eq('reservation_id', existing.id)
-        .in('status', ['pending', 'in_progress'])
+      // Delete ALL tasks for this reservation (any status)
+      await db.from('tasks').delete().eq('reservation_id', existing.id)
       cancelledCount++
     }
   }
