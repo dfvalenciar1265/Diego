@@ -27,20 +27,21 @@ export default async function DashboardPage() {
     redirect('/tasks')
   }
 
-  const today = format(new Date(), "EEEE d 'de' MMMM", { locale: es })
+  const today    = format(new Date(), "EEEE d 'de' MMMM", { locale: es })
+  const todayISO = format(new Date(), 'yyyy-MM-dd')
 
   const [kpis, todayTasks, stockAlerts, pendingPurchases, checkOuts] = await Promise.all([
     getDashboardKPIs(),
-    getTasks({ date: format(new Date(), 'yyyy-MM-dd') }),
+    getTasks({ date: todayISO }),
     getLowStockAlerts(),
     getPurchaseRequests('pending'),
     getTodayCheckOuts(),
   ])
 
-  // Group today's tasks by type
-  const cleaningTasks = todayTasks.filter((t: Task) => t.type === 'cleaning')
-  const prepTasks     = todayTasks.filter((t: Task) => t.type === 'preparation')
-  const otherTasks    = todayTasks.filter((t: Task) => t.type !== 'cleaning' && t.type !== 'preparation')
+  // Group today's tasks by type — always double-filter by date to guard against timezone drift
+  const cleaningTasks = todayTasks.filter((t: Task) => t.type === 'cleaning'    && t.scheduled_for === todayISO)
+  const prepTasks     = todayTasks.filter((t: Task) => t.type === 'preparation' && t.scheduled_for === todayISO)
+  const otherTasks    = todayTasks.filter((t: Task) => t.type !== 'cleaning' && t.type !== 'preparation' && t.scheduled_for === todayISO)
 
   return (
     <div className="pb-4">
