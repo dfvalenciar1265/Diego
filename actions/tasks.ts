@@ -166,9 +166,10 @@ export async function completeTask(
 }
 
 /**
- * Marks all pending/in-progress tasks whose scheduled date is strictly before
- * today as "done". Called automatically during each Gmail sync run so the task
- * list stays clean — past cleaning/preparation tasks no longer show as pending.
+ * Marks overdue cleaning/other tasks as "done" automatically.
+ * Preparation tasks are intentionally excluded — they are shown on the
+ * dashboard on the guest's check-in day regardless of scheduled_for,
+ * so auto-completing them would hide them from that view.
  *
  * Uses the service-role client so it can run from a cron route (no session).
  * Returns the number of tasks that were updated.
@@ -187,8 +188,9 @@ export async function completeOverdueTasks(): Promise<number> {
       status:       'done',
       completed_at: new Date().toISOString(),
     })
-    .lt('scheduled_for', today)        // strictly before today
+    .lt('scheduled_for', today)
     .in('status', ['pending', 'in_progress'])
+    .neq('type', 'preparation')        // prep tasks are managed manually
     .select('id')
 
   if (error) {

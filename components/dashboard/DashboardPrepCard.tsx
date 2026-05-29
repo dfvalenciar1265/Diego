@@ -79,12 +79,15 @@ export function DashboardPrepCard({ task }: { task: PrepTask }) {
   const propName  = task.property?.name ?? '—'
   const checkIn   = res?.check_in ? shortDate(res.check_in) : null
 
+  const isDone = task.status === 'done'
+
   return (
-    <div className="bg-white rounded-xl border border-[#ff385c22] shadow-[0_1px_3px_rgba(0,0,0,0.06)] px-3 py-2.5">
+    <div className={`bg-white rounded-xl border shadow-[0_1px_3px_rgba(0,0,0,0.06)] px-3 py-2.5
+                     ${isDone ? 'border-[#22c55e33] opacity-75' : 'border-[#ff385c22]'}`}>
 
       {/* Row 1: icon + apartment + check-in time */}
       <div className="flex items-center gap-2">
-        <span className="text-base flex-shrink-0">🛏️</span>
+        <span className="text-base flex-shrink-0">{isDone ? '✅' : '🛏️'}</span>
 
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-[#0f172a] leading-tight truncate">{propName}</p>

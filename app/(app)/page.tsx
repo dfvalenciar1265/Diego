@@ -31,17 +31,15 @@ export default async function DashboardPage() {
   const today    = format(new Date(), "EEEE d 'de' MMMM", { locale: es })
   const todayISO = format(new Date(), 'yyyy-MM-dd')
 
-  // Prep tasks for today's check-ins: join through reservations.check_in = today
-  // (distinct from scheduled_for — we show prep tasks when the GUEST ARRIVES today)
+  // Prep tasks for today's check-ins — ALL statuses (done tasks show with ✓)
+  // Filter by reservation.check_in = today so only today's arriving guests appear
   const { data: prepTasksRaw } = await supabase
     .from('tasks')
     .select('*, property:properties(name), assignee:team_members(name), reservation:reservations(check_in, check_out, notes, guest_name, guests)')
     .eq('type', 'preparation')
-    .in('status', ['pending', 'in_progress'])
-    .eq('reservations.check_in', todayISO)   // filter by reservation check-in date
+    .eq('reservations.check_in', todayISO)
     .not('reservation_id', 'is', null)
 
-  // Only keep tasks whose reservation actually has check_in = today (PostgREST returns nulls for non-matching joins)
   const prepTasks = (prepTasksRaw ?? []).filter((t: any) => t.reservation?.check_in === todayISO)
 
   const [kpis, todayTasks, stockAlerts, pendingPurchases, checkOuts] = await Promise.all([
