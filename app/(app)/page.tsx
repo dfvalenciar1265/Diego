@@ -7,7 +7,6 @@ import { getPurchaseRequests } from '@/actions/purchases'
 import { KPICard } from '@/components/dashboard/KPICard'
 import { StockAlert } from '@/components/dashboard/StockAlert'
 import { TaskCard } from '@/components/tasks/TaskCard'
-import { PrepTaskCard } from '@/components/tasks/PrepTaskCard'
 import { ResolvePurchaseButton } from '@/components/dashboard/ResolvePurchaseButton'
 import { canDo } from '@/lib/permissions'
 import { format } from 'date-fns'
@@ -130,18 +129,18 @@ export default async function DashboardPage() {
 
           <div className="space-y-4">
 
-              {/* Preparación — tarjeta especial con datos de reserva */}
+              {/* Preparación — tarjeta simple (sin fechas de reserva para evitar confusión) */}
               {prepTasks.length > 0 && (
                 <div>
                   <div className="flex items-center gap-2 mb-2">
                     <span className="text-base">🛏️</span>
                     <span className="text-xs font-semibold text-[#ff385c] uppercase tracking-wide">
-                      Preparación ({prepTasks.length})
+                      Preparación hoy ({prepTasks.length})
                     </span>
                     <div className="flex-1 h-px bg-[#ffe4e8]" />
                   </div>
                   <div className="space-y-3">
-                    {prepTasks.map((t: Task) => <PrepTaskCard key={t.id} task={t as any} />)}
+                    {prepTasks.map((t: Task) => <TaskCard key={t.id} task={t} />)}
                   </div>
                 </div>
               )}
