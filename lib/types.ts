@@ -108,6 +108,20 @@ export interface PurchaseRequest {
   supply?: Supply              // join opcional
 }
 
+export type ExpenseStatus = 'pending' | 'paid'
+
+export interface Expense {
+  id: string
+  property_id: string
+  provider: string
+  date: string          // ISO date YYYY-MM-DD
+  amount: number
+  status: ExpenseStatus
+  notes: string | null
+  created_at: string
+  property?: { name: string }
+}
+
 // Tipos para el Dashboard
 export interface DashboardKPIs {
   checkInsToday: number

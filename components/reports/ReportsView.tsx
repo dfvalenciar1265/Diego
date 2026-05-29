@@ -3,7 +3,8 @@ import { useState } from 'react'
 import { Pagination, paginate, pageCount } from '@/components/ui/Pagination'
 import { IncomeReport } from './IncomeReport'
 import { CleaningCostReport } from './CleaningCostReport'
-import type { Task, Property, TeamMember, MaintenanceIssue } from '@/lib/types'
+import { ExpensesView } from './ExpensesView'
+import type { Task, Property, TeamMember, MaintenanceIssue, Expense } from '@/lib/types'
 import type { IncomeRow, CleaningCostRow } from '@/actions/reports'
 
 type CleaningRow    = Task            & { property?: { name: string }; assignee?: { name: string } }
@@ -16,11 +17,11 @@ interface Props {
   otherTasks:        OtherRow[]
   properties:        Property[]
   teamMembers:       TeamMember[]
-  // New financial reports
   incomeRows:        IncomeRow[]
   cleaningCostRows:  CleaningCostRow[]
   currentYear:       number
   currentMonth:      number
+  expenses:          Expense[]
 }
 
 type Tab = 'cleaning' | 'expenses' | 'income' | 'cleaning_costs'
@@ -47,6 +48,7 @@ export function ReportsView({
   cleaningCostRows,
   currentYear,
   currentMonth,
+  expenses,
 }: Props) {
   const [tab,          setTab]          = useState<Tab>('income')
   const [filterProp,   setFilterProp]   = useState('')
@@ -244,84 +246,9 @@ export function ReportsView({
         </>
       )}
 
-      {/* ── Expense report ─────────────────────────────────────────────────── */}
+      {/* ── Gastos (expenses table) ────────────────────────────────────────── */}
       {tab === 'expenses' && (
-        <>
-          {/* Filters */}
-          <div className="grid grid-cols-2 gap-2">
-            <select
-              value={filterProp}
-              onChange={e => { setFilterProp(e.target.value); setExpPage(1) }}
-              className="w-full text-sm text-[#0f172a] bg-white border border-[#e2e8f0]
-                         rounded-xl px-3 py-2.5 focus:outline-none appearance-none"
-              style={dropdownStyle}
-            >
-              <option value="">Todos los apts.</option>
-              {properties.map(p => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
-            <div className="flex items-center justify-center bg-[#f0fdf4] rounded-xl px-3 py-2.5 border border-[#bbf7d0]">
-              <span className="text-xs font-semibold text-[#16a34a]">
-                Total: {fmtCOP(totalExpenses)}
-              </span>
-            </div>
-          </div>
-
-          <div>
-            {filteredExpenses.length === 0 ? (
-              <div className="text-center py-12">
-                <p className="text-4xl mb-3">💰</p>
-                <p className="text-[#94a3b8]">No hay gastos registrados en los últimos 90 días</p>
-              </div>
-            ) : (
-              <div className="bg-white rounded-xl border border-[#e2e8f0] overflow-hidden shadow-sm">
-                <div className="grid grid-cols-[1fr_1fr_auto] bg-[#f8fafc] border-b border-[#e2e8f0]">
-                  <div className="px-3 py-2 text-[10px] font-bold text-[#94a3b8] uppercase tracking-wide">Fecha / Categoría</div>
-                  <div className="px-3 py-2 text-[10px] font-bold text-[#94a3b8] uppercase tracking-wide">Detalle / Apto.</div>
-                  <div className="px-3 py-2 text-[10px] font-bold text-[#94a3b8] uppercase tracking-wide text-right">Costo</div>
-                </div>
-                {pagedExpenses.map((r, i) => (
-                  <div
-                    key={i}
-                    className={`grid grid-cols-[1fr_1fr_auto] border-b border-[#f1f5f9] last:border-0
-                                 ${i % 2 === 0 ? 'bg-white' : 'bg-[#fafafa]'}`}
-                  >
-                    <div className="px-3 py-3">
-                      <p className="text-xs font-semibold text-[#0f172a]">{fmtDate(r.date)}</p>
-                      <p className="text-[11px] text-[#64748b]">{r.category}</p>
-                    </div>
-                    <div className="px-3 py-3">
-                      <p className="text-xs text-[#0f172a] truncate">{r.detail}</p>
-                      <p className="text-[11px] text-[#94a3b8] truncate">{r.property}</p>
-                    </div>
-                    <div className="px-3 py-3 text-right">
-                      <p className="text-xs font-semibold text-[#ef4444]">{fmtCOP(r.cost)}</p>
-                    </div>
-                  </div>
-                ))}
-                <div className="grid grid-cols-[1fr_1fr_auto] bg-[#fff5f5] border-t border-[#fecaca]">
-                  <div className="px-3 py-2 col-span-2">
-                    <span className="text-xs font-bold text-[#ef4444]">
-                      Total ({filteredExpenses.length} ítems)
-                    </span>
-                  </div>
-                  <div className="px-3 py-2 text-right">
-                    <span className="text-xs font-bold text-[#ef4444]">
-                      {fmtCOP(totalExpenses)}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            )}
-            <Pagination
-              page={expPage}
-              total={pageCount(filteredExpenses.length, PS)}
-              onChange={setExpPage}
-              accent="#6366f1"
-            />
-          </div>
-        </>
+        <ExpensesView expenses={expenses} properties={properties} />
       )}
     </div>
   )
