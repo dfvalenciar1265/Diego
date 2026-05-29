@@ -99,21 +99,39 @@ export async function deleteReservation(
     return { success: false, error: 'No autorizado' }
   }
   const supabase = await createClient()
+
+  // Fetch the reservation first to get guest_name and property_id for orphan cleanup
+  const { data: reservation } = await supabase
+    .from('reservations')
+    .select('guest_name, property_id')
+    .eq('id', id)
+    .single()
+
   // Soft-delete: mark as cancelled instead of physically deleting.
-  // If the reservation came from Airbnb, a hard delete would cause the Gmail
-  // sync to re-insert it on the next run (the email still exists in Gmail).
   const { error } = await supabase
     .from('reservations')
     .update({ status: 'cancelled' })
     .eq('id', id)
   if (error) return { success: false, error: error.message }
 
-  // Also cancel any pending/in-progress tasks linked to this reservation
+  // Delete pending/in-progress tasks linked via reservation_id
   await supabase
     .from('tasks')
     .delete()
     .eq('reservation_id', id)
     .in('status', ['pending', 'in_progress'])
+
+  // Also delete orphan tasks (reservation_id = null) for same property + guest name
+  // These can be created when auto-task creation runs before the reservation_id is set
+  if (reservation?.guest_name && reservation?.property_id) {
+    await supabase
+      .from('tasks')
+      .delete()
+      .is('reservation_id', null)
+      .eq('property_id', reservation.property_id)
+      .ilike('notes', `%${reservation.guest_name}%`)
+      .in('status', ['pending', 'in_progress'])
+  }
 
   revalidatePath('/calendar')
   revalidatePath('/')

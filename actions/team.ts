@@ -76,6 +76,45 @@ export async function createTeamMember(
   return { success: true }
 }
 
+/** Updates name, email, role, and optionally resets password. */
+export async function updateTeamMember(
+  memberId: string,
+  formData: FormData
+): Promise<{ success: boolean; error?: string }> {
+  const callerRole = await getCallerRole()
+  if (!callerRole || !canDo(callerRole, 'team:manage')) {
+    return { success: false, error: 'No autorizado' }
+  }
+
+  const name     = (formData.get('name') as string).trim()
+  const email    = (formData.get('email') as string).trim().toLowerCase()
+  const role     = (formData.get('role') as UserRole) || 'cleaning'
+  const password = (formData.get('password') as string).trim()
+
+  const db = createServiceClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  )
+
+  // Update auth account (email + optional password)
+  const authUpdate: Record<string, string> = { email }
+  if (password) authUpdate.password = password
+  const { error: authErr } = await db.auth.admin.updateUserById(memberId, authUpdate)
+  if (authErr) return { success: false, error: authErr.message }
+
+  // Update team_members record
+  const { error } = await db
+    .from('team_members')
+    .update({ name, email, role })
+    .eq('id', memberId)
+  if (error) return { success: false, error: error.message }
+
+  revalidatePath('/team')
+  revalidatePath('/cleaning')
+  revalidatePath('/tasks')
+  return { success: true }
+}
+
 export async function updateTeamMemberRole(
   memberId: string,
   newRole: UserRole
