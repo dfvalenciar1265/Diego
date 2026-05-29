@@ -18,16 +18,43 @@ export interface TodayCheckOut {
 export async function getTodayCheckOuts(): Promise<TodayCheckOut[]> {
   const supabase = await createClient()
   const today = format(new Date(), 'yyyy-MM-dd')
+
+  // Fetch today's confirmed check-outs plus their cleaning task (to get
+  // any manually-edited check-out time stored in tasks.notes as "HH:MM|...")
   const { data } = await supabase
     .from('reservations')
-    .select('id, guest_name, notes, property:properties(name)')
+    .select(`
+      id, guest_name, notes,
+      property:properties(name),
+      tasks(notes, type, scheduled_for)
+    `)
     .eq('check_out', today)
     .eq('status', 'confirmed')
     .order('guest_name')
   if (!data) return []
+
   return data.map(r => {
+    // 1. Prefer time saved on the cleaning task ("HH:MM|..." format)
+    const cleaningTask = (r.tasks as any[])?.find(
+      (t: any) => t.type === 'cleaning' && t.scheduled_for === today
+    )
+    const taskTimeMatch = cleaningTask?.notes?.match(/^(\d{2}:\d{2})\|/)
+    if (taskTimeMatch) {
+      const [h, m] = taskTimeMatch[1].split(':').map(Number)
+      const suffix = h >= 12 ? 'pm' : 'am'
+      const h12   = h % 12 || 12
+      const time12 = m === 0 ? `${h12}${suffix}` : `${h12}:${String(m).padStart(2,'0')}${suffix}`
+      return {
+        id: r.id,
+        guest_name: r.guest_name ?? '—',
+        check_out_time: time12,
+        property_name: (r.property as any)?.name ?? '—',
+      }
+    }
+
+    // 2. Fall back to reservation notes ("Check-out: 12pm")
     const match = r.notes?.match(/Check-out:\s*([^\|]+)/i)
-    const checkOutTime = match ? match[1].trim() : '—'
+    const checkOutTime = match ? match[1].trim() : '12pm'
     return {
       id: r.id,
       guest_name: r.guest_name ?? '—',

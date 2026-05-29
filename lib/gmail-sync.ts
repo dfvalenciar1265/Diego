@@ -41,16 +41,16 @@ export interface ChangeRequestFlag {
 export interface SyncEmailResult {
   confirmed: ParsedReservation[]
   updated: UpdatedReservationFlag[]
+  cancelled: string[]           // airbnb_codes to cancel
   change_requests: ChangeRequestFlag[]
-  threads_fetched: number   // total threads seen
-  skipped_no_room: number  // emails dropped because room ID not in map
-  // debug counters (visible in API response for admin diagnostics)
-  d_empty_text: number     // getMessagePlaintext returned empty
-  d_not_airbnb: number     // email is from Airbnb but not a reservation/update type
-  d_parse_fail: number     // parseConfirmationEmail returned null
-  d_fail_code: number      // └─ code regex failed
-  d_fail_guest: number     // └─ guest name regex failed
-  d_fail_dates: number     // └─ fewer than 2 dates found
+  threads_fetched: number
+  skipped_no_room: number
+  d_empty_text: number
+  d_not_airbnb: number
+  d_parse_fail: number
+  d_fail_code: number
+  d_fail_guest: number
+  d_fail_dates: number
 }
 
 // ─── Airbnb room ID → internal property UUID ─────────────────────────────────
@@ -292,7 +292,7 @@ export function parseConfirmationEmail(text: string): Omit<ParsedReservation, 'p
   const textLc = text.toLowerCase()
   if (!textLc.includes('código de confirmación') && !textLc.includes('confirmation code')) return null
 
-  // Skip actual cancellation emails.
+  // Skip actual cancellation emails — these are handled by parseCancellationEmail().
   // IMPORTANT: Do NOT use a broad .includes('cancelada') — every confirmation email's
   // cancellation-policy section says "noches canceladas" which would false-positive here.
   // Only match phrases that appear exclusively in cancellation notification emails.
@@ -410,20 +410,40 @@ export function parseConfirmationEmail(text: string): Omit<ParsedReservation, 'p
   const cancelMatch = text.match(/(?:Política de cancelación|Cancellation policy)[:\s]+([^\n]+)/i)
   const cancelPolicy = cancelMatch ? cancelMatch[1].trim() : 'No especificada'
 
-  // ── Times ─────────────────────────────────────────────────────────────────
-  // Allow "3:00 p.m." (with dots) as well as "3pm"
+  // ── Times — extracted from email for prepopulating task cards ────────────
   const ciTimeMatch = text.match(/(?:Check-in|Llegada)[:\s\n]+(\d{1,2}(?::\d{2})?\s*[ap]\.?m\.?)/i)
   const coTimeMatch = text.match(/(?:Check-out|Salida)[:\s\n]+(\d{1,2}(?::\d{2})?\s*[ap]\.?m\.?)/i)
 
+  // Notes: only store times (used by task cards) + cancellation policy.
+  // Guests/code are now dedicated columns; times are needed for CleaningView/PrepTaskCard.
   const notes = [
-    `Huéspedes: ${guests ?? '?'}`,
-    `Cancelación: ${cancelPolicy}`,
-    `Código: ${airbnb_code}`,
     ciTimeMatch ? `Check-in: ${ciTimeMatch[1]}` : 'Check-in: 3pm',
     coTimeMatch ? `Check-out: ${coTimeMatch[1]}` : 'Check-out: 12pm',
+    `Cancelación: ${cancelPolicy}`,
   ].join(' | ')
 
   return { airbnb_code, guest_name, check_in, check_out, amount, guests, notes, source: 'airbnb', status: 'confirmed' }
+}
+
+/**
+ * Parses a "Reservación cancelada" email and extracts the confirmation code.
+ * Returns the airbnb_code to cancel, or null if not a cancellation email.
+ */
+export function parseCancellationEmail(text: string): string | null {
+  const isCancelled =
+    /reservaci[oó]n\s+cancelada\b/i.test(text) ||
+    /booking\s+cancell/i.test(text) ||
+    /\bha\s+cancelado\s+su\s+reserva/i.test(text) ||
+    /your\s+reservation\s+has\s+been\s+cancell/i.test(text)
+  if (!isCancelled) return null
+
+  // Try to find the confirmation code from the email text or embedded URLs
+  const codeMatch =
+    text.match(/[Cc]ódigo de confirmación[:\s\n]+([A-Z0-9]{8,12})/i) ??
+    text.match(/[Cc]onfirmation [Cc]ode[:\s\n]+([A-Z0-9]{8,12})/i) ??
+    text.match(/reservations\/details\/([A-Z0-9]{8,12})/i) ??
+    text.match(/\b(HM[A-Z0-9]{6,10})\b/)
+  return codeMatch ? codeMatch[1].toUpperCase() : null
 }
 
 /**
@@ -515,6 +535,7 @@ export async function fetchAirbnbEmails(
 
   const confirmed: ParsedReservation[]    = []
   const updated:   UpdatedReservationFlag[] = []
+  const cancelled: string[]               = []
   const change_requests: ChangeRequestFlag[] = []
   let threadsFetched = 0
   let skippedNoRoom = 0
@@ -546,8 +567,19 @@ export async function fetchAirbnbEmails(
       const isUpdate        = textLc.includes('actualizó la reservación') || textLc.includes('se actualizó')
       const isConfirm       = textLc.includes('código de confirmación') || textLc.includes('confirmation code')
       const isChangeRequest = textLc.includes('quiere hacer un cambio') || textLc.includes('wants to make a change')
+      const isCancellation  =
+        /reservaci[oó]n\s+cancelada\b/i.test(text) ||
+        /booking\s+cancell/i.test(text) ||
+        /\bha\s+cancelado\s+su\s+reserva/i.test(text) ||
+        /your\s+reservation\s+has\s+been\s+cancell/i.test(text)
 
-      if (!isUpdate && !isConfirm && !isChangeRequest) { dNotAirbnb++; continue }
+      if (!isUpdate && !isConfirm && !isChangeRequest && !isCancellation) { dNotAirbnb++; continue }
+
+      if (isCancellation) {
+        const code = parseCancellationEmail(text)
+        if (code) cancelled.push(code)
+        continue
+      }
 
       if (isUpdate) {
         const flag = parseUpdateEmail(text)
@@ -569,7 +601,7 @@ export async function fetchAirbnbEmails(
   } while (pageToken)
 
   return {
-    confirmed, updated, change_requests,
+    confirmed, updated, cancelled, change_requests,
     threads_fetched: threadsFetched,
     skipped_no_room: skippedNoRoom,
     d_empty_text: dEmptyText,

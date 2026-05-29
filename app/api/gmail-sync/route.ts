@@ -109,11 +109,27 @@ async function syncHandler(req: NextRequest, fromCron: boolean) {
   let newCount = 0
   let updatedCount = 0
   let changeRequestCount = 0
+  let cancelledCount = 0
 
   // ── 1. Import new "Reservación confirmada" emails ────────────────────────
   for (const r of emailResult.confirmed) {
     const inserted = await insertReservationIfNew(db, r)
     if (inserted) newCount++
+  }
+
+  // ── 1b. Process "Reservación cancelada" emails ───────────────────────────
+  for (const code of emailResult.cancelled) {
+    const { data: existing } = await db
+      .from('reservations').select('id, status').eq('airbnb_code', code).single()
+    if (existing && existing.status !== 'cancelled') {
+      await db.from('reservations').update({ status: 'cancelled' }).eq('id', existing.id)
+      // Delete pending/in-progress tasks for this reservation
+      await db.from('tasks')
+        .delete()
+        .eq('reservation_id', existing.id)
+        .in('status', ['pending', 'in_progress'])
+      cancelledCount++
+    }
   }
 
   // ── 2. Process "Reservación actualizada" emails ──────────────────────────
@@ -157,9 +173,10 @@ async function syncHandler(req: NextRequest, fromCron: boolean) {
     ok: true,
     new_count: newCount,
     updated_count: updatedCount,
+    cancelled_count: cancelledCount,
     change_requests: changeRequestCount,
     completed_tasks: completedTasks,
-    emails_parsed: emailResult.confirmed.length + emailResult.updated.length + emailResult.change_requests.length,
+    emails_parsed: emailResult.confirmed.length + emailResult.updated.length + emailResult.cancelled.length + emailResult.change_requests.length,
     threads_fetched: emailResult.threads_fetched,
     skipped_no_room: emailResult.skipped_no_room,
     d_empty_text: emailResult.d_empty_text,

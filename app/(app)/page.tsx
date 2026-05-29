@@ -83,8 +83,8 @@ export default async function DashboardPage() {
               {checkOuts.map(co => (
                 <div key={co.id} className="flex items-center justify-between">
                   <div className="min-w-0">
-                    <p className="text-sm font-medium text-[#0f172a] truncate">{co.guest_name}</p>
-                    <p className="text-xs text-[#94a3b8]">{co.property_name}</p>
+                    <p className="text-sm font-medium text-[#0f172a] truncate">{co.property_name}</p>
+                    <p className="text-xs text-[#94a3b8] truncate">{co.guest_name}</p>
                   </div>
                   <span className="text-sm font-semibold text-[#22c55e] flex-shrink-0 ml-3">
                     {co.check_out_time}
@@ -120,32 +120,14 @@ export default async function DashboardPage() {
           </section>
         )}
 
-        {/* Tareas de hoy — agrupadas por tipo */}
+        {/* Tareas de hoy — solo preparación y otras (limpieza va en su propia sección) */}
+        {(prepTasks.length > 0 || otherTasks.length > 0) && (
         <section>
           <p className="text-xs font-semibold text-[#94a3b8] uppercase tracking-wide mb-3">
-            ✅ Tareas de hoy ({todayTasks.length})
+            ✅ Tareas de hoy ({prepTasks.length + otherTasks.length})
           </p>
 
-          {todayTasks.length === 0 ? (
-            <p className="text-sm text-[#94a3b8] text-center py-4">Sin tareas para hoy 🎉</p>
-          ) : (
-            <div className="space-y-4">
-
-              {/* Limpieza */}
-              {cleaningTasks.length > 0 && (
-                <div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-base">🧹</span>
-                    <span className="text-xs font-semibold text-[#6366f1] uppercase tracking-wide">
-                      Limpieza ({cleaningTasks.length})
-                    </span>
-                    <div className="flex-1 h-px bg-[#e0e7ff]" />
-                  </div>
-                  <div className="space-y-3">
-                    {cleaningTasks.map((t: Task) => <TaskCard key={t.id} task={t} />)}
-                  </div>
-                </div>
-              )}
+          <div className="space-y-4">
 
               {/* Preparación — tarjeta especial con datos de reserva */}
               {prepTasks.length > 0 && (
@@ -179,9 +161,9 @@ export default async function DashboardPage() {
                 </div>
               )}
 
-            </div>
-          )}
+          </div>
         </section>
+        )}
 
       </div>
     </div>
