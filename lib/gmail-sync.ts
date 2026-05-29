@@ -297,10 +297,12 @@ export function parseConfirmationEmail(text: string): Omit<ParsedReservation, 'p
   // cancellation-policy section says "noches canceladas" which would false-positive here.
   // Only match phrases that appear exclusively in cancellation notification emails.
   const isCancelled =
-    /reservaci[oó]n\s+cancelada\b/i.test(text) ||    // "Reservación cancelada"
-    /booking\s+cancell/i.test(text) ||                // "booking cancelled/cancellation"
-    /\bha\s+cancelado\s+su\s+reserva/i.test(text) || // "ha cancelado su reserva"
-    /your\s+reservation\s+has\s+been\s+cancell/i.test(text)
+    /^subject:\s*cancelada:/im.test(text) ||          // Airbnb subject line format
+    /reservaci[oó]n\s+cancelada\b/i.test(text) ||
+    /booking\s+cancell/i.test(text) ||
+    /\bha\s+cancelado\s+su\s+reserva/i.test(text) ||
+    /your\s+reservation\s+has\s+been\s+cancell/i.test(text) ||
+    /estas\s+fechas\s+est[aá]n\s+disponibles/i.test(text)
   if (isCancelled) return null
 
   // ── Airbnb confirmation code ──────────────────────────────────────────────
@@ -430,14 +432,11 @@ export function parseConfirmationEmail(text: string): Omit<ParsedReservation, 'p
  * Returns the airbnb_code to cancel, or null if not a cancellation email.
  */
 export function parseCancellationEmail(text: string): string | null {
-  const isCancelled =
-    /reservaci[oó]n\s+cancelada\b/i.test(text) ||
-    /booking\s+cancell/i.test(text) ||
-    /\bha\s+cancelado\s+su\s+reserva/i.test(text) ||
-    /your\s+reservation\s+has\s+been\s+cancell/i.test(text)
-  if (!isCancelled) return null
+  // Primary: Airbnb's actual format — "Subject: Cancelada: reservación HMXXXX del…"
+  const subjectCodeMatch = text.match(/^subject:\s*cancelada:\s*reservaci[oó]n\s+([A-Z0-9]{6,12})\b/im)
+  if (subjectCodeMatch) return subjectCodeMatch[1].toUpperCase()
 
-  // Try to find the confirmation code from the email text or embedded URLs
+  // Fallback patterns (body text or other formats)
   const codeMatch =
     text.match(/[Cc]ódigo de confirmación[:\s\n]+([A-Z0-9]{8,12})/i) ??
     text.match(/[Cc]onfirmation [Cc]ode[:\s\n]+([A-Z0-9]{8,12})/i) ??
@@ -567,11 +566,15 @@ export async function fetchAirbnbEmails(
       const isUpdate        = textLc.includes('actualizó la reservación') || textLc.includes('se actualizó')
       const isConfirm       = textLc.includes('código de confirmación') || textLc.includes('confirmation code')
       const isChangeRequest = textLc.includes('quiere hacer un cambio') || textLc.includes('wants to make a change')
+      // Airbnb cancellation emails have "Cancelada:" in the Subject line
+      // and "Estas fechas están disponibles" in the body — NOT "reservación cancelada"
       const isCancellation  =
+        /^subject:\s*cancelada:/im.test(text) ||           // "Cancelada: reservación HMXXXX"
         /reservaci[oó]n\s+cancelada\b/i.test(text) ||
         /booking\s+cancell/i.test(text) ||
         /\bha\s+cancelado\s+su\s+reserva/i.test(text) ||
-        /your\s+reservation\s+has\s+been\s+cancell/i.test(text)
+        /your\s+reservation\s+has\s+been\s+cancell/i.test(text) ||
+        /estas\s+fechas\s+est[aá]n\s+disponibles/i.test(text)  // body text of cancellation
 
       if (!isUpdate && !isConfirm && !isChangeRequest && !isCancellation) { dNotAirbnb++; continue }
 

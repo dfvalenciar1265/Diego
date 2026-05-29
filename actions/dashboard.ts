@@ -15,50 +15,59 @@ export interface TodayCheckOut {
  * check-out time extracted from the reservation notes field.
  * Notes format: "... | Check-out: 12:00 p.m."
  */
+/** Normalizes any time string to "7am", "12pm", "3:30pm" etc. */
+function normalizeTime(raw: string | null | undefined): string {
+  if (!raw) return '12pm'
+  // Already HH:MM (from task notes)
+  const h24 = raw.match(/^(\d{1,2}):(\d{2})$/)
+  if (h24) {
+    const h = parseInt(h24[1])
+    const m = parseInt(h24[2])
+    const suffix = h >= 12 ? 'pm' : 'am'
+    const h12 = h % 12 || 12
+    return m === 0 ? `${h12}${suffix}` : `${h12}:${String(m).padStart(2,'0')}${suffix}`
+  }
+  // "12:00 p.m." / "3:00 p.m." / "12:00 a.m."
+  const dotted = raw.match(/(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m?\.?/i)
+  if (dotted) {
+    let h = parseInt(dotted[1])
+    const m = dotted[2] ? parseInt(dotted[2]) : 0
+    const period = dotted[3].toLowerCase()
+    if (period === 'p' && h !== 12) h += 12
+    if (period === 'a' && h === 12) h = 0
+    const suffix = h >= 12 ? 'pm' : 'am'
+    const h12 = h % 12 || 12
+    return m === 0 ? `${h12}${suffix}` : `${h12}:${String(m).padStart(2,'0')}${suffix}`
+  }
+  return raw.trim()
+}
+
 export async function getTodayCheckOuts(): Promise<TodayCheckOut[]> {
   const supabase = await createClient()
   const today = format(new Date(), 'yyyy-MM-dd')
 
-  // Fetch today's confirmed check-outs plus their cleaning task (to get
-  // any manually-edited check-out time stored in tasks.notes as "HH:MM|...")
   const { data } = await supabase
     .from('reservations')
-    .select(`
-      id, guest_name, notes,
-      property:properties(name),
-      tasks(notes, type, scheduled_for)
-    `)
+    .select(`id, guest_name, notes, property:properties(name), tasks(notes, type, scheduled_for)`)
     .eq('check_out', today)
     .eq('status', 'confirmed')
     .order('guest_name')
   if (!data) return []
 
   return data.map(r => {
-    // 1. Prefer time saved on the cleaning task ("HH:MM|..." format)
+    // 1. Prefer time saved on cleaning task ("HH:MM|..." format)
     const cleaningTask = (r.tasks as any[])?.find(
       (t: any) => t.type === 'cleaning' && t.scheduled_for === today
     )
     const taskTimeMatch = cleaningTask?.notes?.match(/^(\d{2}:\d{2})\|/)
-    if (taskTimeMatch) {
-      const [h, m] = taskTimeMatch[1].split(':').map(Number)
-      const suffix = h >= 12 ? 'pm' : 'am'
-      const h12   = h % 12 || 12
-      const time12 = m === 0 ? `${h12}${suffix}` : `${h12}:${String(m).padStart(2,'0')}${suffix}`
-      return {
-        id: r.id,
-        guest_name: r.guest_name ?? '—',
-        check_out_time: time12,
-        property_name: (r.property as any)?.name ?? '—',
-      }
-    }
+    const rawTime = taskTimeMatch
+      ? taskTimeMatch[1]                                          // "07:00" from task
+      : r.notes?.match(/Check-out:\s*([^\|]+)/i)?.[1] ?? null    // from reservation notes
 
-    // 2. Fall back to reservation notes ("Check-out: 12pm")
-    const match = r.notes?.match(/Check-out:\s*([^\|]+)/i)
-    const checkOutTime = match ? match[1].trim() : '12pm'
     return {
       id: r.id,
       guest_name: r.guest_name ?? '—',
-      check_out_time: checkOutTime,
+      check_out_time: normalizeTime(rawTime),  // always same format: "7am", "12pm"
       property_name: (r.property as any)?.name ?? '—',
     }
   })

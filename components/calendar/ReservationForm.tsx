@@ -56,7 +56,7 @@ export function ReservationForm({
 
   return (
     <Sheet open={open} onOpenChange={v => !v && onClose()} key={reservation?.id ?? 'new'}>
-      <SheetContent side="bottom" className="rounded-t-2xl max-h-[92dvh] overflow-y-auto px-4 pb-safe">
+      <SheetContent side="bottom" className="rounded-t-2xl" style={{ maxHeight: '90dvh', overflowY: 'auto', padding: '1rem 1rem env(safe-area-inset-bottom,1rem)' }}>
         <SheetHeader className="mb-4">
           <SheetTitle>{title}</SheetTitle>
         </SheetHeader>
