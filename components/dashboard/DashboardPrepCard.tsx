@@ -27,6 +27,12 @@ function reservationTimeTo24h(notes: string | null): string {
   return `${String(h).padStart(2, '0')}:${mins}`
 }
 
+function shortDate(iso: string): string {
+  const [, mm, dd] = iso.split('-')
+  const months = ['','ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
+  return `${parseInt(dd)} ${months[parseInt(mm)]}`
+}
+
 function to12h(t: string): string {
   if (!t) return ''
   const [h, m] = t.split(':').map(Number)
@@ -69,8 +75,9 @@ export function DashboardPrepCard({ task }: { task: PrepTask }) {
     })
   }
 
-  const guestName  = res?.guest_name ?? '—'
-  const propName   = task.property?.name ?? '—'
+  const guestName = res?.guest_name ?? '—'
+  const propName  = task.property?.name ?? '—'
+  const checkIn   = res?.check_in ? shortDate(res.check_in) : null
 
   return (
     <div className="bg-white rounded-xl border border-[#ff385c22] shadow-[0_1px_3px_rgba(0,0,0,0.06)] px-3 py-2.5">
@@ -81,10 +88,15 @@ export function DashboardPrepCard({ task }: { task: PrepTask }) {
 
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-[#0f172a] leading-tight truncate">{propName}</p>
-          <p className="text-xs text-[#94a3b8] truncate">{guestName}</p>
+          <p className="text-xs text-[#94a3b8] truncate">
+            {guestName}
+            {checkIn && (
+              <span className="ml-1.5 text-[#ff385c] font-medium">· check-in {checkIn}</span>
+            )}
+          </p>
         </div>
 
-        {/* Editable check-in time — inline on the right */}
+        {/* Editable check-in time */}
         <div className="flex-shrink-0">
           {editingTime ? (
             <input

@@ -8,6 +8,7 @@ import { KPICard } from '@/components/dashboard/KPICard'
 import { StockAlert } from '@/components/dashboard/StockAlert'
 import { TaskCard } from '@/components/tasks/TaskCard'
 import { DashboardPrepCard } from '@/components/dashboard/DashboardPrepCard'
+import { RefreshButton } from '@/components/dashboard/RefreshButton'
 import { ResolvePurchaseButton } from '@/components/dashboard/ResolvePurchaseButton'
 import { canDo } from '@/lib/permissions'
 import { format } from 'date-fns'
@@ -54,9 +55,12 @@ export default async function DashboardPage() {
             </h1>
             <p className="text-xs text-[#94a3b8] capitalize">{today}</p>
           </div>
-          <div className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-white text-sm"
-               style={{ background: 'linear-gradient(135deg, #ff385c, #ff6b6b)' }}>
-            {member?.name?.[0] ?? 'D'}
+          <div className="flex items-center gap-2">
+            <RefreshButton />
+            <div className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-white text-sm"
+                 style={{ background: 'linear-gradient(135deg, #ff385c, #ff6b6b)' }}>
+              {member?.name?.[0] ?? 'D'}
+            </div>
           </div>
         </div>
       </div>
