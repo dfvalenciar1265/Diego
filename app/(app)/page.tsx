@@ -31,6 +31,19 @@ export default async function DashboardPage() {
   const today    = format(new Date(), "EEEE d 'de' MMMM", { locale: es })
   const todayISO = format(new Date(), 'yyyy-MM-dd')
 
+  // Prep tasks for today's check-ins: join through reservations.check_in = today
+  // (distinct from scheduled_for — we show prep tasks when the GUEST ARRIVES today)
+  const { data: prepTasksRaw } = await supabase
+    .from('tasks')
+    .select('*, property:properties(name), assignee:team_members(name), reservation:reservations(check_in, check_out, notes, guest_name, guests)')
+    .eq('type', 'preparation')
+    .in('status', ['pending', 'in_progress'])
+    .eq('reservations.check_in', todayISO)   // filter by reservation check-in date
+    .not('reservation_id', 'is', null)
+
+  // Only keep tasks whose reservation actually has check_in = today (PostgREST returns nulls for non-matching joins)
+  const prepTasks = (prepTasksRaw ?? []).filter((t: any) => t.reservation?.check_in === todayISO)
+
   const [kpis, todayTasks, stockAlerts, pendingPurchases, checkOuts] = await Promise.all([
     getDashboardKPIs(),
     getTasks({ date: todayISO }),
@@ -39,9 +52,8 @@ export default async function DashboardPage() {
     getTodayCheckOuts(),
   ])
 
-  // Group today's tasks by type — always double-filter by date to guard against timezone drift
-  const cleaningTasks = todayTasks.filter((t: Task) => t.type === 'cleaning'    && t.scheduled_for === todayISO)
-  const prepTasks     = todayTasks.filter((t: Task) => t.type === 'preparation' && t.scheduled_for === todayISO)
+  // Cleaning and other tasks: scheduled for today
+  const cleaningTasks = todayTasks.filter((t: Task) => t.type === 'cleaning' && t.scheduled_for === todayISO)
   const otherTasks    = todayTasks.filter((t: Task) => t.type !== 'cleaning' && t.type !== 'preparation' && t.scheduled_for === todayISO)
 
   return (
