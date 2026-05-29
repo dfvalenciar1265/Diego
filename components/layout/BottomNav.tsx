@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Home, Calendar, Sparkles, ClipboardList, Wrench, Building2, BarChart2, Users } from 'lucide-react'
+import { Home, Calendar, Sparkles, ClipboardList, Wrench, Building2, BarChart2 } from 'lucide-react'
 import { useUserRole } from '@/lib/user-context'
 
 const BASE_ITEMS = [
@@ -16,7 +16,6 @@ const BASE_ITEMS = [
 
 const ADMIN_ITEMS = [
   { href: '/reports', label: 'Reportes', icon: BarChart2 },
-  { href: '/team',    label: 'Personas',  icon: Users },
 ] as const
 
 export function BottomNav() {

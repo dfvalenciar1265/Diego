@@ -4,7 +4,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { createTeamMember, deactivateTeamMember } from '@/actions/team'
+import { createTeamMember, deactivateTeamMember, updateTeamMember } from '@/actions/team'
 import { useUserRole } from '@/lib/user-context'
 import type { TeamMember, UserRole } from '@/lib/types'
 import { UserPlus } from 'lucide-react'
@@ -130,39 +130,100 @@ function StaffGroup({
 
 // ── Staff card ────────────────────────────────────────────────────────────────
 
+const ROLE_LABEL_MAP: Record<UserRole, string> = {
+  admin:       'Administrador',
+  cleaning:    'Limpieza',
+  anfitrion:   'Anfitrión',
+  maintenance: 'Mantenimiento',
+}
+
 function StaffCard({
   member, isAdmin, accent, bg,
 }: { member: TeamMember; isAdmin: boolean; accent: string; bg: string }) {
-  const [isPending, startTransition] = useTransition()
+  const [editOpen, setEditOpen]       = useState(false)
+  const [isPending, startTransition]  = useTransition()
+  const [error, setError]             = useState('')
 
   function handleDeactivate() {
-    if (!confirm(`¿Desactivar a ${member.name}?`)) return
+    if (!confirm(`¿Desactivar a ${member.name}? No podrá iniciar sesión.`)) return
     startTransition(async () => { await deactivateTeamMember(member.id) })
   }
 
+  function handleEdit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    setError('')
+    const fd = new FormData(e.currentTarget)
+    startTransition(async () => {
+      const res = await updateTeamMember(member.id, fd)
+      if (!res.success) { setError(res.error ?? 'Error'); return }
+      setEditOpen(false)
+    })
+  }
+
   return (
-    <div className="flex items-center gap-3 py-2 border-b border-[#f1f5f9] last:border-0">
-      <div
-        className="w-9 h-9 rounded-full flex items-center justify-center
-                   font-bold text-sm flex-shrink-0"
-        style={{ background: bg, color: accent }}
-      >
-        {member.name.charAt(0).toUpperCase()}
+    <>
+      <div className="flex items-center gap-3 py-2 border-b border-[#f1f5f9] last:border-0">
+        <div className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0"
+             style={{ background: bg, color: accent }}>
+          {member.name.charAt(0).toUpperCase()}
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="font-medium text-[#0f172a] text-sm">{member.name}</p>
+          <p className="text-xs text-[#94a3b8]">{member.email}</p>
+        </div>
+        {isAdmin && (
+          <button onClick={() => setEditOpen(true)}
+                  className="text-xs font-medium px-2.5 py-1 rounded-lg flex-shrink-0"
+                  style={{ background: `${accent}18`, color: accent }}>
+            Editar
+          </button>
+        )}
       </div>
-      <div className="flex-1 min-w-0">
-        <p className="font-medium text-[#0f172a] text-sm">{member.name}</p>
-        <p className="text-xs text-[#94a3b8]">{member.email}</p>
-      </div>
-      {isAdmin && (
-        <button
-          onClick={handleDeactivate}
-          disabled={isPending}
-          className="text-xs text-[#ef4444] hover:underline disabled:opacity-50 flex-shrink-0"
-        >
-          {isPending ? '…' : 'Desactivar'}
-        </button>
-      )}
-    </div>
+
+      {/* Edit sheet */}
+      <Sheet open={editOpen} onOpenChange={v => { if (!v) { setEditOpen(false); setError('') } }}>
+        <SheetContent side="bottom" className="rounded-t-2xl" style={{ maxHeight: '90dvh', overflowY: 'auto', padding: '1rem' }}>
+          <SheetHeader className="mb-4">
+            <SheetTitle>Editar — {member.name}</SheetTitle>
+          </SheetHeader>
+          <form onSubmit={handleEdit} className="space-y-4 pb-6">
+            <div>
+              <Label>Nombre</Label>
+              <Input name="name" required defaultValue={member.name} className="mt-1" />
+            </div>
+            <div>
+              <Label>Email</Label>
+              <Input name="email" type="email" required defaultValue={member.email} className="mt-1" />
+            </div>
+            <div>
+              <Label>Rol</Label>
+              <select name="role" defaultValue={member.role}
+                      className="w-full mt-1 rounded-lg border border-[#e2e8f0] px-3 py-2.5 text-sm
+                                 focus:outline-none focus:ring-1 focus:ring-[#6366f1]">
+                {(Object.entries(ROLE_LABEL_MAP) as [UserRole, string][]).map(([v, l]) => (
+                  <option key={v} value={v}>{l}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <Label>Nueva contraseña <span className="text-[#94a3b8] font-normal">(dejar vacío para no cambiar)</span></Label>
+              <Input name="password" type="password" placeholder="••••••••" className="mt-1" />
+            </div>
+
+            {error && <p className="text-sm text-[#ef4444]">{error}</p>}
+
+            <Button type="submit" disabled={isPending} className="w-full h-12" style={{ background: '#6366f1' }}>
+              {isPending ? 'Guardando…' : 'Guardar cambios'}
+            </Button>
+
+            <button type="button" onClick={handleDeactivate} disabled={isPending}
+                    className="w-full text-xs text-[#ef4444] py-1 opacity-70 hover:opacity-100">
+              Desactivar cuenta
+            </button>
+          </form>
+        </SheetContent>
+      </Sheet>
+    </>
   )
 }
 
