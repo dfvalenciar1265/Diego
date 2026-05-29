@@ -15,23 +15,41 @@ export interface SyncResult {
  * Calls the /api/gmail-sync route, which handles auth + parsing + DB writes.
  */
 export async function syncGmail(): Promise<SyncResult> {
+  if (!process.env.CRON_SECRET) {
+    return { ok: false, error: 'CRON_SECRET no configurado en variables de entorno' }
+  }
+
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:4000'
 
-  const res = await fetch(`${baseUrl}/api/gmail-sync`, {
-    method: 'POST',
-    // Use CRON_SECRET for internal server-to-server calls.
-    // Server actions run in Node.js and have no cookie jar, so session-based
-    // auth would always fail. The shared secret is safe here because this
-    // code only ever runs on the server, never exposed to the browser.
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${process.env.CRON_SECRET}`,
-    },
-  })
+  let res: Response
+  try {
+    res = await fetch(`${baseUrl}/api/gmail-sync`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.CRON_SECRET}`,
+      },
+    })
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    return { ok: false, error: `No se pudo conectar al servidor: ${msg}` }
+  }
 
-  const body = await res.json() as SyncResult
+  let body: SyncResult
+  try {
+    body = await res.json() as SyncResult
+  } catch {
+    return { ok: false, error: `Respuesta inválida del servidor (HTTP ${res.status})` }
+  }
 
-  if (body.ok && (body.new_count ?? 0) > 0) {
+  if (!res.ok || !body.ok) {
+    return {
+      ok: false,
+      error: body.error ?? `Error del servidor (HTTP ${res.status})`,
+    }
+  }
+
+  if ((body.new_count ?? 0) > 0) {
     revalidatePath('/calendar')
     revalidatePath('/')
   }
