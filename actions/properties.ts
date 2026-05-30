@@ -17,13 +17,33 @@ async function getCallerRole(): Promise<string | null> {
   return data?.role ?? null
 }
 
+// Custom display order for all views (calendar rows, dropdowns, reports)
+const PROPERTY_ORDER: Record<string, number> = {
+  'Palmetto 1001':              1,
+  'Tocahagua 708':              2,
+  'Tocahagua 1208':             3,
+  'Marina Rey 1104':            4,
+  'Conquistador 1821':          5,
+  'Apto 1303':                  6,
+  'Cartagena Beach Crespo 1214':7,
+  'Cibeles':                    8,
+}
+
+function sortProperties(list: Property[]): Property[] {
+  return [...list].sort((a, b) => {
+    const oa = PROPERTY_ORDER[a.name] ?? 99
+    const ob = PROPERTY_ORDER[b.name] ?? 99
+    return oa !== ob ? oa - ob : a.name.localeCompare(b.name)
+  })
+}
+
 export async function getProperties(onlyActive = false): Promise<Property[]> {
   const supabase = await createClient()
-  let query = supabase.from('properties').select('*').order('name')
+  let query = supabase.from('properties').select('*')
   if (onlyActive) query = query.eq('active', true)
   const { data, error } = await query
   if (error) throw new Error(error.message)
-  return data ?? []
+  return sortProperties(data ?? [])
 }
 
 export async function getProperty(id: string): Promise<Property | null> {
