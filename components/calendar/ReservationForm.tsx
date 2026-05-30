@@ -160,15 +160,34 @@ export function ReservationForm({
           )}
 
           {/* Notas */}
-          <div>
-            <Label>Notas</Label>
-            <Input
-              name="notes"
-              defaultValue={reservation?.notes}
-              placeholder="Llegada tardía, mascota, etc."
-              className="mt-1"
-            />
-          </div>
+          {isAirbnb && reservation ? (
+            // Airbnb: show only cancellation policy (read-only) + preserve full notes via hidden input
+            <div>
+              <Label>Cancelación</Label>
+              {(() => {
+                const cancelText = reservation.notes?.match(/Cancelaci[oó]n:\s*([^|]+)/i)?.[1]?.trim()
+                return cancelText ? (
+                  <p className="mt-1 text-xs text-[#64748b] bg-[#f8fafc] rounded-lg px-3 py-2 border border-[#e2e8f0]">
+                    {cancelText}
+                  </p>
+                ) : (
+                  <p className="mt-1 text-xs text-[#94a3b8] italic">Sin información</p>
+                )
+              })()}
+              {/* Preserve full notes so sync-managed data isn't lost */}
+              <input type="hidden" name="notes" value={reservation.notes ?? ''} />
+            </div>
+          ) : (
+            <div>
+              <Label>Notas</Label>
+              <Input
+                name="notes"
+                defaultValue={reservation?.notes}
+                placeholder="Llegada tardía, mascota, etc."
+                className="mt-1"
+              />
+            </div>
+          )}
 
           {error && <p className="text-sm text-[#ef4444]">{error}</p>}
 
