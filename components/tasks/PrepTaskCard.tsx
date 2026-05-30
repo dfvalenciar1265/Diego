@@ -83,9 +83,9 @@ export function PrepTaskCard({ task }: Props) {
   const guestName = res?.guest_name ?? '—'
   const guestsCount = res?.guests ?? null
 
-  // Times from reservation notes (pre-populated)
-  const defaultCiTime = reservationTimeTo24h(resNotes, 'Check-in')
-  const defaultCoTime = reservationTimeTo24h(resNotes, 'Check-out')
+  // Times from reservation notes — fallback to Airbnb standard (3pm / 12pm)
+  const defaultCiTime = reservationTimeTo24h(resNotes, 'Check-in') || '15:00'
+  const defaultCoTime = reservationTimeTo24h(resNotes, 'Check-out') || '12:00'
 
   const { time24: savedTime, note: savedNote } = parseAnnotation(task.notes)
 

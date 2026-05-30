@@ -61,7 +61,7 @@ export function DashboardPrepCard({ task }: { task: PrepTask }) {
   const res      = task.reservation
   const resNotes = res?.notes ?? null
 
-  const defaultTime = reservationTimeTo24h(resNotes)
+  const defaultTime = reservationTimeTo24h(resNotes) || '15:00'
   const { time24: savedTime, note: savedNote } = parseAnnotation(task.notes)
 
   const [editingTime, setEditingTime] = useState(false)

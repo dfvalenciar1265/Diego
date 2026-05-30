@@ -290,8 +290,8 @@ function CleaningTaskCard({
   const resNotes = res?.notes ?? null
 
   const guestName     = res?.guest_name ?? '—'
-  const ciTime        = reservationTimeTo24h(resNotes, 'Check-in')
-  const defaultCoTime = reservationTimeTo24h(resNotes, 'Check-out')
+  const ciTime        = reservationTimeTo24h(resNotes, 'Check-in')  || '15:00'
+  const defaultCoTime = reservationTimeTo24h(resNotes, 'Check-out') || '12:00'
   const savedCoTime   = parseCoTime(task.notes)
 
   const [coTime, setCoTime]          = useState(savedCoTime || defaultCoTime)
