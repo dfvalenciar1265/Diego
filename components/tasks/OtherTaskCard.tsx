@@ -22,6 +22,7 @@ export function OtherTaskCard({ task, teamMembers }: Props) {
   const [compNotes, setCompNotes]   = useState('')
   const [compCost,  setCompCost]    = useState('')
   const [compPerson, setCompPerson] = useState(task.assigned_to ?? '')
+  const [error, setError]           = useState('')
 
   const overdue = isTaskOverdue(task.scheduled_for, task.status)
 
@@ -37,19 +38,23 @@ export function OtherTaskCard({ task, teamMembers }: Props) {
   }
 
   function submitComplete() {
+    setError('')
     startTransition(async () => {
-      await completeTask(task.id, {
+      const res = await completeTask(task.id, {
         notes:      compNotes || undefined,
         cost:       compCost ? parseFloat(compCost) : undefined,
         assignedTo: compPerson || undefined,
       })
+      if (!res.success) { setError(res.error ?? 'No se pudo completar. Reintenta.'); return }
       setCompleting(false)
     })
   }
 
   function advance() {
+    setError('')
     startTransition(async () => {
-      await updateTaskStatus(task.id, 'in_progress')
+      const res = await updateTaskStatus(task.id, 'in_progress')
+      if (!res.success) setError('No se pudo iniciar. Revisa tu conexión.')
     })
   }
 
@@ -213,6 +218,12 @@ export function OtherTaskCard({ task, teamMembers }: Props) {
               </button>
             </div>
           </div>
+        )}
+
+        {error && (
+          <p className="mt-2 text-xs text-[#ef4444] bg-[#fef2f2] rounded-lg px-3 py-2 border border-[#fecaca]">
+            ⚠️ {error}
+          </p>
         )}
       </div>
     </div>

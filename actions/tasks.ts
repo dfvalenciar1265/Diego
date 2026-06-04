@@ -133,15 +133,16 @@ export async function createTask(
 export async function updateTaskStatus(
   id: string,
   status: TaskStatus
-): Promise<void> {
+): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient()
   const { error } = await supabase.from('tasks').update({
     status,
     completed_at: status === 'done' ? new Date().toISOString() : null,
   }).eq('id', id)
-  if (error) throw new Error(error.message)
+  if (error) return { success: false, error: error.message }
   revalidatePath('/tasks')
   revalidatePath('/')
+  return { success: true }
 }
 
 /** Completes a task and optionally records cost, notes, and assignee. */

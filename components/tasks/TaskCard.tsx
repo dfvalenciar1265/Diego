@@ -1,5 +1,5 @@
 'use client'
-import { useTransition } from 'react'
+import { useState, useTransition } from 'react'
 import { updateTaskStatus } from '@/actions/tasks'
 import { getTaskStatusLabel, getTaskStatusColor, isTaskOverdue, formatDate } from '@/lib/utils'
 import type { Task, TaskStatus } from '@/lib/types'
@@ -22,13 +22,18 @@ const TYPE_ICON: Record<string, string> = {
 
 export function TaskCard({ task }: Props) {
   const [isPending, startTransition] = useTransition()
+  const [error, setError] = useState('')
   const nextStatus = NEXT_STATUS[task.status]
   const overdue = isTaskOverdue(task.scheduled_for, task.status)
   const color = getTaskStatusColor(task.status)
 
   function advance() {
     if (!nextStatus) return
-    startTransition(() => updateTaskStatus(task.id, nextStatus))
+    setError('')
+    startTransition(async () => {
+      const res = await updateTaskStatus(task.id, nextStatus)
+      if (!res.success) setError('No se pudo actualizar. Revisa tu conexión.')
+    })
   }
 
   return (
@@ -78,6 +83,12 @@ export function TaskCard({ task }: Props) {
             Completado{task.completed_at ? ` · ${formatDate(task.completed_at.split('T')[0])}` : ''}
           </span>
         </div>
+      )}
+
+      {error && (
+        <p className="mt-2 text-xs text-[#ef4444] bg-[#fef2f2] rounded-lg px-3 py-2 border border-[#fecaca]">
+          ⚠️ {error}
+        </p>
       )}
     </div>
   )

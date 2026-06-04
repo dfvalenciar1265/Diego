@@ -298,23 +298,35 @@ function CleaningTaskCard({
   const [editingCoTime, setEditing]  = useState(false)
   const [pickingPerson, setPicking]  = useState(false)
   const [isPending, startTransition] = useTransition()
+  const [error, setError] = useState('')
 
+  // Field staff often act on spotty building WiFi. A failed mutation must NOT
+  // crash the whole page — show a retryable inline error and keep their place.
   function saveCoTime(time: string) {
+    setError('')
     startTransition(async () => {
-      await updateTaskNotes(task.id, buildCoAnnotation(time))
+      try {
+        await updateTaskNotes(task.id, buildCoAnnotation(time))
+      } catch {
+        setError('No se pudo guardar la hora. Revisa tu conexión.')
+      }
     })
   }
 
   function startWithPerson(memberId: string) {
+    setError('')
     startTransition(async () => {
-      await assignAndStartTask(task.id, memberId)
+      const res = await assignAndStartTask(task.id, memberId)
+      if (!res.success) { setError(res.error ?? 'No se pudo iniciar. Reintenta.'); return }
       setPicking(false)
     })
   }
 
   function complete() {
+    setError('')
     startTransition(async () => {
-      await updateTaskStatus(task.id, 'done')
+      const res = await updateTaskStatus(task.id, 'done')
+      if (!res.success) setError('No se pudo marcar como terminada. Revisa tu conexión y reintenta.')
     })
   }
 
@@ -466,6 +478,13 @@ function CleaningTaskCard({
         >
           {isPending ? '…' : '✓ Terminar'}
         </button>
+      )}
+
+      {/* Retryable error (network/server) — keeps the user's place instead of crashing */}
+      {error && (
+        <p className="mt-2 text-xs text-[#ef4444] bg-[#fef2f2] rounded-lg px-3 py-2 border border-[#fecaca]">
+          ⚠️ {error}
+        </p>
       )}
     </div>
   )
