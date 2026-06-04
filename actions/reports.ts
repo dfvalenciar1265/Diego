@@ -1,6 +1,7 @@
 'use server'
 import { createClient } from '@/lib/supabase/server'
 import { CLEANING_PRICES } from '@/lib/cleaning-prices'
+import { getExpenses } from '@/actions/expenses'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -27,6 +28,16 @@ export interface CleaningCostRow {
   period:        1 | 2
   fixed_price:   number
   actual_cost:   number
+}
+
+export interface ProfitabilityRow {
+  property_id:   string
+  property_name: string
+  income:        number   // proportional income earned this month
+  cleaning_cost: number   // cleaning labour cost this month
+  expenses:      number   // other expenses logged this month
+  net:           number   // income − cleaning − expenses
+  reservations:  number   // # of reservations contributing income
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -139,4 +150,58 @@ export async function getCleaningCostReport(year: number, month: number): Promis
       actual_cost:   t.cost ?? fixedPrice,
     }
   })
+}
+
+// ── Profitability (P&L per property) ──────────────────────────────────────────
+
+/**
+ * Net profit per property for a month: income − cleaning cost − expenses.
+ * Reuses the existing income / cleaning-cost / expense reports (single source
+ * of truth) and aggregates them per property. Sorted by net profit desc.
+ */
+export async function getProfitabilityReport(
+  year: number,
+  month: number
+): Promise<ProfitabilityRow[]> {
+  const [income, cleaning, expenses] = await Promise.all([
+    getIncomeReport(year, month),
+    getCleaningCostReport(year, month),
+    getExpenses({ year, month }),
+  ])
+
+  const map = new Map<string, ProfitabilityRow>()
+  const row = (id: string, name: string): ProfitabilityRow => {
+    let r = map.get(id)
+    if (!r) {
+      r = { property_id: id, property_name: name, income: 0, cleaning_cost: 0, expenses: 0, net: 0, reservations: 0 }
+      map.set(id, r)
+    }
+    return r
+  }
+
+  // Income — proportional amount that falls in this month (p1 + p2)
+  for (const i of income) {
+    const r = row(i.property_id, i.property_name)
+    r.income += i.p1_amount + i.p2_amount
+    r.reservations++
+  }
+
+  // Cleaning labour cost
+  for (const c of cleaning) {
+    const r = row(c.property_id, c.property_name)
+    r.cleaning_cost += c.actual_cost
+  }
+
+  // Other expenses (provider invoices, repairs logged as expenses, etc.)
+  for (const e of expenses) {
+    const name = e.property?.name ?? '—'
+    const r = row(e.property_id, name)
+    r.expenses += e.amount
+  }
+
+  for (const r of map.values()) {
+    r.net = r.income - r.cleaning_cost - r.expenses
+  }
+
+  return [...map.values()].sort((a, b) => b.net - a.net)
 }

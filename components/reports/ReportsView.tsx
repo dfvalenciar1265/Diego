@@ -4,23 +4,25 @@ import { Pagination, paginate, pageCount } from '@/components/ui/Pagination'
 import { IncomeReport } from './IncomeReport'
 import { CleaningCostReport } from './CleaningCostReport'
 import { ExpensesView } from './ExpensesView'
+import { ProfitabilityReport } from './ProfitabilityReport'
 import type { Task, Property, TeamMember, Expense } from '@/lib/types'
-import type { IncomeRow, CleaningCostRow } from '@/actions/reports'
+import type { IncomeRow, CleaningCostRow, ProfitabilityRow } from '@/actions/reports'
 
 type CleaningRow = Task & { property?: { name: string }; assignee?: { name: string } }
 
 interface Props {
-  cleaningTasks:     CleaningRow[]
-  properties:        Property[]
-  teamMembers:       TeamMember[]
-  incomeRows:        IncomeRow[]
-  cleaningCostRows:  CleaningCostRow[]
-  currentYear:       number
-  currentMonth:      number
-  expenses:          Expense[]
+  cleaningTasks:      CleaningRow[]
+  properties:         Property[]
+  teamMembers:        TeamMember[]
+  incomeRows:         IncomeRow[]
+  cleaningCostRows:   CleaningCostRow[]
+  profitabilityRows:  ProfitabilityRow[]
+  currentYear:        number
+  currentMonth:       number
+  expenses:           Expense[]
 }
 
-type Tab = 'cleaning' | 'expenses' | 'income' | 'cleaning_costs'
+type Tab = 'profitability' | 'cleaning' | 'expenses' | 'income' | 'cleaning_costs'
 
 function fmtDate(iso: string | null | undefined): string {
   if (!iso) return '—'
@@ -40,11 +42,12 @@ export function ReportsView({
   teamMembers,
   incomeRows,
   cleaningCostRows,
+  profitabilityRows,
   currentYear,
   currentMonth,
   expenses,
 }: Props) {
-  const [tab,          setTab]          = useState<Tab>('income')
+  const [tab,          setTab]          = useState<Tab>('profitability')
   const [filterProp,   setFilterProp]   = useState('')
   const [filterPerson, setFilterPerson] = useState('')
   const [cleanPage,    setCleanPage]    = useState(1)
@@ -68,6 +71,7 @@ export function ReportsView({
 
   // ── Tab definitions ────────────────────────────────────────────────────────
   const tabs: { key: Tab; label: string }[] = [
+    { key: 'profitability',  label: '📈 Renta'     },
     { key: 'income',         label: '💵 Ingresos'  },
     { key: 'cleaning_costs', label: '🧹 Costos'    },
     { key: 'cleaning',       label: '📋 Limpiezas' },
@@ -78,12 +82,12 @@ export function ReportsView({
     <div className="p-4 space-y-4">
 
       {/* ── Tabs ──────────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-4 rounded-xl overflow-hidden border border-[#e2e8f0]">
+      <div className="grid grid-cols-5 rounded-xl overflow-hidden border border-[#e2e8f0]">
         {tabs.map(t => (
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
-            className="py-2.5 text-[11px] font-medium transition-colors leading-tight"
+            className="py-2.5 text-[10px] font-medium transition-colors leading-tight"
             style={{
               background: tab === t.key ? '#6366f1' : 'white',
               color:      tab === t.key ? 'white'   : '#64748b',
@@ -93,6 +97,15 @@ export function ReportsView({
           </button>
         ))}
       </div>
+
+      {/* ── Profitability (P&L per property) ──────────────────────────────── */}
+      {tab === 'profitability' && (
+        <ProfitabilityReport
+          initialRows={profitabilityRows}
+          initialYear={currentYear}
+          initialMonth={currentMonth}
+        />
+      )}
 
       {/* ── Income report ─────────────────────────────────────────────────── */}
       {tab === 'income' && (
