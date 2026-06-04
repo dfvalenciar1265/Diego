@@ -237,7 +237,7 @@ async function getThreadPlaintext(accessToken: string, threadId: string): Promis
 }
 
 /** Runs an async mapper over items with bounded concurrency, preserving order. */
-async function mapWithConcurrency<T, R>(
+export async function mapWithConcurrency<T, R>(
   items: T[],
   limit: number,
   fn: (item: T) => Promise<R>
