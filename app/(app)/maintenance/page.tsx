@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { getCurrentUser } from '@/lib/auth'
 import { getMaintenance } from '@/actions/maintenance'
 import { getProperties } from '@/actions/properties'
 import { getTeamMembers } from '@/actions/team'
@@ -8,8 +8,7 @@ import { MaintenanceClient } from '@/components/maintenance/MaintenanceClient'
 import { MaintenanceView } from '@/components/maintenance/MaintenanceView'
 
 export default async function MaintenancePage() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getCurrentUser()
   if (!user) redirect('/login')
 
   const [issues, properties, teamMembers] = await Promise.all([

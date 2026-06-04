@@ -3,7 +3,7 @@ import { useState, useTransition } from 'react'
 import { updateTaskNotes } from '@/actions/tasks'
 import type { Task } from '@/lib/types'
 
-type PrepTask = Task & {
+export type PrepTask = Task & {
   property?: { name: string }
   reservation?: {
     check_in: string

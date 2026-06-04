@@ -180,18 +180,8 @@ async function gmailSearch(
  * The email Subject header is prepended so parsers can extract the full
  * guest name from "Reservación confirmada: Nombre Apellido llega el X".
  */
-export async function getMessagePlaintext(
-  accessToken: string,
-  messageId: string
-): Promise<string> {
-  const res = await fetch(
-    `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}?format=full`,
-    { headers: { Authorization: `Bearer ${accessToken}` } }
-  )
-  if (!res.ok) return ''
-  const msg = await res.json() as GmailMessage
-
-  // Extract subject so parsers can get the full guest name from it
+/** Pure: extract readable plaintext (Subject prepended) from a Gmail message payload. */
+function messageToPlaintext(msg: GmailMessage): string {
   const subject =
     msg.payload?.headers?.find(h => h.name.toLowerCase() === 'subject')?.value ?? ''
 
@@ -206,7 +196,6 @@ export async function getMessagePlaintext(
     if (html) {
       body = stripHtml(html)
     } else {
-      // Fallback: top-level body (may be HTML)
       const data = msg.payload?.body?.data
       if (data) {
         const b64 = data.replace(/-/g, '+').replace(/_/g, '/')
@@ -216,19 +205,53 @@ export async function getMessagePlaintext(
     }
   }
 
-  // Prepend subject line so guest-name regex can use it
   return subject ? `Subject: ${subject}\n\n${body}` : body
 }
 
-/** Fetches first message ID from a thread */
-async function getFirstMessageId(accessToken: string, threadId: string): Promise<string | null> {
+export async function getMessagePlaintext(
+  accessToken: string,
+  messageId: string
+): Promise<string> {
   const res = await fetch(
-    `https://gmail.googleapis.com/gmail/v1/users/me/threads/${threadId}?format=minimal`,
+    `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}?format=full`,
     { headers: { Authorization: `Bearer ${accessToken}` } }
   )
-  if (!res.ok) return null
-  const t = await res.json() as { messages?: Array<{ id: string }> }
-  return t.messages?.[0]?.id ?? null
+  if (!res.ok) return ''
+  return messageToPlaintext(await res.json() as GmailMessage)
+}
+
+/**
+ * Fetches a thread's first message as plaintext in a SINGLE request.
+ * `threads/{id}?format=full` returns every message with its full payload,
+ * so we avoid the previous two-step (minimal thread → full message) round-trip.
+ */
+async function getThreadPlaintext(accessToken: string, threadId: string): Promise<string> {
+  const res = await fetch(
+    `https://gmail.googleapis.com/gmail/v1/users/me/threads/${threadId}?format=full`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  )
+  if (!res.ok) return ''
+  const t = await res.json() as { messages?: GmailMessage[] }
+  const first = t.messages?.[0]
+  return first ? messageToPlaintext(first) : ''
+}
+
+/** Runs an async mapper over items with bounded concurrency, preserving order. */
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<R>
+): Promise<R[]> {
+  const results: R[] = new Array(items.length)
+  let cursor = 0
+  async function worker() {
+    while (cursor < items.length) {
+      const i = cursor++
+      results[i] = await fn(items[i])
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker))
+  return results
 }
 
 // ─── Date utilities ───────────────────────────────────────────────────────────
@@ -554,11 +577,11 @@ export async function fetchAirbnbEmails(
     pageToken = nextPageToken
     threadsFetched += threads.length
 
-    for (const thread of threads) {
-      const msgId = await getFirstMessageId(accessToken, thread.id)
-      if (!msgId) continue
+    // Fetch all thread bodies for this page concurrently (bounded), then parse
+    // synchronously. One request per thread instead of two, ~10 at a time.
+    const texts = await mapWithConcurrency(threads, 10, t => getThreadPlaintext(accessToken, t.id))
 
-      const text = await getMessagePlaintext(accessToken, msgId)
+    for (const text of texts) {
       if (!text) { dEmptyText++; continue }
 
       // Determine email type by content (case-insensitive — Airbnb uses ALL CAPS in some formats)
@@ -628,9 +651,7 @@ export async function fetchConfirmationByCode(
   const { threads = [] } = await gmailSearch(accessToken, query)
 
   for (const thread of threads) {
-    const msgId = await getFirstMessageId(accessToken, thread.id)
-    if (!msgId) continue
-    const text = await getMessagePlaintext(accessToken, msgId)
+    const text = await getThreadPlaintext(accessToken, thread.id)
     if (!text) continue
 
     if (!text.includes(code)) continue

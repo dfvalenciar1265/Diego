@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { getCurrentMember } from '@/lib/auth'
 import { getDashboardKPIs, getTodayCheckOuts } from '@/actions/dashboard'
 import { getTasks } from '@/actions/tasks'
 import { getLowStockAlerts } from '@/actions/supplies'
@@ -7,7 +8,7 @@ import { getPurchaseRequests } from '@/actions/purchases'
 import { KPICard } from '@/components/dashboard/KPICard'
 import { StockAlert } from '@/components/dashboard/StockAlert'
 import { TaskCard } from '@/components/tasks/TaskCard'
-import { DashboardPrepCard } from '@/components/dashboard/DashboardPrepCard'
+import { DashboardPrepCard, type PrepTask } from '@/components/dashboard/DashboardPrepCard'
 import { RefreshButton } from '@/components/dashboard/RefreshButton'
 import { ResolvePurchaseButton } from '@/components/dashboard/ResolvePurchaseButton'
 import { canDo } from '@/lib/permissions'
@@ -16,33 +17,32 @@ import { es } from 'date-fns/locale'
 import type { PurchaseRequest, Task } from '@/lib/types'
 
 export default async function DashboardPage() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
-
-  const { data: member } = await supabase
-    .from('team_members').select('*').eq('id', user.id).single()
+  // Cached per request — no duplicate auth round-trip with the layout
+  const member = await getCurrentMember()
+  if (!member) redirect('/login')
 
   // Equipo va directo a sus tareas
-  if (member && !canDo(member.role, 'dashboard:view')) {
+  if (!canDo(member.role, 'dashboard:view')) {
     redirect('/tasks')
   }
 
-  const today    = format(new Date(), "EEEE d 'de' MMMM", { locale: es })
-  const todayISO = format(new Date(), 'yyyy-MM-dd')
+  const now      = new Date()
+  const today    = format(now, "EEEE d 'de' MMMM", { locale: es })
+  const todayISO = format(now, 'yyyy-MM-dd')
+  const hour     = now.getHours()
+  const greeting = hour < 12 ? 'Buenos días' : hour < 19 ? 'Buenas tardes' : 'Buenas noches'
 
-  // Prep tasks for today's check-ins — ALL statuses (done tasks show with ✓)
-  // Filter by reservation.check_in = today so only today's arriving guests appear
-  const { data: prepTasksRaw } = await supabase
-    .from('tasks')
-    .select('*, property:properties(name), assignee:team_members(name), reservation:reservations(check_in, check_out, notes, guest_name, guests)')
-    .eq('type', 'preparation')
-    .eq('reservations.check_in', todayISO)
-    .not('reservation_id', 'is', null)
-
-  const prepTasks = (prepTasksRaw ?? []).filter((t: any) => t.reservation?.check_in === todayISO)
-
-  const [kpis, todayTasks, stockAlerts, pendingPurchases, checkOuts] = await Promise.all([
+  // All dashboard data fetched concurrently (no waterfall)
+  const supabase = await createClient()
+  const [prepTasksRaw, kpis, todayTasks, stockAlerts, pendingPurchases, checkOuts] = await Promise.all([
+    // Prep tasks for today's check-ins — ALL statuses (done tasks show with ✓)
+    supabase
+      .from('tasks')
+      .select('*, property:properties(name), assignee:team_members(name), reservation:reservations(check_in, check_out, notes, guest_name, guests)')
+      .eq('type', 'preparation')
+      .eq('reservations.check_in', todayISO)
+      .not('reservation_id', 'is', null)
+      .then(r => r.data ?? []),
     getDashboardKPIs(),
     getTasks({ date: todayISO }),
     getLowStockAlerts(),
@@ -50,9 +50,11 @@ export default async function DashboardPage() {
     getTodayCheckOuts(),
   ])
 
-  // Cleaning and other tasks: scheduled for today
-  const cleaningTasks = todayTasks.filter((t: Task) => t.type === 'cleaning' && t.scheduled_for === todayISO)
-  const otherTasks    = todayTasks.filter((t: Task) => t.type !== 'cleaning' && t.type !== 'preparation' && t.scheduled_for === todayISO)
+  // PostgREST returns rows with null reservation for non-matching joins — keep only today's
+  const prepTasks = prepTasksRaw.filter(t => t.reservation?.check_in === todayISO)
+
+  // Other tasks scheduled for today (cleaning shown in its own section)
+  const otherTasks = todayTasks.filter((t: Task) => t.type !== 'cleaning' && t.type !== 'preparation' && t.scheduled_for === todayISO)
 
   return (
     <div className="pb-4">
@@ -61,7 +63,7 @@ export default async function DashboardPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-lg font-bold text-[#0f172a]">
-              Buenos días, {member?.name?.split(' ')[0] ?? 'Diego'} 👋
+              {greeting}, {member.name?.split(' ')[0] ?? 'Diego'} 👋
             </h1>
             <p className="text-xs text-[#94a3b8] capitalize">{today}</p>
           </div>
@@ -155,7 +157,7 @@ export default async function DashboardPage() {
                     <div className="flex-1 h-px bg-[#ffe4e8]" />
                   </div>
                   <div className="space-y-2">
-                    {prepTasks.map((t: Task) => <DashboardPrepCard key={t.id} task={t as any} />)}
+                    {(prepTasks as PrepTask[]).map(t => <DashboardPrepCard key={t.id} task={t} />)}
                   </div>
                 </div>
               )}

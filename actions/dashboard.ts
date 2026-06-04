@@ -54,21 +54,31 @@ export async function getTodayCheckOuts(): Promise<TodayCheckOut[]> {
     .order('guest_name')
   if (!data) return []
 
-  return data.map(r => {
+  type CheckoutTaskRow = { type: string; scheduled_for: string; notes: string | null }
+  type CheckoutRow = {
+    id: string
+    guest_name: string | null
+    notes: string | null
+    property: { name: string } | { name: string }[] | null
+    tasks: CheckoutTaskRow[] | null
+  }
+
+  return (data as CheckoutRow[]).map(r => {
     // 1. Prefer time saved on cleaning task ("HH:MM|..." format)
-    const cleaningTask = (r.tasks as any[])?.find(
-      (t: any) => t.type === 'cleaning' && t.scheduled_for === today
+    const cleaningTask = r.tasks?.find(
+      t => t.type === 'cleaning' && t.scheduled_for === today
     )
     const taskTimeMatch = cleaningTask?.notes?.match(/^(\d{2}:\d{2})\|/)
     const rawTime = taskTimeMatch
       ? taskTimeMatch[1]                                          // "07:00" from task
-      : r.notes?.match(/Check-out:\s*([^\|]+)/i)?.[1] ?? null    // from reservation notes
+      : r.notes?.match(/Check-out:\s*([^|]+)/i)?.[1] ?? null    // from reservation notes
 
+    const prop = Array.isArray(r.property) ? r.property[0] : r.property
     return {
       id: r.id,
       guest_name: r.guest_name ?? '—',
       check_out_time: normalizeTime(rawTime),  // always same format: "7am", "12pm"
-      property_name: (r.property as any)?.name ?? '—',
+      property_name: prop?.name ?? '—',
     }
   })
 }

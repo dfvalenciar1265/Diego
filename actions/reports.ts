@@ -75,7 +75,7 @@ export async function getIncomeReport(year: number, month: number): Promise<Inco
     const cur = new Date(checkIn)
     while (cur < checkOut) {
       if (cur.getFullYear() === year && cur.getMonth() + 1 === month) {
-        cur.getDate() <= 15 ? p1++ : p2++
+        if (cur.getDate() <= 15) p1++; else p2++
       }
       cur.setDate(cur.getDate() + 1)
     }

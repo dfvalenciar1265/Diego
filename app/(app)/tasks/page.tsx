@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { getCurrentMember } from '@/lib/auth'
 import { getTasks } from '@/actions/tasks'
 import { getProperties } from '@/actions/properties'
 import { getTeamMembers } from '@/actions/team'
@@ -8,15 +8,11 @@ import { TasksClient } from '@/components/tasks/TasksClient'
 import { TasksView } from '@/components/tasks/TasksView'
 
 export default async function TasksPage() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
-
-  const { data: member } = await supabase
-    .from('team_members').select('*').eq('id', user!.id).single()
+  const member = await getCurrentMember()
+  if (!member) redirect('/login')
 
   // Admin sees all 'other' tasks; team sees only their own
-  const filters = member?.role !== 'admin' ? { assignedTo: user!.id } : {}
+  const filters = member.role !== 'admin' ? { assignedTo: member.id } : {}
   const [tasks, properties, teamMembers] = await Promise.all([
     getTasks(filters),
     getProperties(true),

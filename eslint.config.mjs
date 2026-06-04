@@ -12,6 +12,11 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // PWA-generated service workers (minified, not source)
+    "public/sw.js",
+    "public/workbox-*.js",
+    "public/worker-*.js",
+    "public/swe-worker-*.js",
   ]),
 ]);
 

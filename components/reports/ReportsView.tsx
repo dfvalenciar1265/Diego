@@ -4,17 +4,13 @@ import { Pagination, paginate, pageCount } from '@/components/ui/Pagination'
 import { IncomeReport } from './IncomeReport'
 import { CleaningCostReport } from './CleaningCostReport'
 import { ExpensesView } from './ExpensesView'
-import type { Task, Property, TeamMember, MaintenanceIssue, Expense } from '@/lib/types'
+import type { Task, Property, TeamMember, Expense } from '@/lib/types'
 import type { IncomeRow, CleaningCostRow } from '@/actions/reports'
 
-type CleaningRow    = Task            & { property?: { name: string }; assignee?: { name: string } }
-type MaintenanceRow = MaintenanceIssue & { property?: { name: string }; assignee?: { name: string } }
-type OtherRow       = Task            & { property?: { name: string }; assignee?: { name: string } }
+type CleaningRow = Task & { property?: { name: string }; assignee?: { name: string } }
 
 interface Props {
   cleaningTasks:     CleaningRow[]
-  maintenanceIssues: MaintenanceRow[]
-  otherTasks:        OtherRow[]
   properties:        Property[]
   teamMembers:       TeamMember[]
   incomeRows:        IncomeRow[]
@@ -40,8 +36,6 @@ function fmtCOP(n: number | null | undefined): string {
 
 export function ReportsView({
   cleaningTasks,
-  maintenanceIssues,
-  otherTasks,
   properties,
   teamMembers,
   incomeRows,
@@ -54,7 +48,6 @@ export function ReportsView({
   const [filterProp,   setFilterProp]   = useState('')
   const [filterPerson, setFilterPerson] = useState('')
   const [cleanPage,    setCleanPage]    = useState(1)
-  const [expPage,      setExpPage]      = useState(1)
 
   const PS = 5
 
@@ -72,45 +65,6 @@ export function ReportsView({
   })
   const pagedCleaning = paginate(filteredCleaning, cleanPage, PS)
 
-  // ── Expense report ─────────────────────────────────────────────────────────
-  type ExpenseRow = {
-    date:     string | null
-    property: string
-    category: string
-    detail:   string
-    person:   string
-    cost:     number
-  }
-
-  const expenseRows: ExpenseRow[] = [
-    ...maintenanceIssues.map(i => ({
-      date:     i.resolved_at ?? null,
-      property: i.property?.name ?? '—',
-      category: '🔧 Mantenimiento',
-      detail:   i.title,
-      person:   i.assignee?.name ?? '—',
-      cost:     i.cost ?? 0,
-    })),
-    ...otherTasks.map(t => ({
-      date:     t.completed_at ?? null,
-      property: t.property?.name ?? '—',
-      category: '📋 Tarea',
-      detail:   t.notes ?? t.type,
-      person:   t.assignee?.name ?? '—',
-      cost:     t.cost ?? 0,
-    })),
-  ].sort((a, b) => (b.date ?? '').localeCompare(a.date ?? ''))
-
-  const filteredExpenses = expenseRows.filter(r => {
-    if (filterProp) {
-      const propName = properties.find(p => p.id === filterProp)?.name
-      if (propName && r.property !== propName) return false
-    }
-    return true
-  })
-
-  const totalExpenses = filteredExpenses.reduce((s, r) => s + r.cost, 0)
-  const pagedExpenses = paginate(filteredExpenses, expPage, PS)
 
   // ── Tab definitions ────────────────────────────────────────────────────────
   const tabs: { key: Tab; label: string }[] = [
