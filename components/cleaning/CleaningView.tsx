@@ -1,7 +1,8 @@
 'use client'
 import { useState, useTransition } from 'react'
-import { assignAndStartTask, updateTaskNotes, updateTaskStatus } from '@/actions/tasks'
+import { assignAndStartTask, updateTaskNotes, updateTaskStatus, type WeekCleaningTask } from '@/actions/tasks'
 import { Pagination, paginate, pageCount } from '@/components/ui/Pagination'
+import { WeeklyScheduleView } from './WeeklyScheduleView'
 import type { Task } from '@/lib/types'
 import type { TeamMember } from '@/lib/types'
 import { Sparkles } from 'lucide-react'
@@ -21,9 +22,12 @@ type CleaningTask = Task & {
 interface Props {
   tasks: CleaningTask[]
   staff: TeamMember[]
+  weekTasks: WeekCleaningTask[]
+  weekStart: string
+  todayISO:  string
 }
 
-type Tab = 'pending' | 'done'
+type Tab = 'pending' | 'done' | 'week'
 const PAGE_SIZE = 5
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
@@ -90,7 +94,7 @@ function buildCoAnnotation(time24: string): string {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export function CleaningView({ tasks, staff }: Props) {
+export function CleaningView({ tasks, staff, weekTasks, weekStart, todayISO }: Props) {
   const today    = todayStr()
   const tomorrow = tomorrowStr()
 
@@ -164,7 +168,27 @@ export function CleaningView({ tasks, staff }: Props) {
             </span>
           )}
         </button>
+        <button
+          onClick={() => setTab('week')}
+          className="flex-1 py-2.5 text-sm font-medium transition-colors"
+          style={{
+            background: tab === 'week' ? '#6366f1' : 'white',
+            color:      tab === 'week' ? 'white'   : '#64748b',
+          }}
+        >
+          📅 Semana
+        </button>
       </div>
+
+      {/* ── Semana tab ─────────────────────────────────────────────────────── */}
+      {tab === 'week' && (
+        <WeeklyScheduleView
+          initialTasks={weekTasks}
+          initialWeekStart={weekStart}
+          staff={staff}
+          todayISO={todayISO}
+        />
+      )}
 
       {/* ── Pendientes tab ────────────────────────────────────────────────── */}
       {tab === 'pending' && (

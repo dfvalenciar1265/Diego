@@ -41,6 +41,78 @@ export async function getCleaningTasks(): Promise<(Task & {
   return [...(activeRes.data ?? []), ...(doneRes.data ?? [])]
 }
 
+// ── Weekly cleaning schedule ──────────────────────────────────────────────────
+
+export interface WeekCleaningTask {
+  id:            string
+  scheduled_for: string          // YYYY-MM-DD
+  property_name: string
+  assignee_name: string | null
+  status:        TaskStatus
+  checkout_time: string          // display string, e.g. "12pm"
+  guest_name:    string | null
+}
+
+/** Converts "HH:MM" or "12:00 p.m." / "12pm" to a compact "12pm" / "3:30pm". */
+function displayTime(raw: string | null | undefined): string {
+  if (!raw) return '12pm'
+  const h24 = raw.match(/^(\d{1,2}):(\d{2})$/)
+  let h: number, m: number
+  if (h24) {
+    h = parseInt(h24[1]); m = parseInt(h24[2])
+  } else {
+    const d = raw.match(/(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m?\.?/i)
+    if (!d) return '12pm'
+    h = parseInt(d[1]); m = d[2] ? parseInt(d[2]) : 0
+    const p = d[3].toLowerCase()
+    if (p === 'p' && h !== 12) h += 12
+    if (p === 'a' && h === 12) h = 0
+  }
+  const suffix = h >= 12 ? 'pm' : 'am'
+  const h12 = h % 12 || 12
+  return m === 0 ? `${h12}${suffix}` : `${h12}:${String(m).padStart(2, '0')}${suffix}`
+}
+
+/**
+ * All cleaning tasks scheduled within a week [weekStart, weekStart+6 days],
+ * any status, for the weekly schedule view. weekStart is a Monday (YYYY-MM-DD).
+ */
+export async function getWeekCleaningSchedule(weekStart: string): Promise<WeekCleaningTask[]> {
+  const supabase = await createClient()
+  const start = new Date(weekStart + 'T12:00:00')
+  const end = new Date(start)
+  end.setDate(end.getDate() + 6)
+  const weekEnd = end.toISOString().slice(0, 10)
+
+  const { data } = await supabase
+    .from('tasks')
+    .select('id, scheduled_for, status, notes, property:properties(name), assignee:team_members(name), reservation:reservations(notes, guest_name)')
+    .eq('type', 'cleaning')
+    .gte('scheduled_for', weekStart)
+    .lte('scheduled_for', weekEnd)
+    .order('scheduled_for')
+
+  if (!data) return []
+
+  return data.map(t => {
+    const prop = Array.isArray(t.property) ? t.property[0] : t.property
+    const assignee = Array.isArray(t.assignee) ? t.assignee[0] : t.assignee
+    const res = Array.isArray(t.reservation) ? t.reservation[0] : t.reservation
+    // Prefer the edited checkout time on the task ("HH:MM|..."), else reservation notes
+    const taskTime = (t.notes as string | null)?.match(/^(\d{2}:\d{2})\|/)?.[1]
+    const resTime  = (res?.notes as string | null)?.match(/Check-out:\s*([^|]+)/i)?.[1]?.trim()
+    return {
+      id:            t.id,
+      scheduled_for: t.scheduled_for as string,
+      property_name: prop?.name ?? '—',
+      assignee_name: assignee?.name ?? null,
+      status:        t.status as TaskStatus,
+      checkout_time: displayTime(taskTime ?? resTime),
+      guest_name:    res?.guest_name ?? null,
+    }
+  })
+}
+
 /** Assigns a task to a team member (or unassigns if memberId is null). */
 export async function assignTask(
   taskId: string,
