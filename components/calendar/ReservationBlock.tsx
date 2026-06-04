@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import type { Reservation } from '@/lib/types'
 import type { CSSProperties } from 'react'
 
@@ -13,7 +14,9 @@ const SOURCE_COLORS: Record<string, { bg: string; text: string }> = {
   blocked: { bg: '#94a3b8', text: 'white' },
 }
 
-export function ReservationBlock({ reservation, onClick, style }: Props) {
+// Memoized: a reservation bar only needs to re-render if its own data,
+// position, or click handler change — not when the calendar's form state does.
+export const ReservationBlock = memo(function ReservationBlock({ reservation, onClick, style }: Props) {
   const colors = SOURCE_COLORS[reservation.source] ?? SOURCE_COLORS.direct
 
   return (
@@ -28,4 +31,4 @@ export function ReservationBlock({ reservation, onClick, style }: Props) {
       </span>
     </button>
   )
-}
+})
