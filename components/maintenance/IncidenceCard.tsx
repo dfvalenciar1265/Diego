@@ -46,6 +46,7 @@ export function IncidenceCard({ issue, teamMembers = [] }: Props) {
   const [resNotes, setResNotes]       = useState('')
   const [resCost, setResCost]         = useState('')
   const [resPerson, setResPerson]     = useState(issue.assigned_to ?? '')
+  const [error, setError]             = useState('')
 
   function advance() {
     if (!nextStatus) return
@@ -54,22 +55,29 @@ export function IncidenceCard({ issue, teamMembers = [] }: Props) {
       setResolving(true)
       return
     }
-    startTransition(() => updateMaintenanceStatus(issue.id, nextStatus))
+    setError('')
+    startTransition(async () => {
+      const res = await updateMaintenanceStatus(issue.id, nextStatus)
+      if (!res.success) setError('No se pudo actualizar. Revisa tu conexión.')
+    })
   }
 
   function cancelResolve() {
     setResolving(false)
     setResNotes('')
     setResCost('')
+    setError('')
   }
 
   function submitResolve() {
+    setError('')
     startTransition(async () => {
-      await updateMaintenanceStatus(issue.id, 'resolved', {
+      const res = await updateMaintenanceStatus(issue.id, 'resolved', {
         notes:      resNotes || undefined,
         cost:       resCost ? parseFloat(resCost) : undefined,
         assignedTo: resPerson || undefined,
       })
+      if (!res.success) { setError('No se pudo resolver. Revisa tu conexión y reintenta.'); return }
       setResolving(false)
     })
   }
@@ -220,6 +228,12 @@ export function IncidenceCard({ issue, teamMembers = [] }: Props) {
               </button>
             </div>
           </div>
+        )}
+
+        {error && (
+          <p className="mt-2 text-xs text-[#ef4444] bg-[#fef2f2] rounded-lg px-3 py-2 border border-[#fecaca]">
+            ⚠️ {error}
+          </p>
         )}
       </div>
     </div>

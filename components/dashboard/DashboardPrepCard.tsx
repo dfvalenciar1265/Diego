@@ -67,11 +67,18 @@ export function DashboardPrepCard({ task }: { task: PrepTask }) {
   const [editingTime, setEditingTime] = useState(false)
   const [ciTime, setCiTime]           = useState(savedTime || defaultTime)
   const [noteText, setNoteText]       = useState(savedNote)
+  const [saveError, setSaveError]     = useState(false)
   const [, startTransition]           = useTransition()
 
   function save(time: string, note: string) {
+    setSaveError(false)
     startTransition(async () => {
-      await updateTaskNotes(task.id, buildAnnotation(time, note))
+      try {
+        const res = await updateTaskNotes(task.id, buildAnnotation(time, note))
+        if (!res.success) setSaveError(true)
+      } catch {
+        setSaveError(true)
+      }
     })
   }
 
@@ -137,6 +144,12 @@ export function DashboardPrepCard({ task }: { task: PrepTask }) {
                    focus:outline-none focus:ring-1 focus:ring-[#ff385c] bg-[#fafafa]
                    resize-none placeholder:text-[#c4c9d4]"
       />
+
+      {saveError && (
+        <p className="mt-1.5 text-[11px] text-[#ef4444]">
+          ⚠️ No se guardó. Revisa tu conexión.
+        </p>
+      )}
 
     </div>
   )

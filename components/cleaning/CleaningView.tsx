@@ -306,7 +306,8 @@ function CleaningTaskCard({
     setError('')
     startTransition(async () => {
       try {
-        await updateTaskNotes(task.id, buildCoAnnotation(time))
+        const res = await updateTaskNotes(task.id, buildCoAnnotation(time))
+        if (!res.success) setError('No se pudo guardar la hora. Revisa tu conexión.')
       } catch {
         setError('No se pudo guardar la hora. Revisa tu conexión.')
       }

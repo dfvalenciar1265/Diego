@@ -47,7 +47,7 @@ export async function updateMaintenanceStatus(
   id: string,
   status: MaintenanceStatus,
   options?: { notes?: string; assignedTo?: string | null; cost?: number | null }
-): Promise<void> {
+): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient()
   const update: Record<string, unknown> = {
     status,
@@ -58,8 +58,9 @@ export async function updateMaintenanceStatus(
   if (options?.cost       !== undefined) update.cost        = options.cost
 
   const { error } = await supabase.from('maintenance').update(update).eq('id', id)
-  if (error) throw new Error(error.message)
+  if (error) return { success: false, error: error.message }
   revalidatePath('/maintenance')
   revalidatePath('/')
+  return { success: true }
 }
 

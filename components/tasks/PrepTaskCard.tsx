@@ -92,11 +92,18 @@ export function PrepTaskCard({ task }: Props) {
   const [editingTime, setEditingTime] = useState(false)
   const [ciTime, setCiTime]           = useState(savedTime || defaultCiTime)
   const [noteText, setNoteText]       = useState(savedNote)
+  const [saveError, setSaveError]     = useState(false)
   const [, startTransition]           = useTransition()
 
   function saveAnnotation(time: string, note: string) {
+    setSaveError(false)
     startTransition(async () => {
-      await updateTaskNotes(task.id, buildAnnotation(time, note))
+      try {
+        const res = await updateTaskNotes(task.id, buildAnnotation(time, note))
+        if (!res.success) setSaveError(true)
+      } catch {
+        setSaveError(true)
+      }
     })
   }
 
@@ -178,6 +185,12 @@ export function PrepTaskCard({ task }: Props) {
                    focus:outline-none focus:ring-1 focus:ring-[#ff385c] bg-[#fafafa]
                    resize-none placeholder:text-[#c4c9d4]"
       />
+
+      {saveError && (
+        <p className="mt-2 text-[11px] text-[#ef4444]">
+          ⚠️ No se guardó. Revisa tu conexión y reintenta.
+        </p>
+      )}
 
     </div>
   )

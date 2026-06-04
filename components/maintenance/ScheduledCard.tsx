@@ -1,5 +1,5 @@
 'use client'
-import { useTransition } from 'react'
+import { useState, useTransition } from 'react'
 import { updateMaintenanceStatus } from '@/actions/maintenance'
 import type { MaintenanceIssue } from '@/lib/types'
 
@@ -50,6 +50,7 @@ const URGENCY_LABEL   = { overdue: 'Vencido', soon: 'Próximo', ok: 'Al día', u
 
 export function ScheduledCard({ issue }: Props) {
   const [isPending, startTransition] = useTransition()
+  const [error, setError] = useState('')
   const meta   = parseMeta(issue.description ?? '')
   const level  = urgency(meta.next)
   const color  = URGENCY_COLOR[level]
@@ -57,7 +58,11 @@ export function ScheduledCard({ issue }: Props) {
   const icon   = isAire ? '❄️' : '🐛'
 
   function markDone() {
-    startTransition(() => updateMaintenanceStatus(issue.id, 'resolved'))
+    setError('')
+    startTransition(async () => {
+      const res = await updateMaintenanceStatus(issue.id, 'resolved')
+      if (!res.success) setError('No se pudo marcar. Revisa tu conexión.')
+    })
   }
 
   return (
@@ -118,6 +123,10 @@ export function ScheduledCard({ issue }: Props) {
         >
           {isPending ? '…' : '✓ Marcar como hecho'}
         </button>
+      )}
+
+      {error && (
+        <p className="mt-2 text-xs text-[#ef4444]">⚠️ {error}</p>
       )}
     </div>
   )
