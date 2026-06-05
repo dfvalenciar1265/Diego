@@ -11,13 +11,14 @@ describe('canDo permissions', () => {
   })
 
   describe('cleaning', () => {
-    it('cannot view full dashboard', () => expect(canDo('cleaning', 'dashboard:view')).toBe(false))
+    it('can view the dashboard (Inicio, no financial data shown there)', () => expect(canDo('cleaning', 'dashboard:view')).toBe(true))
+    it('cannot view finances', () => expect(canDo('cleaning', 'finances:view')).toBe(false))
     it('can view own tasks', () => expect(canDo('cleaning', 'tasks:view_own')).toBe(true))
     it('can update task status', () => expect(canDo('cleaning', 'tasks:update_status')).toBe(true))
     it('can update stock', () => expect(canDo('cleaning', 'supplies:update_stock')).toBe(true))
     it('can report maintenance', () => expect(canDo('cleaning', 'maintenance:report')).toBe(true))
     it('cannot manage maintenance', () => expect(canDo('cleaning', 'maintenance:manage')).toBe(false))
-    it('cannot edit properties', () => expect(canDo('cleaning', 'properties:edit')).toBe(false))
+    it('cannot edit properties (Props tab hidden in nav)', () => expect(canDo('cleaning', 'properties:edit')).toBe(false))
   })
 
   describe('maintenance', () => {

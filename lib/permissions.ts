@@ -1,6 +1,6 @@
 import type { UserRole } from './types'
 
-type Action =
+export type Action =
   | 'dashboard:view'
   | 'reservations:view'
   | 'reservations:edit'
@@ -32,6 +32,7 @@ const ROLE_PERMISSIONS: Record<UserRole, Action[]> = {
     'finances:view',
   ],
   cleaning: [
+    'dashboard:view',   // can open Inicio (no financial data is shown there)
     'reservations:view',
     'tasks:view_own', 'tasks:view_all', 'tasks:update_status',
     'maintenance:report',
@@ -65,6 +66,6 @@ export function canDo(role: UserRole, action: Action): boolean {
 }
 
 export function getHomeRoute(role: UserRole): string {
-  if (role === 'admin') return '/'
-  return '/tasks'
+  // Anyone who can view the dashboard lands on Inicio; others go to their tasks.
+  return canDo(role, 'dashboard:view') ? '/' : '/tasks'
 }
