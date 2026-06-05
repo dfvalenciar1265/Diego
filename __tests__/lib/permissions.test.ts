@@ -22,7 +22,8 @@ describe('canDo permissions', () => {
   })
 
   describe('maintenance', () => {
-    it('cannot view full dashboard', () => expect(canDo('maintenance', 'dashboard:view')).toBe(false))
+    it('can view the dashboard (Inicio)', () => expect(canDo('maintenance', 'dashboard:view')).toBe(true))
+    it('cannot edit properties (Props tab hidden in nav)', () => expect(canDo('maintenance', 'properties:edit')).toBe(false))
     it('can view own tasks', () => expect(canDo('maintenance', 'tasks:view_own')).toBe(true))
     it('can manage own maintenance issues', () => expect(canDo('maintenance', 'maintenance:manage')).toBe(true))
     it('can report maintenance', () => expect(canDo('maintenance', 'maintenance:report')).toBe(true))

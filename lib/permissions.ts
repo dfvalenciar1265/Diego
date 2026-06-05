@@ -42,6 +42,7 @@ const ROLE_PERMISSIONS: Record<UserRole, Action[]> = {
     // NOTE: no 'finances:view' — amounts/revenue are hidden for cleaning staff
   ],
   maintenance: [
+    'dashboard:view',   // can open Inicio
     'reservations:view',
     'tasks:view_own', 'tasks:update_status',
     'maintenance:report', 'maintenance:manage',
