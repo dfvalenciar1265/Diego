@@ -3,6 +3,7 @@ import { useState, useTransition } from 'react'
 import { assignAndStartTask, updateTaskNotes, updateTaskStatus, type WeekCleaningTask } from '@/actions/tasks'
 import { Pagination, paginate, pageCount } from '@/components/ui/Pagination'
 import { WeeklyScheduleView } from './WeeklyScheduleView'
+import { useCurrentUser } from '@/hooks/useCurrentUser'
 import type { Task } from '@/lib/types'
 import type { TeamMember } from '@/lib/types'
 import { Sparkles } from 'lucide-react'
@@ -95,6 +96,7 @@ function buildCoAnnotation(time24: string): string {
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function CleaningView({ tasks, staff, weekTasks, weekStart, todayISO }: Props) {
+  const { member: currentMember } = useCurrentUser()
   const today    = todayStr()
   const tomorrow = tomorrowStr()
 
@@ -202,7 +204,7 @@ export function CleaningView({ tasks, staff, weekTasks, weekStart, todayISO }: P
             <>
               {todayTasks.length > 0 && (
                 <Section label="Limpieza hoy" emoji="🧹" count={todayTasks.length} accent="#6366f1" line="#e0e7ff">
-                  {pagedToday.map(t => <CleaningTaskCard key={t.id} task={t} staff={staff} />)}
+                  {pagedToday.map(t => <CleaningTaskCard key={t.id} task={t} staff={staff} currentMember={currentMember} />)}
                   <Pagination
                     page={todayPage}
                     total={pageCount(todayTasks.length, PAGE_SIZE)}
@@ -213,7 +215,7 @@ export function CleaningView({ tasks, staff, weekTasks, weekStart, todayISO }: P
               )}
               {tomorrowTasks.length > 0 && (
                 <Section label="Limpieza mañana" emoji="📅" count={tomorrowTasks.length} accent="#94a3b8" line="#e2e8f0">
-                  {pagedTomorrow.map(t => <CleaningTaskCard key={t.id} task={t} staff={staff} />)}
+                  {pagedTomorrow.map(t => <CleaningTaskCard key={t.id} task={t} staff={staff} currentMember={currentMember} />)}
                   <Pagination
                     page={tomorrowPage}
                     total={pageCount(tomorrowTasks.length, PAGE_SIZE)}
@@ -223,7 +225,7 @@ export function CleaningView({ tasks, staff, weekTasks, weekStart, todayISO }: P
               )}
               {laterTasks.length > 0 && (
                 <Section label="Próximas" emoji="📆" count={laterTasks.length} accent="#94a3b8" line="#e2e8f0">
-                  {pagedLater.map(t => <CleaningTaskCard key={t.id} task={t} staff={staff} />)}
+                  {pagedLater.map(t => <CleaningTaskCard key={t.id} task={t} staff={staff} currentMember={currentMember} />)}
                   <Pagination
                     page={laterPage}
                     total={pageCount(laterTasks.length, PAGE_SIZE)}
@@ -306,9 +308,11 @@ function DoneCleaningCard({ task }: { task: CleaningTask }) {
 function CleaningTaskCard({
   task,
   staff,
+  currentMember,
 }: {
   task: CleaningTask
   staff: TeamMember[]
+  currentMember: TeamMember | null
 }) {
   const res      = task.reservation
   const resNotes = res?.notes ?? null
@@ -346,6 +350,14 @@ function CleaningTaskCard({
       setPicking(false)
     })
   }
+
+  // Self-assign: the person tapping "Iniciar" becomes the assignee.
+  function startSelf() {
+    if (!currentMember) { setError('No se pudo identificar tu usuario. Recarga la página.'); return }
+    startWithPerson(currentMember.id)
+  }
+
+  const isAdmin = currentMember?.role === 'admin'
 
   function complete() {
     setError('')
@@ -445,16 +457,16 @@ function CleaningTaskCard({
         )}
       </div>
 
-      {/* Iniciar → person picker */}
+      {/* Iniciar — non-admin self-assigns; admin picks who cleans */}
       {task.status === 'pending' && !pickingPerson && (
         <button
-          onClick={() => setPicking(true)}
+          onClick={() => isAdmin ? setPicking(true) : startSelf()}
           disabled={isPending}
           className="mt-1 w-full h-9 rounded-lg text-sm font-semibold text-white
                      active:opacity-80 transition-opacity disabled:opacity-50"
           style={{ background: '#6366f1' }}
         >
-          ▶ Iniciar
+          {isPending ? '…' : '▶ Iniciar'}
         </button>
       )}
 
