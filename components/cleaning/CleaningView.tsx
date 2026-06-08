@@ -33,6 +33,9 @@ interface Props {
 type Tab = 'pending' | 'done' | 'week'
 const PAGE_SIZE = 5
 
+// Proof-of-clean photo feature — temporarily hidden. Flip to true to re-enable.
+const PHOTO_PROOF_ENABLED = false
+
 // ── Date helpers ──────────────────────────────────────────────────────────────
 
 function todayStr() {
@@ -300,7 +303,7 @@ function DoneCleaningCard({ task }: { task: CleaningTask }) {
             {task.assignee?.name ?? 'Sin asignar'} · {fmtDatetime(task.completed_at)}
           </p>
         </div>
-        {task.photo_url && (
+        {PHOTO_PROOF_ENABLED && task.photo_url && (
           // eslint-disable-next-line @next/next/no-img-element
           <a href={task.photo_url} target="_blank" rel="noopener noreferrer" className="flex-shrink-0">
             <img src={task.photo_url} alt="Evidencia"
@@ -535,47 +538,59 @@ function CleaningTaskCard({
         </div>
       )}
 
-      {/* Foto de evidencia + Terminar (en curso) */}
+      {/* Terminar (en curso) — con foto de evidencia opcional si está habilitada */}
       {task.status === 'in_progress' && (
-        <div className="mt-1 space-y-2">
-          {/* Hidden camera/file input */}
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            className="hidden"
-            onChange={handlePhoto}
-          />
+        PHOTO_PROOF_ENABLED ? (
+          <div className="mt-1 space-y-2">
+            {/* Hidden camera/file input */}
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={handlePhoto}
+            />
 
-          {photoUrl ? (
-            <a href={photoUrl} target="_blank" rel="noopener noreferrer" className="block">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={photoUrl} alt="Evidencia de limpieza"
-                   className="w-full h-32 object-cover rounded-lg border border-[#e2e8f0]" />
-              <p className="text-[11px] text-[#16a34a] mt-1 text-center">📸 Foto adjunta · tocar para ampliar</p>
-            </a>
-          ) : null}
+            {photoUrl ? (
+              <a href={photoUrl} target="_blank" rel="noopener noreferrer" className="block">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={photoUrl} alt="Evidencia de limpieza"
+                     className="w-full h-32 object-cover rounded-lg border border-[#e2e8f0]" />
+                <p className="text-[11px] text-[#16a34a] mt-1 text-center">📸 Foto adjunta · tocar para ampliar</p>
+              </a>
+            ) : null}
 
-          <button
-            onClick={() => fileRef.current?.click()}
-            disabled={uploading || isPending}
-            className="w-full h-9 rounded-lg text-sm font-semibold border border-[#6366f1] text-[#6366f1]
-                       bg-white active:opacity-80 transition-opacity disabled:opacity-50"
-          >
-            {uploading ? 'Subiendo…' : photoUrl ? '📸 Cambiar foto' : '📸 Tomar foto'}
-          </button>
+            <button
+              onClick={() => fileRef.current?.click()}
+              disabled={uploading || isPending}
+              className="w-full h-9 rounded-lg text-sm font-semibold border border-[#6366f1] text-[#6366f1]
+                         bg-white active:opacity-80 transition-opacity disabled:opacity-50"
+            >
+              {uploading ? 'Subiendo…' : photoUrl ? '📸 Cambiar foto' : '📸 Tomar foto'}
+            </button>
 
+            <button
+              onClick={complete}
+              disabled={isPending || uploading}
+              className="w-full h-9 rounded-lg text-sm font-semibold text-white
+                         active:opacity-80 transition-opacity disabled:opacity-50"
+              style={{ background: '#22c55e' }}
+            >
+              {isPending ? '…' : '✓ Terminar'}
+            </button>
+          </div>
+        ) : (
           <button
             onClick={complete}
-            disabled={isPending || uploading}
-            className="w-full h-9 rounded-lg text-sm font-semibold text-white
+            disabled={isPending}
+            className="mt-1 w-full h-9 rounded-lg text-sm font-semibold text-white
                        active:opacity-80 transition-opacity disabled:opacity-50"
             style={{ background: '#22c55e' }}
           >
             {isPending ? '…' : '✓ Terminar'}
           </button>
-        </div>
+        )
       )}
 
       {/* Retryable error (network/server) — keeps the user's place instead of crashing */}
