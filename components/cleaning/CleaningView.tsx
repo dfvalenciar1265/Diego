@@ -1,9 +1,11 @@
 'use client'
 import { useState, useTransition } from 'react'
-import { assignAndStartTask, updateTaskNotes, updateTaskStatus, type WeekCleaningTask } from '@/actions/tasks'
+import { assignAndStartTask, updateTaskNotes, updateTaskStatus, setTaskPhoto, type WeekCleaningTask } from '@/actions/tasks'
 import { Pagination, paginate, pageCount } from '@/components/ui/Pagination'
 import { WeeklyScheduleView } from './WeeklyScheduleView'
 import { useCurrentUser } from '@/hooks/useCurrentUser'
+import { uploadCleaningPhoto } from '@/lib/upload'
+import { useRef } from 'react'
 import type { Task } from '@/lib/types'
 import type { TeamMember } from '@/lib/types'
 import { Sparkles } from 'lucide-react'
@@ -298,6 +300,13 @@ function DoneCleaningCard({ task }: { task: CleaningTask }) {
             {task.assignee?.name ?? 'Sin asignar'} · {fmtDatetime(task.completed_at)}
           </p>
         </div>
+        {task.photo_url && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <a href={task.photo_url} target="_blank" rel="noopener noreferrer" className="flex-shrink-0">
+            <img src={task.photo_url} alt="Evidencia"
+                 className="w-12 h-12 object-cover rounded-lg border border-[#e2e8f0]" />
+          </a>
+        )}
       </div>
     </div>
   )
@@ -327,6 +336,28 @@ function CleaningTaskCard({
   const [pickingPerson, setPicking]  = useState(false)
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState('')
+  const [photoUrl, setPhotoUrl]      = useState(task.photo_url)
+  const [uploading, setUploading]    = useState(false)
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  async function handlePhoto(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setError('')
+    setUploading(true)
+    try {
+      const url = await uploadCleaningPhoto(file)
+      if (!url) { setError('No se pudo subir la foto. Reintenta.'); return }
+      const res = await setTaskPhoto(task.id, url)
+      if (!res.success) { setError('No se pudo guardar la foto. Reintenta.'); return }
+      setPhotoUrl(url)
+    } catch {
+      setError('No se pudo subir la foto. Revisa tu conexión.')
+    } finally {
+      setUploading(false)
+      if (fileRef.current) fileRef.current.value = ''
+    }
+  }
 
   // Field staff often act on spotty building WiFi. A failed mutation must NOT
   // crash the whole page — show a retryable inline error and keep their place.
@@ -504,17 +535,47 @@ function CleaningTaskCard({
         </div>
       )}
 
-      {/* Terminar */}
+      {/* Foto de evidencia + Terminar (en curso) */}
       {task.status === 'in_progress' && (
-        <button
-          onClick={complete}
-          disabled={isPending}
-          className="mt-1 w-full h-9 rounded-lg text-sm font-semibold text-white
-                     active:opacity-80 transition-opacity disabled:opacity-50"
-          style={{ background: '#22c55e' }}
-        >
-          {isPending ? '…' : '✓ Terminar'}
-        </button>
+        <div className="mt-1 space-y-2">
+          {/* Hidden camera/file input */}
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={handlePhoto}
+          />
+
+          {photoUrl ? (
+            <a href={photoUrl} target="_blank" rel="noopener noreferrer" className="block">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={photoUrl} alt="Evidencia de limpieza"
+                   className="w-full h-32 object-cover rounded-lg border border-[#e2e8f0]" />
+              <p className="text-[11px] text-[#16a34a] mt-1 text-center">📸 Foto adjunta · tocar para ampliar</p>
+            </a>
+          ) : null}
+
+          <button
+            onClick={() => fileRef.current?.click()}
+            disabled={uploading || isPending}
+            className="w-full h-9 rounded-lg text-sm font-semibold border border-[#6366f1] text-[#6366f1]
+                       bg-white active:opacity-80 transition-opacity disabled:opacity-50"
+          >
+            {uploading ? 'Subiendo…' : photoUrl ? '📸 Cambiar foto' : '📸 Tomar foto'}
+          </button>
+
+          <button
+            onClick={complete}
+            disabled={isPending || uploading}
+            className="w-full h-9 rounded-lg text-sm font-semibold text-white
+                       active:opacity-80 transition-opacity disabled:opacity-50"
+            style={{ background: '#22c55e' }}
+          >
+            {isPending ? '…' : '✓ Terminar'}
+          </button>
+        </div>
       )}
 
       {/* Retryable error (network/server) — keeps the user's place instead of crashing */}

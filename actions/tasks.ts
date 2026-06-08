@@ -166,6 +166,22 @@ export async function assignAndStartTask(
   return { success: true }
 }
 
+/** Saves a proof-of-clean photo URL on a task. */
+export async function setTaskPhoto(
+  taskId: string,
+  photoUrl: string
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient()
+  const { error } = await supabase
+    .from('tasks')
+    .update({ photo_url: photoUrl })
+    .eq('id', taskId)
+  if (error) return { success: false, error: error.message }
+  revalidatePath('/cleaning')
+  revalidatePath('/')
+  return { success: true }
+}
+
 /** Updates the notes field of a task (used for check-in time annotation). */
 export async function updateTaskNotes(
   taskId: string,
