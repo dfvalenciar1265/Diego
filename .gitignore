@@ -47,3 +47,10 @@ next-env.d.ts
 /public/swe-worker-*.js
 /public/sw.js.map
 /public/workbox-*.js.map
+
+# Security-scan artifacts (should never be committed)
+checkov-report.json
+checkov-stderr.txt
+semgrep-report.json
+security-report-*.html
+precommit-scan-*.md
