@@ -34,7 +34,7 @@ const ROLE_PERMISSIONS: Record<UserRole, Action[]> = {
   cleaning: [
     'dashboard:view',   // can open Inicio (no financial data is shown there)
     'reservations:view',
-    'tasks:view_own', 'tasks:view_all', 'tasks:update_status',
+    'tasks:view_own', 'tasks:view_all', 'tasks:create', 'tasks:update_status',
     'maintenance:report',
     'properties:view',
     'supplies:view', 'supplies:update_stock',
@@ -44,7 +44,7 @@ const ROLE_PERMISSIONS: Record<UserRole, Action[]> = {
   maintenance: [
     'dashboard:view',   // can open Inicio
     'reservations:view',
-    'tasks:view_own', 'tasks:update_status',
+    'tasks:view_own', 'tasks:create', 'tasks:update_status',
     'maintenance:report', 'maintenance:manage',
     'properties:view',
     'supplies:view',
@@ -54,7 +54,7 @@ const ROLE_PERMISSIONS: Record<UserRole, Action[]> = {
   anfitrion: [
     'dashboard:view',
     'reservations:view',
-    'tasks:view_own', 'tasks:view_all', 'tasks:update_status',
+    'tasks:view_own', 'tasks:view_all', 'tasks:create', 'tasks:update_status',
     'maintenance:report',
     'properties:view',
     'supplies:view',

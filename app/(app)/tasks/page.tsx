@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { getCurrentMember } from '@/lib/auth'
+import { canDo } from '@/lib/permissions'
 import { getTasks } from '@/actions/tasks'
 import { getProperties } from '@/actions/properties'
 import { getTeamMembers } from '@/actions/team'
@@ -11,8 +12,10 @@ export default async function TasksPage() {
   const member = await getCurrentMember()
   if (!member) redirect('/login')
 
-  // Admin sees all 'other' tasks; team sees only their own
-  const filters = member.role !== 'admin' ? { assignedTo: member.id } : {}
+  // Anyone who can create tasks sees the full shared 'other' task list;
+  // others see only the tasks assigned to them.
+  const canManageTasks = canDo(member.role, 'tasks:create')
+  const filters = canManageTasks ? {} : { assignedTo: member.id }
   const [tasks, properties, teamMembers] = await Promise.all([
     getTasks(filters),
     getProperties(true),
@@ -23,7 +26,7 @@ export default async function TasksPage() {
     <>
       <PageHeader
         title="Tareas"
-        action={member?.role === 'admin' ? (
+        action={canManageTasks ? (
           <TasksClient properties={properties} teamMembers={teamMembers} />
         ) : null}
       />
