@@ -1,5 +1,6 @@
 import { getCleaningTasks, getWeekCleaningSchedule } from '@/actions/tasks'
 import { getTeamMembers } from '@/actions/team'
+import { getCurrentMember } from '@/lib/auth'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { CleaningView } from '@/components/cleaning/CleaningView'
 
@@ -17,10 +18,11 @@ export default async function CleaningPage() {
   const todayISO  = now.toISOString().slice(0, 10)
   const weekStart = mondayOf(now)
 
-  const [tasks, staff, weekTasks] = await Promise.all([
+  const [tasks, staff, weekTasks, currentMember] = await Promise.all([
     getCleaningTasks(),
     getTeamMembers('cleaning'),
     getWeekCleaningSchedule(weekStart),
+    getCurrentMember(),
   ])
 
   return (
@@ -32,6 +34,7 @@ export default async function CleaningPage() {
         weekTasks={weekTasks}
         weekStart={weekStart}
         todayISO={todayISO}
+        currentMember={currentMember}
       />
     </>
   )

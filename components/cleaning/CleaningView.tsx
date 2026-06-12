@@ -3,7 +3,6 @@ import { useState, useTransition } from 'react'
 import { assignAndStartTask, updateTaskNotes, updateTaskStatus, setTaskPhoto, type WeekCleaningTask } from '@/actions/tasks'
 import { Pagination, paginate, pageCount } from '@/components/ui/Pagination'
 import { WeeklyScheduleView } from './WeeklyScheduleView'
-import { useCurrentUser } from '@/hooks/useCurrentUser'
 import { uploadCleaningPhoto } from '@/lib/upload'
 import { useRef } from 'react'
 import type { Task } from '@/lib/types'
@@ -28,6 +27,7 @@ interface Props {
   weekTasks: WeekCleaningTask[]
   weekStart: string
   todayISO:  string
+  currentMember: TeamMember | null
 }
 
 type Tab = 'pending' | 'done' | 'week'
@@ -100,8 +100,7 @@ function buildCoAnnotation(time24: string): string {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export function CleaningView({ tasks, staff, weekTasks, weekStart, todayISO }: Props) {
-  const { member: currentMember } = useCurrentUser()
+export function CleaningView({ tasks, staff, weekTasks, weekStart, todayISO, currentMember }: Props) {
   const today    = todayStr()
   const tomorrow = tomorrowStr()
 
