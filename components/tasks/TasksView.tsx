@@ -1,6 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { OtherTaskCard } from './OtherTaskCard'
+import { TaskForm } from './TaskForm'
 import { Pagination, paginate, pageCount } from '@/components/ui/Pagination'
 import type { Task, Property, TeamMember } from '@/lib/types'
 
@@ -22,6 +23,7 @@ export function TasksView({ tasks, properties, teamMembers }: Props) {
   const [pendPage,   setPendPage]   = useState(1)
   const [donePage,   setDonePage]   = useState(1)
   const [filterProp, setFilterProp] = useState('')
+  const [editing,    setEditing]    = useState<ExtendedTask | null>(null)
 
   // Only show 'other' type tasks (misc tasks managed here)
   const otherTasks = tasks.filter(t => t.type === 'other')
@@ -133,7 +135,7 @@ export function TasksView({ tasks, properties, teamMembers }: Props) {
           ) : (
             <>
               {pagedPending.map(t => (
-                <OtherTaskCard key={t.id} task={t} teamMembers={teamMembers} />
+                <OtherTaskCard key={t.id} task={t} teamMembers={teamMembers} onEdit={() => setEditing(t)} />
               ))}
               <Pagination page={pendPage} total={pendPages} onChange={setPendPage} accent="#ff385c" />
               <p className="text-center text-xs text-[#c4c9d4]">
@@ -142,6 +144,17 @@ export function TasksView({ tasks, properties, teamMembers }: Props) {
             </>
           )}
         </div>
+      )}
+
+      {/* ── Formulario de edición ─────────────────────────────────────────── */}
+      {editing && (
+        <TaskForm
+          open
+          onClose={() => setEditing(null)}
+          properties={properties}
+          teamMembers={teamMembers}
+          task={editing}
+        />
       )}
 
       {/* ── Terminadas ────────────────────────────────────────────────────── */}
@@ -155,7 +168,7 @@ export function TasksView({ tasks, properties, teamMembers }: Props) {
           ) : (
             <>
               {pagedDone.map(t => (
-                <OtherTaskCard key={t.id} task={t} teamMembers={teamMembers} />
+                <OtherTaskCard key={t.id} task={t} teamMembers={teamMembers} onEdit={() => setEditing(t)} />
               ))}
               <Pagination page={donePage} total={donePages} onChange={setDonePage} accent="#ff385c" />
               <p className="text-center text-xs text-[#c4c9d4]">

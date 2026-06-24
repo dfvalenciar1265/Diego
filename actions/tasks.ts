@@ -218,6 +218,26 @@ export async function createTask(
   return { success: true }
 }
 
+/** Edits an existing task. Cost is optional (null when left blank). */
+export async function updateTask(
+  id: string,
+  formData: FormData
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient()
+  const costRaw = formData.get('cost') as string
+  const { error } = await supabase.from('tasks').update({
+    property_id:   formData.get('property_id') as string,
+    assigned_to:   (formData.get('assigned_to') as string) || null,
+    scheduled_for: formData.get('scheduled_for') as string,
+    notes:         (formData.get('notes') as string) || '',
+    cost:          costRaw ? parseFloat(costRaw) : null,
+  }).eq('id', id)
+  if (error) return { success: false, error: error.message }
+  revalidatePath('/tasks')
+  revalidatePath('/')
+  return { success: true }
+}
+
 export async function updateTaskStatus(
   id: string,
   status: TaskStatus

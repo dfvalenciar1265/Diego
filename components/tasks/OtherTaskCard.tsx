@@ -10,9 +10,10 @@ import type { Task, TeamMember } from '@/lib/types'
 interface Props {
   task: Task & { property?: { name: string }; assignee?: { name: string } }
   teamMembers: TeamMember[]
+  onEdit?: () => void
 }
 
-export function OtherTaskCard({ task, teamMembers }: Props) {
+export function OtherTaskCard({ task, teamMembers, onEdit }: Props) {
   const [isPending, startTransition] = useTransition()
   const { member } = useCurrentUser()
   const role = member?.role ?? 'cleaning'
@@ -218,6 +219,18 @@ export function OtherTaskCard({ task, teamMembers }: Props) {
               </button>
             </div>
           </div>
+        )}
+
+        {/* Editar — disponible para quien gestiona tareas */}
+        {canManage && !completing && onEdit && (
+          <button
+            onClick={onEdit}
+            disabled={isPending}
+            className="mt-2 w-full h-8 rounded-lg text-xs font-medium text-[#64748b]
+                       border border-[#e2e8f0] active:opacity-70 disabled:opacity-50"
+          >
+            ✏️ Editar
+          </button>
         )}
 
         {error && (
