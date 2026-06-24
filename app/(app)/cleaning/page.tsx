@@ -20,7 +20,7 @@ export default async function CleaningPage() {
 
   const [tasks, staff, weekTasks, currentMember] = await Promise.all([
     getCleaningTasks(),
-    getTeamMembers('cleaning'),
+    getTeamMembers(),   // all roles — anyone can be assigned a cleaning
     getWeekCleaningSchedule(weekStart),
     getCurrentMember(),
   ])
