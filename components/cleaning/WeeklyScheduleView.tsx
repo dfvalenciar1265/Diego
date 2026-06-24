@@ -56,7 +56,8 @@ export function WeeklyScheduleView({ initialTasks, initialWeekStart, staff, toda
       lines.push(`*${d.label} ${dayNum(d.iso)}*`)
       for (const t of d.tasks) {
         const who = t.assignee_name && !cleaner ? ` — ${t.assignee_name}` : ''
-        lines.push(`• ${t.property_name} · ${t.checkout_time}${who}`)
+        const pax = t.guests != null ? ` · 👥 ${t.guests}` : ''
+        lines.push(`• ${t.property_name} · ${t.checkout_time}${pax}${who}`)
       }
     }
     if (total === 0) lines.push('Sin limpiezas esta semana.')
@@ -143,6 +144,9 @@ export function WeeklyScheduleView({ initialTasks, initialWeekStart, staff, toda
                           <p className="text-[11px] text-[#94a3b8] truncate">{t.assignee_name}</p>
                         )}
                       </div>
+                      {t.guests != null && (
+                        <span className="text-[11px] text-[#94a3b8] flex-shrink-0">👥 {t.guests}</span>
+                      )}
                       <span className="text-xs font-semibold text-[#6366f1] flex-shrink-0">{t.checkout_time}</span>
                       {t.status === 'done' && <span className="text-xs flex-shrink-0">✅</span>}
                     </div>

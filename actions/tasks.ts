@@ -51,6 +51,7 @@ export interface WeekCleaningTask {
   status:        TaskStatus
   checkout_time: string          // display string, e.g. "12pm"
   guest_name:    string | null
+  guests:        number | null
 }
 
 /** Converts "HH:MM" or "12:00 p.m." / "12pm" to a compact "12pm" / "3:30pm". */
@@ -86,7 +87,7 @@ export async function getWeekCleaningSchedule(weekStart: string): Promise<WeekCl
 
   const { data } = await supabase
     .from('tasks')
-    .select('id, scheduled_for, status, notes, property:properties(name), assignee:team_members(name), reservation:reservations(notes, guest_name)')
+    .select('id, scheduled_for, status, notes, property:properties(name), assignee:team_members(name), reservation:reservations(notes, guest_name, guests)')
     .eq('type', 'cleaning')
     .gte('scheduled_for', weekStart)
     .lte('scheduled_for', weekEnd)
@@ -109,6 +110,7 @@ export async function getWeekCleaningSchedule(weekStart: string): Promise<WeekCl
       status:        t.status as TaskStatus,
       checkout_time: displayTime(taskTime ?? resTime),
       guest_name:    res?.guest_name ?? null,
+      guests:        (res as { guests?: number | null } | null)?.guests ?? null,
     }
   })
 }
