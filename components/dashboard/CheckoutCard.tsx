@@ -37,12 +37,7 @@ export function CheckoutCard({ co }: { co: TodayCheckOut }) {
     <div className="flex items-center justify-between gap-3">
       <div className="min-w-0">
         <p className="text-sm font-medium text-[#0f172a] truncate">{co.property_name}</p>
-        <p className="text-xs text-[#94a3b8] truncate">
-          {co.guest_name}
-          {co.guests != null && (
-            <span className="ml-1.5">· 👥 {co.guests} huésped{co.guests !== 1 ? 'es' : ''}</span>
-          )}
-        </p>
+        <p className="text-xs text-[#94a3b8] truncate">{co.guest_name}</p>
         {error && <p className="text-[11px] text-[#ef4444] mt-0.5">⚠️ No se guardó, reintenta</p>}
       </div>
 

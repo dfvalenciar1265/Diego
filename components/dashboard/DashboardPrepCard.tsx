@@ -85,6 +85,7 @@ export function DashboardPrepCard({ task }: { task: PrepTask }) {
   const guestName = res?.guest_name ?? '—'
   const propName  = task.property?.name ?? '—'
   const checkIn   = res?.check_in ? shortDate(res.check_in) : null
+  const guests    = res?.guests ?? null
 
   const isDone = task.status === 'done'
 
@@ -100,6 +101,9 @@ export function DashboardPrepCard({ task }: { task: PrepTask }) {
           <p className="text-sm font-semibold text-[#0f172a] leading-tight truncate">{propName}</p>
           <p className="text-xs text-[#94a3b8] truncate">
             {guestName}
+            {guests != null && (
+              <span className="ml-1.5">· 👥 {guests}</span>
+            )}
             {checkIn && (
               <span className="ml-1.5 text-[#ff385c] font-medium">· check-in {checkIn}</span>
             )}
