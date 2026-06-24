@@ -6,8 +6,11 @@ import { getOccupiedDaysInWeek } from '@/lib/utils'
 export interface TodayCheckOut {
   id: string
   guest_name: string
-  check_out_time: string   // extracted from notes, e.g. "12:00 p.m."
+  check_out_time: string      // display, e.g. "12pm"
+  check_out_time_24: string   // "HH:MM" for the time input
   property_name: string
+  guests: number | null
+  cleaning_task_id: string | null  // where the editable check-out time is stored
 }
 
 /**
@@ -15,19 +18,11 @@ export interface TodayCheckOut {
  * check-out time extracted from the reservation notes field.
  * Notes format: "... | Check-out: 12:00 p.m."
  */
-/** Normalizes any time string to "7am", "12pm", "3:30pm" etc. */
-function normalizeTime(raw: string | null | undefined): string {
-  if (!raw) return '12pm'
-  // Already HH:MM (from task notes)
+/** Parses any time string ("07:00", "12pm", "12:00 p.m.") to 24h parts, or null. */
+function parseTimeParts(raw: string | null | undefined): { h: number; m: number } | null {
+  if (!raw) return null
   const h24 = raw.match(/^(\d{1,2}):(\d{2})$/)
-  if (h24) {
-    const h = parseInt(h24[1])
-    const m = parseInt(h24[2])
-    const suffix = h >= 12 ? 'pm' : 'am'
-    const h12 = h % 12 || 12
-    return m === 0 ? `${h12}${suffix}` : `${h12}:${String(m).padStart(2,'0')}${suffix}`
-  }
-  // "12:00 p.m." / "3:00 p.m." / "12:00 a.m."
+  if (h24) return { h: parseInt(h24[1]), m: parseInt(h24[2]) }
   const dotted = raw.match(/(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m?\.?/i)
   if (dotted) {
     let h = parseInt(dotted[1])
@@ -35,11 +30,23 @@ function normalizeTime(raw: string | null | undefined): string {
     const period = dotted[3].toLowerCase()
     if (period === 'p' && h !== 12) h += 12
     if (period === 'a' && h === 12) h = 0
-    const suffix = h >= 12 ? 'pm' : 'am'
-    const h12 = h % 12 || 12
-    return m === 0 ? `${h12}${suffix}` : `${h12}:${String(m).padStart(2,'0')}${suffix}`
+    return { h, m }
   }
-  return raw.trim()
+  return null
+}
+
+/** "7am", "12pm", "3:30pm" */
+function toDisplayTime(parts: { h: number; m: number } | null): string {
+  if (!parts) return '12pm'
+  const suffix = parts.h >= 12 ? 'pm' : 'am'
+  const h12 = parts.h % 12 || 12
+  return parts.m === 0 ? `${h12}${suffix}` : `${h12}:${String(parts.m).padStart(2, '0')}${suffix}`
+}
+
+/** "HH:MM" for an <input type="time"> */
+function to24hInput(parts: { h: number; m: number } | null): string {
+  if (!parts) return '12:00'
+  return `${String(parts.h).padStart(2, '0')}:${String(parts.m).padStart(2, '0')}`
 }
 
 export async function getTodayCheckOuts(): Promise<TodayCheckOut[]> {
@@ -48,23 +55,24 @@ export async function getTodayCheckOuts(): Promise<TodayCheckOut[]> {
 
   const { data } = await supabase
     .from('reservations')
-    .select(`id, guest_name, notes, property:properties(name), tasks(notes, type, scheduled_for)`)
+    .select(`id, guest_name, notes, guests, property:properties(name), tasks(id, notes, type, scheduled_for)`)
     .eq('check_out', today)
     .eq('status', 'confirmed')
     .order('guest_name')
   if (!data) return []
 
-  type CheckoutTaskRow = { type: string; scheduled_for: string; notes: string | null }
+  type CheckoutTaskRow = { id: string; type: string; scheduled_for: string; notes: string | null }
   type CheckoutRow = {
     id: string
     guest_name: string | null
     notes: string | null
+    guests: number | null
     property: { name: string } | { name: string }[] | null
     tasks: CheckoutTaskRow[] | null
   }
 
   return (data as CheckoutRow[]).map(r => {
-    // 1. Prefer time saved on cleaning task ("HH:MM|..." format)
+    // The editable check-out time lives on today's cleaning task ("HH:MM|...").
     const cleaningTask = r.tasks?.find(
       t => t.type === 'cleaning' && t.scheduled_for === today
     )
@@ -73,12 +81,16 @@ export async function getTodayCheckOuts(): Promise<TodayCheckOut[]> {
       ? taskTimeMatch[1]                                          // "07:00" from task
       : r.notes?.match(/Check-out:\s*([^|]+)/i)?.[1] ?? null    // from reservation notes
 
+    const parts = parseTimeParts(rawTime)
     const prop = Array.isArray(r.property) ? r.property[0] : r.property
     return {
       id: r.id,
       guest_name: r.guest_name ?? '—',
-      check_out_time: normalizeTime(rawTime),  // always same format: "7am", "12pm"
+      check_out_time: toDisplayTime(parts),
+      check_out_time_24: to24hInput(parts),
       property_name: prop?.name ?? '—',
+      guests: r.guests ?? null,
+      cleaning_task_id: cleaningTask?.id ?? null,
     }
   })
 }

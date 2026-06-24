@@ -8,6 +8,7 @@ import { getPurchaseRequests } from '@/actions/purchases'
 import { KPICard } from '@/components/dashboard/KPICard'
 import { StockAlert } from '@/components/dashboard/StockAlert'
 import { TaskCard } from '@/components/tasks/TaskCard'
+import { CheckoutCard } from '@/components/dashboard/CheckoutCard'
 import { DashboardPrepCard, type PrepTask } from '@/components/dashboard/DashboardPrepCard'
 import { RefreshButton } from '@/components/dashboard/RefreshButton'
 import { ResolvePurchaseButton } from '@/components/dashboard/ResolvePurchaseButton'
@@ -96,17 +97,9 @@ export default async function DashboardPage() {
             <p className="text-xs font-semibold text-[#94a3b8] uppercase tracking-wide mb-3">
               🚪 Check-outs de hoy — horarios
             </p>
-            <div className="space-y-2">
+            <div className="space-y-2.5">
               {checkOuts.map(co => (
-                <div key={co.id} className="flex items-center justify-between">
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-[#0f172a] truncate">{co.property_name}</p>
-                    <p className="text-xs text-[#94a3b8] truncate">{co.guest_name}</p>
-                  </div>
-                  <span className="text-sm font-semibold text-[#22c55e] flex-shrink-0 ml-3">
-                    {co.check_out_time}
-                  </span>
-                </div>
+                <CheckoutCard key={co.id} co={co} />
               ))}
             </div>
           </section>
