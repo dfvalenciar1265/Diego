@@ -99,15 +99,14 @@ export function DashboardPrepCard({ task }: { task: PrepTask }) {
 
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-[#0f172a] leading-tight truncate">{propName}</p>
-          <p className="text-xs text-[#94a3b8] truncate">
-            {guestName}
-            {guests != null && (
-              <span className="ml-1.5">· 👥 {guests}</span>
-            )}
-            {checkIn && (
-              <span className="ml-1.5 text-[#ff385c] font-medium">· check-in {checkIn}</span>
-            )}
-          </p>
+          <p className="text-xs text-[#94a3b8] truncate">{guestName}</p>
+          {(guests != null || checkIn) && (
+            <p className="text-[11px] text-[#94a3b8] leading-tight mt-0.5">
+              {guests != null && <span>👥 {guests}</span>}
+              {guests != null && checkIn && <span> · </span>}
+              {checkIn && <span className="text-[#ff385c] font-medium">check-in {checkIn}</span>}
+            </p>
+          )}
         </div>
 
         {/* Editable check-in time */}
