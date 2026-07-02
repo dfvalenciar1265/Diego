@@ -138,10 +138,13 @@ export function ReservationForm({
               <Label>Código Airbnb</Label>
               <Input
                 name="airbnb_code"
-                defaultValue={reservation?.notes?.match(/Código:\s*(\S+)/)?.[1]}
+                defaultValue={reservation?.airbnb_code ?? undefined}
                 placeholder="HM12345678"
                 className="mt-1"
               />
+              <p className="text-[11px] text-[#94a3b8] mt-1">
+                Ponlo para que la reserva se cancele sola si cancelan en Airbnb.
+              </p>
             </div>
           )}
 

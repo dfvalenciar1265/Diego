@@ -35,6 +35,7 @@ export interface Reservation {
   guests: number | null
   notes: string
   status: ReservationStatus
+  airbnb_code: string | null
   created_at: string
 }
 

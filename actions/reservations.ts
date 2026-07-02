@@ -4,6 +4,13 @@ import { createClient } from '@/lib/supabase/server'
 import { canDo } from '@/lib/permissions'
 import type { Reservation, UserRole } from '@/lib/types'
 
+/** Day before a date (YYYY-MM-DD). */
+function dayBefore(date: string): string {
+  const d = new Date(date + 'T12:00:00')
+  d.setDate(d.getDate() - 1)
+  return d.toISOString().slice(0, 10)
+}
+
 async function getCallerRole(): Promise<UserRole | null> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -50,20 +57,55 @@ export async function createReservation(
   }
   const supabase = await createClient()
   const guestsRaw = formData.get('guests') as string
-  const { error } = await supabase.from('reservations').insert({
-    property_id: formData.get('property_id') as string,
+  const propertyId = formData.get('property_id') as string
+  const guestName  = formData.get('guest_name') as string
+  const checkIn    = formData.get('check_in') as string
+  const checkOut   = formData.get('check_out') as string
+  const status     = (formData.get('status') as string) || 'confirmed'
+  // Airbnb confirmation code — lets cancellation emails match this reservation later
+  const airbnbCode = ((formData.get('airbnb_code') as string) || '').trim().toUpperCase() || null
+
+  const { data: inserted, error } = await supabase.from('reservations').insert({
+    property_id: propertyId,
     source: formData.get('source') as string,
-    guest_name: formData.get('guest_name') as string,
-    check_in: formData.get('check_in') as string,
-    check_out: formData.get('check_out') as string,
+    guest_name: guestName,
+    check_in: checkIn,
+    check_out: checkOut,
     amount: Number(formData.get('amount')) || 0,
     guests: guestsRaw ? Math.max(1, parseInt(guestsRaw, 10)) : null,
     notes: formData.get('notes') as string,
-    status: 'confirmed',
-  })
-  if (error) return { success: false, error: error.message }
+    airbnb_code: airbnbCode,
+    status,
+  }).select('id').single()
+  if (error || !inserted) return { success: false, error: error?.message ?? 'Error al crear' }
+
+  // Auto-create cleaning + preparation tasks (same as the Gmail sync does),
+  // so manually-added reservations show up in Limpieza and Preparación.
+  if (status === 'confirmed' && checkIn && checkOut) {
+    const prepDate = dayBefore(checkIn) >= checkOut ? checkIn : dayBefore(checkIn)
+    await supabase.from('tasks').insert([
+      {
+        property_id: propertyId,
+        reservation_id: inserted.id,
+        type: 'cleaning',
+        scheduled_for: checkOut,
+        status: 'pending',
+        notes: `Limpieza post-estadía — ${guestName}`,
+      },
+      {
+        property_id: propertyId,
+        reservation_id: inserted.id,
+        type: 'preparation',
+        scheduled_for: prepDate,
+        status: 'pending',
+        notes: `Preparación para ${guestName} (check-in ${checkIn})`,
+      },
+    ])
+  }
+
   revalidatePath('/calendar')
   revalidatePath('/')
+  revalidatePath('/cleaning')
   return { success: true }
 }
 
@@ -76,6 +118,7 @@ export async function updateReservation(
   }
   const supabase = await createClient()
   const guestsRaw = formData.get('guests') as string
+  const airbnbCode = ((formData.get('airbnb_code') as string) || '').trim().toUpperCase() || null
   const { error } = await supabase.from('reservations').update({
     guest_name: formData.get('guest_name') as string,
     check_in: formData.get('check_in') as string,
@@ -84,6 +127,7 @@ export async function updateReservation(
     guests: guestsRaw ? Math.max(1, parseInt(guestsRaw, 10)) : null,
     notes: formData.get('notes') as string,
     source: formData.get('source') as string,
+    airbnb_code: airbnbCode,
   }).eq('id', id)
   if (error) return { success: false, error: error.message }
   revalidatePath('/calendar')
