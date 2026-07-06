@@ -219,7 +219,7 @@ export function CleaningView({ tasks, staff, weekTasks, weekStart, todayISO, cur
               )}
               {tomorrowTasks.length > 0 && (
                 <Section label="Limpieza mañana" emoji="📅" count={tomorrowTasks.length} accent="#94a3b8" line="#e2e8f0">
-                  {pagedTomorrow.map(t => <CleaningTaskCard key={t.id} task={t} staff={staff} currentMember={currentMember} />)}
+                  {pagedTomorrow.map(t => <CleaningTaskCard key={t.id} task={t} staff={staff} currentMember={currentMember} locked />)}
                   <Pagination
                     page={tomorrowPage}
                     total={pageCount(tomorrowTasks.length, PAGE_SIZE)}
@@ -229,7 +229,7 @@ export function CleaningView({ tasks, staff, weekTasks, weekStart, todayISO, cur
               )}
               {laterTasks.length > 0 && (
                 <Section label="Próximas" emoji="📆" count={laterTasks.length} accent="#94a3b8" line="#e2e8f0">
-                  {pagedLater.map(t => <CleaningTaskCard key={t.id} task={t} staff={staff} currentMember={currentMember} />)}
+                  {pagedLater.map(t => <CleaningTaskCard key={t.id} task={t} staff={staff} currentMember={currentMember} locked />)}
                   <Pagination
                     page={laterPage}
                     total={pageCount(laterTasks.length, PAGE_SIZE)}
@@ -320,10 +320,12 @@ function CleaningTaskCard({
   task,
   staff,
   currentMember,
+  locked = false,
 }: {
   task: CleaningTask
   staff: TeamMember[]
   currentMember: TeamMember | null
+  locked?: boolean   // future cleanings: read-only preview, can't start/finish early
 }) {
   const res      = task.reservation
   const resNotes = res?.notes ?? null
@@ -490,8 +492,15 @@ function CleaningTaskCard({
         )}
       </div>
 
+      {/* Future cleaning: read-only preview (can't start/finish before check-out day) */}
+      {locked && (
+        <p className="mt-1 text-[11px] text-[#94a3b8] text-center bg-[#f8fafc] rounded-lg py-1.5">
+          📅 Programada — disponible el día del check-out
+        </p>
+      )}
+
       {/* Iniciar — non-admin self-assigns; admin picks who cleans */}
-      {task.status === 'pending' && !pickingPerson && (
+      {!locked && task.status === 'pending' && !pickingPerson && (
         <button
           onClick={() => isAdmin ? setPicking(true) : startSelf()}
           disabled={isPending}
@@ -503,7 +512,7 @@ function CleaningTaskCard({
         </button>
       )}
 
-      {task.status === 'pending' && pickingPerson && (
+      {!locked && task.status === 'pending' && pickingPerson && (
         <div className="mt-1 space-y-1.5">
           <p className="text-xs font-semibold text-[#64748b] mb-1.5">
             👤 ¿Quién va a limpiar?
@@ -538,7 +547,7 @@ function CleaningTaskCard({
       )}
 
       {/* Terminar (en curso) — con foto de evidencia opcional si está habilitada */}
-      {task.status === 'in_progress' && (
+      {!locked && task.status === 'in_progress' && (
         PHOTO_PROOF_ENABLED ? (
           <div className="mt-1 space-y-2">
             {/* Hidden camera/file input */}

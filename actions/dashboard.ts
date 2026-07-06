@@ -108,9 +108,10 @@ export async function getDashboardKPIs(): Promise<DashboardKPIs> {
     // Check-outs hoy
     supabase.from('reservations').select('id', { count: 'exact', head: true })
       .eq('check_out', today).eq('status', 'confirmed'),
-    // Tareas pendientes hoy
+    // Tareas pendientes hoy — solo 'other' (lo que muestra la pantalla Tareas)
     supabase.from('tasks').select('id', { count: 'exact', head: true })
       .in('status', ['pending', 'in_progress'])
+      .eq('type', 'other')
       .eq('scheduled_for', today),
     supabase.from('reservations').select('amount')
       .gte('check_in', monthStart).lte('check_in', monthEnd)
