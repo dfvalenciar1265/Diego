@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getCurrentMember } from '@/lib/auth'
 import { getProperties } from '@/actions/properties'
 import { getTeamMembers } from '@/actions/team'
-import { getIncomeReport, getCleaningCostReport, getProfitabilityReport } from '@/actions/reports'
+import { getIncomeReport, getCleaningCostReport, getProfitabilityReport, getCleaningByEmployee } from '@/actions/reports'
 import { getExpenses } from '@/actions/expenses'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { ReportsView } from '@/components/reports/ReportsView'
@@ -30,6 +30,7 @@ export default async function ReportsPage() {
     incomeRows,
     cleaningCostRows,
     profitabilityRows,
+    employeeCleaningRows,
     expenses,
   ] = await Promise.all([
     supabase
@@ -45,6 +46,7 @@ export default async function ReportsPage() {
     getIncomeReport(currentYear, currentMonth),
     getCleaningCostReport(currentYear, currentMonth),
     getProfitabilityReport(currentYear, currentMonth),
+    getCleaningByEmployee(currentYear, currentMonth),
     getExpenses({ year: currentYear, month: currentMonth }),
   ])
 
@@ -58,6 +60,7 @@ export default async function ReportsPage() {
         incomeRows={incomeRows}
         cleaningCostRows={cleaningCostRows}
         profitabilityRows={profitabilityRows}
+        employeeCleaningRows={employeeCleaningRows}
         currentYear={currentYear}
         currentMonth={currentMonth}
         expenses={expenses}

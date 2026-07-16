@@ -3,10 +3,11 @@ import { useState } from 'react'
 import { Pagination, paginate, pageCount } from '@/components/ui/Pagination'
 import { IncomeReport } from './IncomeReport'
 import { CleaningCostReport } from './CleaningCostReport'
+import { EmployeeCleaningReport } from './EmployeeCleaningReport'
 import { ExpensesView } from './ExpensesView'
 import { ProfitabilityReport } from './ProfitabilityReport'
 import type { Task, Property, TeamMember, Expense } from '@/lib/types'
-import type { IncomeRow, CleaningCostRow, ProfitabilityRow } from '@/actions/reports'
+import type { IncomeRow, CleaningCostRow, ProfitabilityRow, EmployeeCleaningRow } from '@/actions/reports'
 
 type CleaningRow = Task & { property?: { name: string }; assignee?: { name: string } }
 
@@ -14,15 +15,16 @@ interface Props {
   cleaningTasks:      CleaningRow[]
   properties:         Property[]
   teamMembers:        TeamMember[]
-  incomeRows:         IncomeRow[]
-  cleaningCostRows:   CleaningCostRow[]
-  profitabilityRows:  ProfitabilityRow[]
-  currentYear:        number
-  currentMonth:       number
-  expenses:           Expense[]
+  incomeRows:            IncomeRow[]
+  cleaningCostRows:      CleaningCostRow[]
+  profitabilityRows:     ProfitabilityRow[]
+  employeeCleaningRows:  EmployeeCleaningRow[]
+  currentYear:           number
+  currentMonth:          number
+  expenses:              Expense[]
 }
 
-type Tab = 'profitability' | 'cleaning' | 'expenses' | 'income' | 'cleaning_costs'
+type Tab = 'profitability' | 'cleaning' | 'expenses' | 'income' | 'cleaning_costs' | 'employee'
 
 function fmtDate(iso: string | null | undefined): string {
   if (!iso) return '—'
@@ -43,6 +45,7 @@ export function ReportsView({
   incomeRows,
   cleaningCostRows,
   profitabilityRows,
+  employeeCleaningRows,
   currentYear,
   currentMonth,
   expenses,
@@ -75,6 +78,7 @@ export function ReportsView({
     { key: 'income',         label: '💵 Ingresos'  },
     { key: 'cleaning_costs', label: '🧹 Costos'    },
     { key: 'cleaning',       label: '📋 Limpiezas' },
+    { key: 'employee',       label: '👤 Empleada'  },
     { key: 'expenses',       label: '💰 Gastos'    },
   ]
 
@@ -82,7 +86,7 @@ export function ReportsView({
     <div className="p-4 space-y-4">
 
       {/* ── Tabs ──────────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-5 rounded-xl overflow-hidden border border-[#e2e8f0]">
+      <div className="grid grid-cols-3 rounded-xl overflow-hidden border border-[#e2e8f0]">
         {tabs.map(t => (
           <button
             key={t.key}
@@ -120,6 +124,15 @@ export function ReportsView({
       {tab === 'cleaning_costs' && (
         <CleaningCostReport
           initialRows={cleaningCostRows}
+          initialYear={currentYear}
+          initialMonth={currentMonth}
+        />
+      )}
+
+      {/* ── Cleaning by employee (payroll per fortnight) ──────────────────── */}
+      {tab === 'employee' && (
+        <EmployeeCleaningReport
+          initialRows={employeeCleaningRows}
           initialYear={currentYear}
           initialMonth={currentMonth}
         />

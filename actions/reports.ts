@@ -152,6 +152,60 @@ export async function getCleaningCostReport(year: number, month: number): Promis
   })
 }
 
+// ── Cleaning by employee (payroll per fortnight) ──────────────────────────────
+
+export interface EmployeeCleaningRow {
+  id:            string
+  employee_id:   string | null
+  employee_name: string        // 'Sin asignar' if the task had no assignee
+  property_name: string
+  completed_at:  string
+  day:           number        // day-of-month of completed_at (for distinct-days)
+  period:        1 | 2         // quincena: 1 = days 1–15, 2 = days 16–end
+  value:         number        // task.cost override, else the property's fixed price
+}
+
+/**
+ * All done cleaning tasks in the month, one row per task, with the employee who
+ * did it and the value paid. Same period (completed_at) and value (cost ?? fixed)
+ * logic as getCleaningCostReport, so the two reports always agree. Aggregation
+ * per employee/quincena happens in the component.
+ */
+export async function getCleaningByEmployee(year: number, month: number): Promise<EmployeeCleaningRow[]> {
+  const supabase = await createClient()
+
+  const firstDay = `${year}-${pad(month)}-01`
+  const lastDay  = `${year}-${pad(month)}-${pad(lastDayOfMonth(year, month))}`
+
+  const { data } = await supabase
+    .from('tasks')
+    .select('*, property:properties(name), assignee:team_members(name)')
+    .eq('type', 'cleaning')
+    .eq('status', 'done')
+    .gte('completed_at', `${firstDay}T00:00:00`)
+    .lte('completed_at', `${lastDay}T23:59:59`)
+    .order('completed_at')
+
+  if (!data) return []
+
+  return data.map(t => {
+    const day      = new Date(t.completed_at).getDate()
+    const propName = t.property?.name ?? ''
+    const fixed    = CLEANING_PRICES[propName] ?? 0
+
+    return {
+      id:            t.id,
+      employee_id:   t.assigned_to ?? null,
+      employee_name: t.assignee?.name ?? 'Sin asignar',
+      property_name: propName,
+      completed_at:  t.completed_at,
+      day,
+      period:        (day <= 15 ? 1 : 2) as 1 | 2,
+      value:         t.cost ?? fixed,
+    }
+  })
+}
+
 // ── Profitability (P&L per property) ──────────────────────────────────────────
 
 /**
