@@ -41,10 +41,11 @@ export function ProfitabilityReport({ initialRows, initialYear, initialMonth }: 
   const now = new Date()
   const isCurrent = year === now.getFullYear() && month === now.getMonth() + 1
 
-  const totalNet      = rows.reduce((s, r) => s + r.net, 0)
-  const totalIncome   = rows.reduce((s, r) => s + r.income, 0)
-  const totalCleaning = rows.reduce((s, r) => s + r.cleaning_cost, 0)
-  const totalExpenses = rows.reduce((s, r) => s + r.expenses, 0)
+  const totalNet         = rows.reduce((s, r) => s + r.net, 0)
+  const totalIncome      = rows.reduce((s, r) => s + r.income, 0)
+  const totalCleaning    = rows.reduce((s, r) => s + r.cleaning_cost, 0)
+  const totalExpenses    = rows.reduce((s, r) => s + r.expenses, 0)
+  const totalMaintenance = rows.reduce((s, r) => s + r.maintenance_cost, 0)
 
   return (
     <div className="space-y-4">
@@ -88,9 +89,10 @@ export function ProfitabilityReport({ initialRows, initialYear, initialMonth }: 
                style={{ color: totalNet >= 0 ? '#16a34a' : '#ef4444' }}>
               {fmtCOP(totalNet)}
             </p>
-            <div className="flex justify-center gap-4 mt-2 text-[11px] text-[#64748b]">
+            <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 mt-2 text-[11px] text-[#64748b]">
               <span>Ingresos {fmtCOP(totalIncome)}</span>
               <span>Limpieza {fmtCOP(-totalCleaning)}</span>
+              {totalMaintenance > 0 && <span>Mant. {fmtCOP(-totalMaintenance)}</span>}
               <span>Gastos {fmtCOP(-totalExpenses)}</span>
             </div>
           </div>
@@ -119,9 +121,10 @@ export function ProfitabilityReport({ initialRows, initialYear, initialMonth }: 
                   </div>
                   {/* Breakdown */}
                   <div className="px-4 py-2.5 space-y-1">
-                    <Line label="Ingresos"  value={r.income}         positive />
-                    <Line label="Limpieza"  value={-r.cleaning_cost} />
-                    <Line label="Gastos"    value={-r.expenses} />
+                    <Line label="Ingresos"      value={r.income}            positive />
+                    <Line label="Limpieza"      value={-r.cleaning_cost} />
+                    <Line label="Mantenimiento" value={-r.maintenance_cost} />
+                    <Line label="Gastos"        value={-r.expenses} />
                   </div>
                 </div>
               )

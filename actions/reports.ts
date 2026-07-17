@@ -31,13 +31,14 @@ export interface CleaningCostRow {
 }
 
 export interface ProfitabilityRow {
-  property_id:   string
-  property_name: string
-  income:        number   // proportional income earned this month
-  cleaning_cost: number   // cleaning labour cost this month
-  expenses:      number   // other expenses logged this month
-  net:           number   // income − cleaning − expenses
-  reservations:  number   // # of reservations contributing income
+  property_id:      string
+  property_name:    string
+  income:           number   // proportional income earned this month
+  cleaning_cost:    number   // cleaning labour cost this month
+  expenses:         number   // other expenses logged this month
+  maintenance_cost: number   // maintenance resolved this month (by resolved_at)
+  net:              number   // income − cleaning − expenses − maintenance
+  reservations:     number   // # of reservations contributing income
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -223,17 +224,31 @@ export async function getProfitabilityReport(
   year: number,
   month: number
 ): Promise<ProfitabilityRow[]> {
-  const [income, cleaning, expenses] = await Promise.all([
+  const firstDay = `${year}-${pad(month)}-01`
+  const lastDay  = `${year}-${pad(month)}-${pad(lastDayOfMonth(year, month))}`
+
+  const [income, cleaning, expenses, maintenance] = await Promise.all([
     getIncomeReport(year, month),
     getCleaningCostReport(year, month),
     getExpenses({ year, month }),
+    // Maintenance cost = issues resolved this month (attributed by resolved_at)
+    (async () => {
+      const supabase = await createClient()
+      const { data } = await supabase
+        .from('maintenance')
+        .select('property_id, cost, property:properties(name)')
+        .eq('status', 'resolved')
+        .gte('resolved_at', `${firstDay}T00:00:00`)
+        .lte('resolved_at', `${lastDay}T23:59:59`)
+      return data ?? []
+    })(),
   ])
 
   const map = new Map<string, ProfitabilityRow>()
   const row = (id: string, name: string): ProfitabilityRow => {
     let r = map.get(id)
     if (!r) {
-      r = { property_id: id, property_name: name, income: 0, cleaning_cost: 0, expenses: 0, net: 0, reservations: 0 }
+      r = { property_id: id, property_name: name, income: 0, cleaning_cost: 0, expenses: 0, maintenance_cost: 0, net: 0, reservations: 0 }
       map.set(id, r)
     }
     return r
@@ -259,8 +274,15 @@ export async function getProfitabilityReport(
     r.expenses += e.amount
   }
 
+  // Maintenance resolved this month (PostgREST may return the join as object or array)
+  for (const m of maintenance) {
+    const prop = Array.isArray(m.property) ? m.property[0] : m.property
+    const r = row(m.property_id, prop?.name ?? '—')
+    r.maintenance_cost += m.cost ?? 0
+  }
+
   for (const r of map.values()) {
-    r.net = r.income - r.cleaning_cost - r.expenses
+    r.net = r.income - r.cleaning_cost - r.expenses - r.maintenance_cost
   }
 
   return [...map.values()].sort((a, b) => b.net - a.net)

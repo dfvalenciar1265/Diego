@@ -3,8 +3,10 @@ import { createClient } from '@/lib/supabase/server'
 import { getCurrentMember } from '@/lib/auth'
 import { getDashboardKPIs, getTodayCheckOuts } from '@/actions/dashboard'
 import { getTasks } from '@/actions/tasks'
+import { getMaintenance } from '@/actions/maintenance'
 import { getLowStockAlerts } from '@/actions/supplies'
 import { getPurchaseRequests } from '@/actions/purchases'
+import Link from 'next/link'
 import { KPICard } from '@/components/dashboard/KPICard'
 import { StockAlert } from '@/components/dashboard/StockAlert'
 import { TaskCard } from '@/components/tasks/TaskCard'
@@ -15,7 +17,9 @@ import { ResolvePurchaseButton } from '@/components/dashboard/ResolvePurchaseBut
 import { canDo } from '@/lib/permissions'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
-import type { PurchaseRequest, Task } from '@/lib/types'
+import type { PurchaseRequest, Task, MaintenanceIssue } from '@/lib/types'
+
+type OpenMaintenance = MaintenanceIssue & { property?: { name: string } | null }
 
 export default async function DashboardPage() {
   // Cached per request — no duplicate auth round-trip with the layout
@@ -35,7 +39,7 @@ export default async function DashboardPage() {
 
   // All dashboard data fetched concurrently (no waterfall)
   const supabase = await createClient()
-  const [prepTasksRaw, kpis, todayTasks, stockAlerts, pendingPurchases, checkOuts] = await Promise.all([
+  const [prepTasksRaw, kpis, todayTasks, stockAlerts, pendingPurchases, checkOuts, maintenanceAll] = await Promise.all([
     // Prep tasks for today's check-ins — ALL statuses (done tasks show with ✓)
     supabase
       .from('tasks')
@@ -49,7 +53,16 @@ export default async function DashboardPage() {
     getLowStockAlerts(),
     getPurchaseRequests('pending'),
     getTodayCheckOuts(),
+    getMaintenance(),
   ])
+
+  // Unresolved REPORTED incidences surfaced on the home so an urgent report isn't
+  // siloed in the Mantenimiento tab. Excludes 'scheduled' (preventive/recurring —
+  // that's a planning list, not an alert, and lives in its own section). Urgent first.
+  const priorityRank: Record<string, number> = { urgent: 0, normal: 1 }
+  const openMaintenance = (maintenanceAll as OpenMaintenance[])
+    .filter(m => m.status !== 'resolved' && m.priority !== 'scheduled')
+    .sort((a, b) => (priorityRank[a.priority] ?? 9) - (priorityRank[b.priority] ?? 9))
 
   // PostgREST returns rows with null reservation for non-matching joins — keep only today's
   const prepTasks = prepTasksRaw.filter(t => t.reservation?.check_in === todayISO)
@@ -102,6 +115,27 @@ export default async function DashboardPage() {
                 <CheckoutCard key={co.id} co={co} />
               ))}
             </div>
+          </section>
+        )}
+
+        {/* Mantenimiento pendiente — urgentes arriba, con enlace a la pantalla completa */}
+        {openMaintenance.length > 0 && (
+          <section className="bg-white border border-[#e2e8f0] rounded-xl p-4
+                              shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs font-semibold text-[#94a3b8] uppercase tracking-wide">
+                🔧 Mantenimiento pendiente ({openMaintenance.length})
+              </p>
+              <Link href="/maintenance" className="text-[11px] font-semibold text-[#6366f1] shrink-0">
+                Ver todo →
+              </Link>
+            </div>
+            <div className="space-y-1.5">
+              {openMaintenance.slice(0, 5).map(m => <MaintenanceAlertItem key={m.id} issue={m} />)}
+            </div>
+            {openMaintenance.length > 5 && (
+              <p className="text-[11px] text-[#94a3b8] mt-2">+{openMaintenance.length - 5} más</p>
+            )}
           </section>
         )}
 
@@ -175,6 +209,22 @@ export default async function DashboardPage() {
         </section>
         )}
 
+      </div>
+    </div>
+  )
+}
+
+function MaintenanceAlertItem({ issue }: { issue: OpenMaintenance }) {
+  const color = issue.priority === 'urgent' ? '#ef4444' : issue.priority === 'scheduled' ? '#6366f1' : '#f97316'
+  const label = issue.priority === 'urgent' ? 'Urgente' : issue.priority === 'scheduled' ? 'Programado' : 'Normal'
+  return (
+    <div className="flex items-center gap-2.5 py-1">
+      <span className="w-2 h-2 rounded-full shrink-0" style={{ background: color }} />
+      <div className="flex-1 min-w-0">
+        <p className="text-xs font-medium text-[#0f172a] truncate">{issue.title}</p>
+        <p className="text-[11px] text-[#94a3b8] truncate">
+          {issue.property?.name ?? '—'} · {label}{issue.status === 'in_progress' ? ' · en curso' : ''}
+        </p>
       </div>
     </div>
   )
