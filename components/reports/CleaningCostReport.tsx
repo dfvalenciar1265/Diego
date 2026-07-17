@@ -19,6 +19,17 @@ interface Props {
 type PeriodEntry = { count: number; cost: number }
 type PropSummary = { name: string; q1: PeriodEntry; q2: PeriodEntry; fixedPrice: number }
 
+/**
+ * "3 × $45.000" — the calculation behind the period's cost. Falls back to a plain
+ * count when a task carries a manual cost, since then the total is not
+ * count × fixed price and showing the multiplication would be a lie.
+ */
+function calcLabel(e: PeriodEntry, fixedPrice: number): string {
+  return e.cost === e.count * fixedPrice
+    ? `${e.count} × ${fmtCOP(fixedPrice)}`
+    : `${e.count} limpieza${e.count !== 1 ? 's' : ''}`
+}
+
 export function CleaningCostReport({ initialRows, initialYear, initialMonth }: Props) {
   const [year,      setYear]       = useState(initialYear)
   const [month,     setMonth]      = useState(initialMonth)
@@ -142,8 +153,8 @@ export function CleaningCostReport({ initialRows, initialYear, initialMonth }: P
                 <div className="px-3 py-3 text-right">
                   {p.q1.count > 0 ? (
                     <>
+                      <p className="text-[10px] text-[#94a3b8] whitespace-nowrap">{calcLabel(p.q1, p.fixedPrice)}</p>
                       <p className="text-xs font-semibold text-[#ef4444]">{fmtCOP(p.q1.cost)}</p>
-                      <p className="text-[10px] text-[#94a3b8]">{p.q1.count}×</p>
                     </>
                   ) : (
                     <p className="text-xs text-[#cbd5e1]">—</p>
@@ -152,8 +163,8 @@ export function CleaningCostReport({ initialRows, initialYear, initialMonth }: P
                 <div className="px-3 py-3 text-right">
                   {p.q2.count > 0 ? (
                     <>
+                      <p className="text-[10px] text-[#94a3b8] whitespace-nowrap">{calcLabel(p.q2, p.fixedPrice)}</p>
                       <p className="text-xs font-semibold text-[#ef4444]">{fmtCOP(p.q2.cost)}</p>
-                      <p className="text-[10px] text-[#94a3b8]">{p.q2.count}×</p>
                     </>
                   ) : (
                     <p className="text-xs text-[#cbd5e1]">—</p>
