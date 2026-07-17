@@ -9,11 +9,6 @@ function fmtCOP(n: number): string {
   return `$${n.toLocaleString('es-CO')}`
 }
 
-function fmtDate(iso: string): string {
-  const d = new Date(iso + 'T12:00:00')
-  return `${d.getDate()} ${['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][d.getMonth()]}`
-}
-
 interface Props {
   initialRows:  IncomeRow[]
   initialYear:  number
@@ -140,58 +135,6 @@ export function IncomeReport({ initialRows, initialYear, initialMonth }: Props) 
           <div className="bg-[#eff6ff] rounded-xl border border-[#bfdbfe] px-4 py-3 flex justify-between items-center">
             <span className="text-sm font-bold text-[#1d4ed8]">Total del mes</span>
             <span className="text-base font-bold text-[#1d4ed8]">{fmtCOP(grandTotal)}</span>
-          </div>
-
-          {/* ── Reservation detail ──────────────────────────────────────── */}
-          <div>
-            <p className="text-[10px] font-bold text-[#94a3b8] uppercase tracking-wide mb-2 px-1">
-              Detalle de reservas ({rows.length})
-            </p>
-            <div className="bg-white rounded-xl border border-[#e2e8f0] overflow-hidden shadow-sm">
-              <div className="grid grid-cols-[1fr_auto_auto] bg-[#f8fafc] border-b border-[#e2e8f0]">
-                <div className="px-3 py-2 text-[10px] font-bold text-[#94a3b8] uppercase tracking-wide">Huésped / Apto.</div>
-                <div className="px-3 py-2 text-[10px] font-bold text-[#94a3b8] uppercase tracking-wide text-right">Q1</div>
-                <div className="px-3 py-2 text-[10px] font-bold text-[#94a3b8] uppercase tracking-wide text-right">Q2</div>
-              </div>
-
-              {rows.map((r, i) => (
-                <div
-                  key={r.id}
-                  className={`grid grid-cols-[1fr_auto_auto] border-b border-[#f1f5f9] last:border-0
-                              ${i % 2 === 0 ? 'bg-white' : 'bg-[#fafafa]'}`}
-                >
-                  <div className="px-3 py-3">
-                    <p className="text-xs font-semibold text-[#0f172a] truncate">{r.guest_name}</p>
-                    <p className="text-[11px] text-[#64748b] truncate">{r.property_name}</p>
-                    <p className="text-[10px] text-[#94a3b8]">
-                      {fmtDate(r.check_in)} → {fmtDate(r.check_out)}
-                      <span className="ml-1 text-[#cbd5e1]">·</span>
-                      <span className="ml-1">{r.total_nights}n</span>
-                    </p>
-                  </div>
-                  <div className="px-3 py-3 text-right">
-                    {r.p1_nights > 0 ? (
-                      <>
-                        <p className="text-xs font-semibold text-[#0f172a]">{fmtCOP(r.p1_amount)}</p>
-                        <p className="text-[10px] text-[#94a3b8]">{r.p1_nights}n</p>
-                      </>
-                    ) : (
-                      <p className="text-xs text-[#cbd5e1]">—</p>
-                    )}
-                  </div>
-                  <div className="px-3 py-3 text-right">
-                    {r.p2_nights > 0 ? (
-                      <>
-                        <p className="text-xs font-semibold text-[#0f172a]">{fmtCOP(r.p2_amount)}</p>
-                        <p className="text-[10px] text-[#94a3b8]">{r.p2_nights}n</p>
-                      </>
-                    ) : (
-                      <p className="text-xs text-[#cbd5e1]">—</p>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
           </div>
         </>
       )}
