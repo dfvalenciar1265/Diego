@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { IncomeReport } from './IncomeReport'
 import { CleaningCostReport } from './CleaningCostReport'
 import { EmployeeCleaningReport } from './EmployeeCleaningReport'
+import { AdminReport } from './AdminReport'
 import { ExpensesView } from './ExpensesView'
 import { ProfitabilityReport } from './ProfitabilityReport'
 import type { Property, Expense } from '@/lib/types'
@@ -19,7 +20,7 @@ interface Props {
   expenses:              Expense[]
 }
 
-type Tab = 'profitability' | 'expenses' | 'income' | 'cleaning_costs' | 'employee'
+type Tab = 'profitability' | 'expenses' | 'income' | 'cleaning_costs' | 'employee' | 'admin'
 
 export function ReportsView({
   properties,
@@ -39,6 +40,7 @@ export function ReportsView({
     { key: 'income',         label: '💵 Ingresos' },
     { key: 'cleaning_costs', label: '🧹 Costos'   },
     { key: 'employee',       label: '👤 Empleada' },
+    { key: 'admin',          label: '🏢 Admin'    },
     { key: 'expenses',       label: '💰 Gastos'   },
   ]
 
@@ -46,7 +48,7 @@ export function ReportsView({
     <div className="p-4 space-y-4">
 
       {/* ── Tabs ──────────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-5 rounded-xl overflow-hidden border border-[#e2e8f0]">
+      <div className="grid grid-cols-3 rounded-xl overflow-hidden border border-[#e2e8f0]">
         {tabs.map(t => (
           <button
             key={t.key}
@@ -93,6 +95,15 @@ export function ReportsView({
       {tab === 'employee' && (
         <EmployeeCleaningReport
           initialRows={employeeCleaningRows}
+          initialYear={currentYear}
+          initialMonth={currentMonth}
+        />
+      )}
+
+      {/* ── Administration cost (prorated by income share) ────────────────── */}
+      {tab === 'admin' && (
+        <AdminReport
+          initialRows={incomeRows}
           initialYear={currentYear}
           initialMonth={currentMonth}
         />
