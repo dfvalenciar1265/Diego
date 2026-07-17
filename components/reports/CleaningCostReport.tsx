@@ -1,5 +1,5 @@
 'use client'
-import { useState, useTransition } from 'react'
+import { Fragment, useState, useTransition } from 'react'
 import { getCleaningCostReport, type CleaningCostRow } from '@/actions/reports'
 import { CLEANING_PRICES } from '@/lib/cleaning-prices'
 
@@ -130,60 +130,61 @@ export function CleaningCostReport({ initialRows, initialYear, initialMonth }: P
         </div>
       ) : (
         <>
-          {/* ── Summary table ───────────────────────────────────────────── */}
-          <div className="bg-white rounded-xl border border-[#e2e8f0] overflow-hidden shadow-sm">
-            <div className="grid grid-cols-[1fr_auto_auto] bg-[#f8fafc] border-b border-[#e2e8f0]">
-              <div className="px-3 py-2 text-[10px] font-bold text-[#94a3b8] uppercase tracking-wide">Apartamento</div>
-              <div className="px-3 py-2 text-[10px] font-bold text-[#94a3b8] uppercase tracking-wide text-right">Q1 (1–15)</div>
-              <div className="px-3 py-2 text-[10px] font-bold text-[#94a3b8] uppercase tracking-wide text-right">Q2 (16–fin)</div>
+          {/* ── Summary table ───────────────────────────────────────────────
+                One single grid for header + every row + totals. A grid per row
+                would size its own `auto` columns from its own content, so the
+                Q1/Q2 figures would land at a different x on each row instead of
+                lining up under their header. ─────────────────────────────── */}
+          <div className="grid grid-cols-[1fr_auto_auto] bg-white rounded-xl border border-[#e2e8f0] overflow-hidden shadow-sm">
+            {/* Header */}
+            <div className="px-3 py-2 text-[10px] font-bold text-[#94a3b8] uppercase tracking-wide bg-[#f8fafc] border-b border-[#e2e8f0]">Apartamento</div>
+            <div className="px-3 py-2 text-[10px] font-bold text-[#94a3b8] uppercase tracking-wide text-right bg-[#f8fafc] border-b border-[#e2e8f0]">Q1 (1–15)</div>
+            <div className="px-3 py-2 text-[10px] font-bold text-[#94a3b8] uppercase tracking-wide text-right bg-[#f8fafc] border-b border-[#e2e8f0]">Q2 (16–fin)</div>
+
+            {props.map((p, i) => {
+              const cell = `px-3 py-3 ${i % 2 === 0 ? 'bg-white' : 'bg-[#fafafa]'}`
+                         + (i < props.length - 1 ? ' border-b border-[#f1f5f9]' : '')
+              return (
+                <Fragment key={p.name}>
+                  <div className={`${cell} min-w-0`}>
+                    <p className="text-xs font-semibold text-[#0f172a] truncate">{p.name}</p>
+                    <p className="text-[11px] text-[#94a3b8]">
+                      {fmtCOP(p.fixedPrice)} / limpieza
+                    </p>
+                  </div>
+                  <div className={`${cell} text-right`}>
+                    {p.q1.count > 0 ? (
+                      <>
+                        <p className="text-[10px] text-[#94a3b8] whitespace-nowrap">{calcLabel(p.q1, p.fixedPrice)}</p>
+                        <p className="text-xs font-semibold text-[#ef4444]">{fmtCOP(p.q1.cost)}</p>
+                      </>
+                    ) : (
+                      <p className="text-xs text-[#cbd5e1]">—</p>
+                    )}
+                  </div>
+                  <div className={`${cell} text-right`}>
+                    {p.q2.count > 0 ? (
+                      <>
+                        <p className="text-[10px] text-[#94a3b8] whitespace-nowrap">{calcLabel(p.q2, p.fixedPrice)}</p>
+                        <p className="text-xs font-semibold text-[#ef4444]">{fmtCOP(p.q2.cost)}</p>
+                      </>
+                    ) : (
+                      <p className="text-xs text-[#cbd5e1]">—</p>
+                    )}
+                  </div>
+                </Fragment>
+              )
+            })}
+
+            {/* Totals */}
+            <div className="px-3 py-2 bg-[#fff5f5] border-t border-[#fecaca]">
+              <span className="text-xs font-bold text-[#ef4444]">Total {MONTHS[month - 1]}</span>
             </div>
-
-            {props.map((p, i) => (
-              <div
-                key={p.name}
-                className={`grid grid-cols-[1fr_auto_auto] border-b border-[#f1f5f9] last:border-0
-                            ${i % 2 === 0 ? 'bg-white' : 'bg-[#fafafa]'}`}
-              >
-                <div className="px-3 py-3">
-                  <p className="text-xs font-semibold text-[#0f172a] truncate">{p.name}</p>
-                  <p className="text-[11px] text-[#94a3b8]">
-                    {fmtCOP(p.fixedPrice)} / limpieza
-                  </p>
-                </div>
-                <div className="px-3 py-3 text-right">
-                  {p.q1.count > 0 ? (
-                    <>
-                      <p className="text-[10px] text-[#94a3b8] whitespace-nowrap">{calcLabel(p.q1, p.fixedPrice)}</p>
-                      <p className="text-xs font-semibold text-[#ef4444]">{fmtCOP(p.q1.cost)}</p>
-                    </>
-                  ) : (
-                    <p className="text-xs text-[#cbd5e1]">—</p>
-                  )}
-                </div>
-                <div className="px-3 py-3 text-right">
-                  {p.q2.count > 0 ? (
-                    <>
-                      <p className="text-[10px] text-[#94a3b8] whitespace-nowrap">{calcLabel(p.q2, p.fixedPrice)}</p>
-                      <p className="text-xs font-semibold text-[#ef4444]">{fmtCOP(p.q2.cost)}</p>
-                    </>
-                  ) : (
-                    <p className="text-xs text-[#cbd5e1]">—</p>
-                  )}
-                </div>
-              </div>
-            ))}
-
-            {/* Totals row */}
-            <div className="grid grid-cols-[1fr_auto_auto] bg-[#fff5f5] border-t border-[#fecaca]">
-              <div className="px-3 py-2">
-                <span className="text-xs font-bold text-[#ef4444]">Total {MONTHS[month - 1]}</span>
-              </div>
-              <div className="px-3 py-2 text-right">
-                <span className="text-xs font-bold text-[#ef4444]">{fmtCOP(totalQ1)}</span>
-              </div>
-              <div className="px-3 py-2 text-right">
-                <span className="text-xs font-bold text-[#ef4444]">{fmtCOP(totalQ2)}</span>
-              </div>
+            <div className="px-3 py-2 text-right bg-[#fff5f5] border-t border-[#fecaca]">
+              <span className="text-xs font-bold text-[#ef4444]">{fmtCOP(totalQ1)}</span>
+            </div>
+            <div className="px-3 py-2 text-right bg-[#fff5f5] border-t border-[#fecaca]">
+              <span className="text-xs font-bold text-[#ef4444]">{fmtCOP(totalQ2)}</span>
             </div>
           </div>
 

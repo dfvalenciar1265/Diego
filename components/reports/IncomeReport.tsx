@@ -1,5 +1,5 @@
 'use client'
-import { useState, useTransition } from 'react'
+import { Fragment, useState, useTransition } from 'react'
 import { getIncomeReport, type IncomeRow } from '@/actions/reports'
 
 const MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
@@ -88,46 +88,46 @@ export function IncomeReport({ initialRows, initialYear, initialMonth }: Props) 
         </div>
       ) : (
         <>
-          {/* ── Summary table ───────────────────────────────────────────── */}
-          <div className="bg-white rounded-xl border border-[#e2e8f0] overflow-hidden shadow-sm">
-            <div className="grid grid-cols-[1fr_auto_auto] bg-[#f8fafc] border-b border-[#e2e8f0]">
-              <div className="px-3 py-2 text-[10px] font-bold text-[#94a3b8] uppercase tracking-wide">Apartamento</div>
-              <div className="px-3 py-2 text-[10px] font-bold text-[#94a3b8] uppercase tracking-wide text-right">Q1 (1–15)</div>
-              <div className="px-3 py-2 text-[10px] font-bold text-[#94a3b8] uppercase tracking-wide text-right">Q2 (16–fin)</div>
+          {/* ── Summary table ───────────────────────────────────────────────
+                One single grid for header + every row + totals, so the columns
+                are sized once and shared. A grid per row would size its own
+                `auto` columns from its own content and nothing would line up. */}
+          <div className="grid grid-cols-[1fr_auto_auto] bg-white rounded-xl border border-[#e2e8f0] overflow-hidden shadow-sm">
+            {/* Header */}
+            <div className="px-3 py-2 text-[10px] font-bold text-[#94a3b8] uppercase tracking-wide bg-[#f8fafc] border-b border-[#e2e8f0]">Apartamento</div>
+            <div className="px-3 py-2 text-[10px] font-bold text-[#94a3b8] uppercase tracking-wide text-right bg-[#f8fafc] border-b border-[#e2e8f0]">Q1 (1–15)</div>
+            <div className="px-3 py-2 text-[10px] font-bold text-[#94a3b8] uppercase tracking-wide text-right bg-[#f8fafc] border-b border-[#e2e8f0]">Q2 (16–fin)</div>
+
+            {props.map((p, i) => {
+              const cell = `px-3 py-3 ${i % 2 === 0 ? 'bg-white' : 'bg-[#fafafa]'}`
+                         + (i < props.length - 1 ? ' border-b border-[#f1f5f9]' : '')
+              return (
+                <Fragment key={p.name}>
+                  <div className={`${cell} min-w-0`}>
+                    <p className="text-xs font-semibold text-[#0f172a] truncate">{p.name}</p>
+                    <p className="text-[11px] text-[#94a3b8]">
+                      {p.count} reserva{p.count !== 1 ? 's' : ''}
+                    </p>
+                  </div>
+                  <div className={`${cell} text-right`}>
+                    <p className="text-xs font-semibold text-[#16a34a]">{p.q1 > 0 ? fmtCOP(p.q1) : '—'}</p>
+                  </div>
+                  <div className={`${cell} text-right`}>
+                    <p className="text-xs font-semibold text-[#16a34a]">{p.q2 > 0 ? fmtCOP(p.q2) : '—'}</p>
+                  </div>
+                </Fragment>
+              )
+            })}
+
+            {/* Totals */}
+            <div className="px-3 py-2 bg-[#f0fdf4] border-t border-[#bbf7d0]">
+              <span className="text-xs font-bold text-[#16a34a]">Total {MONTHS[month - 1]}</span>
             </div>
-
-            {props.map((p, i) => (
-              <div
-                key={p.name}
-                className={`grid grid-cols-[1fr_auto_auto] border-b border-[#f1f5f9] last:border-0
-                            ${i % 2 === 0 ? 'bg-white' : 'bg-[#fafafa]'}`}
-              >
-                <div className="px-3 py-3">
-                  <p className="text-xs font-semibold text-[#0f172a] truncate">{p.name}</p>
-                  <p className="text-[11px] text-[#94a3b8]">
-                    {p.count} reserva{p.count !== 1 ? 's' : ''}
-                  </p>
-                </div>
-                <div className="px-3 py-3 text-right">
-                  <p className="text-xs font-semibold text-[#16a34a]">{p.q1 > 0 ? fmtCOP(p.q1) : '—'}</p>
-                </div>
-                <div className="px-3 py-3 text-right">
-                  <p className="text-xs font-semibold text-[#16a34a]">{p.q2 > 0 ? fmtCOP(p.q2) : '—'}</p>
-                </div>
-              </div>
-            ))}
-
-            {/* Totals row */}
-            <div className="grid grid-cols-[1fr_auto_auto] bg-[#f0fdf4] border-t border-[#bbf7d0]">
-              <div className="px-3 py-2">
-                <span className="text-xs font-bold text-[#16a34a]">Total {MONTHS[month - 1]}</span>
-              </div>
-              <div className="px-3 py-2 text-right">
-                <span className="text-xs font-bold text-[#16a34a]">{fmtCOP(totalQ1)}</span>
-              </div>
-              <div className="px-3 py-2 text-right">
-                <span className="text-xs font-bold text-[#16a34a]">{fmtCOP(totalQ2)}</span>
-              </div>
+            <div className="px-3 py-2 text-right bg-[#f0fdf4] border-t border-[#bbf7d0]">
+              <span className="text-xs font-bold text-[#16a34a]">{fmtCOP(totalQ1)}</span>
+            </div>
+            <div className="px-3 py-2 text-right bg-[#f0fdf4] border-t border-[#bbf7d0]">
+              <span className="text-xs font-bold text-[#16a34a]">{fmtCOP(totalQ2)}</span>
             </div>
           </div>
 
