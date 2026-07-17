@@ -133,12 +133,12 @@ export function EmployeeCleaningReport({ initialRows, initialYear, initialMonth 
         <>
           {employees.map(e => (
             <div key={e.key} className="bg-white rounded-xl border border-[#e2e8f0] overflow-hidden shadow-sm">
-              {/* Employee header: name · count · days worked · total to pay */}
+              {/* Employee header: name · count · total to pay */}
               <div className="flex items-center justify-between px-4 py-3 bg-[#f8fafc] border-b border-[#e2e8f0]">
                 <div className="min-w-0">
                   <p className="text-sm font-bold text-[#0f172a] truncate">{e.name}</p>
                   <p className="text-[11px] text-[#94a3b8]">
-                    {e.count} {e.count === 1 ? 'aseo' : 'aseos'} · {e.days} {e.days === 1 ? 'día' : 'días'} trabajados
+                    {e.count} {e.count === 1 ? 'aseo' : 'aseos'}
                   </p>
                 </div>
                 <span className="text-base font-bold text-[#16a34a] shrink-0 ml-2">{fmtCOP(e.total)}</span>
@@ -153,6 +153,13 @@ export function EmployeeCleaningReport({ initialRows, initialYear, initialMonth 
                     <span className="text-xs font-semibold text-[#0f172a] shrink-0">{fmtCOP(a.value)}</span>
                   </div>
                 ))}
+              </div>
+              {/* Days worked — its own item, separate from the money breakdown */}
+              <div className="flex items-center justify-between px-4 py-2.5 bg-[#f8fafc] border-t border-[#e2e8f0]">
+                <span className="text-xs font-medium text-[#64748b]">📅 Días laborados en la quincena</span>
+                <span className="text-xs font-bold text-[#0f172a] shrink-0 ml-2">
+                  {e.days} {e.days === 1 ? 'día' : 'días'}
+                </span>
               </div>
             </div>
           ))}
