@@ -115,7 +115,11 @@ export async function getIncomeReport(year: number, month: number): Promise<Inco
 // ── Cleaning cost report ──────────────────────────────────────────────────────
 
 /**
- * Returns all done cleaning tasks in the given month.
+ * Returns all done cleaning tasks whose check-out (scheduled_for) falls in the
+ * given month. Attribution is by check-out date, NOT by when the task was marked
+ * done — a late or bulk completion must not drag the cleaning into another month
+ * (that's what made June cleanings show up in July). scheduled_for is a plain
+ * date, so there is also no timezone/quincena-boundary ambiguity.
  * Cost = task.cost if set, otherwise the fixed price for the property.
  */
 export async function getCleaningCostReport(year: number, month: number): Promise<CleaningCostRow[]> {
@@ -129,14 +133,14 @@ export async function getCleaningCostReport(year: number, month: number): Promis
     .select('*, property:properties(name)')
     .eq('type', 'cleaning')
     .eq('status', 'done')
-    .gte('completed_at', `${firstDay}T00:00:00`)
-    .lte('completed_at', `${lastDay}T23:59:59`)
-    .order('completed_at')
+    .gte('scheduled_for', firstDay)
+    .lte('scheduled_for', lastDay)
+    .order('scheduled_for')
 
   if (!data) return []
 
   return data.map(t => {
-    const day        = new Date(t.completed_at).getDate()
+    const day        = parseInt(String(t.scheduled_for).slice(8, 10), 10)
     const propName   = t.property?.name ?? ''
     const fixedPrice = CLEANING_PRICES[propName] ?? 0
 
@@ -160,16 +164,18 @@ export interface EmployeeCleaningRow {
   employee_name: string        // 'Sin asignar' if the task had no assignee
   property_name: string
   completed_at:  string
-  day:           number        // day-of-month of completed_at (for distinct-days)
+  day:           number        // day-of-month of the check-out (for distinct-days)
   period:        1 | 2         // quincena: 1 = days 1–15, 2 = days 16–end
   value:         number        // task.cost override, else the property's fixed price
 }
 
 /**
- * All done cleaning tasks in the month, one row per task, with the employee who
- * did it and the value paid. Same period (completed_at) and value (cost ?? fixed)
- * logic as getCleaningCostReport, so the two reports always agree. Aggregation
- * per employee/quincena happens in the component.
+ * All done cleaning tasks whose check-out (scheduled_for) falls in the month, one
+ * row per task, with the employee who did it and the value paid. Attributed by
+ * check-out date and value (cost ?? fixed) exactly like getCleaningCostReport, so
+ * the two reports always agree. "Días laborados" therefore counts distinct
+ * check-out days — a fair proxy for work days, and immune to bulk completions
+ * that stamp many tasks done on a single day. Aggregation happens in the component.
  */
 export async function getCleaningByEmployee(year: number, month: number): Promise<EmployeeCleaningRow[]> {
   const supabase = await createClient()
@@ -182,14 +188,14 @@ export async function getCleaningByEmployee(year: number, month: number): Promis
     .select('*, property:properties(name), assignee:team_members(name)')
     .eq('type', 'cleaning')
     .eq('status', 'done')
-    .gte('completed_at', `${firstDay}T00:00:00`)
-    .lte('completed_at', `${lastDay}T23:59:59`)
-    .order('completed_at')
+    .gte('scheduled_for', firstDay)
+    .lte('scheduled_for', lastDay)
+    .order('scheduled_for')
 
   if (!data) return []
 
   return data.map(t => {
-    const day      = new Date(t.completed_at).getDate()
+    const day      = parseInt(String(t.scheduled_for).slice(8, 10), 10)
     const propName = t.property?.name ?? ''
     const fixed    = CLEANING_PRICES[propName] ?? 0
 
