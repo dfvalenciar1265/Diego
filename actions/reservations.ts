@@ -119,10 +119,12 @@ export async function updateReservation(
   const supabase = await createClient()
   const guestsRaw = formData.get('guests') as string
   const airbnbCode = ((formData.get('airbnb_code') as string) || '').trim().toUpperCase() || null
+  const checkIn  = formData.get('check_in') as string
+  const checkOut = formData.get('check_out') as string
   const { error } = await supabase.from('reservations').update({
     guest_name: formData.get('guest_name') as string,
-    check_in: formData.get('check_in') as string,
-    check_out: formData.get('check_out') as string,
+    check_in: checkIn,
+    check_out: checkOut,
     amount: Number(formData.get('amount')) || 0,
     guests: guestsRaw ? Math.max(1, parseInt(guestsRaw, 10)) : null,
     notes: formData.get('notes') as string,
@@ -130,8 +132,24 @@ export async function updateReservation(
     airbnb_code: airbnbCode,
   }).eq('id', id)
   if (error) return { success: false, error: error.message }
+
+  // Keep the linked turnover tasks in sync with the (possibly edited) dates:
+  // the cleaning is due on check-out, the preparation the day before check-in.
+  // Without this, moving a reservation's dates strands its cleaning on the old
+  // day — which, among other things, hides the check-out time editor on the home.
+  if (checkOut) {
+    await supabase.from('tasks').update({ scheduled_for: checkOut })
+      .eq('reservation_id', id).eq('type', 'cleaning')
+  }
+  if (checkIn) {
+    const prepDate = dayBefore(checkIn) >= checkOut ? checkIn : dayBefore(checkIn)
+    await supabase.from('tasks').update({ scheduled_for: prepDate })
+      .eq('reservation_id', id).eq('type', 'preparation')
+  }
+
   revalidatePath('/calendar')
   revalidatePath('/')
+  revalidatePath('/cleaning')
   return { success: true }
 }
 
