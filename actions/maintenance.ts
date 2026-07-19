@@ -64,3 +64,61 @@ export async function updateMaintenanceStatus(
   return { success: true }
 }
 
+/** Reprograma un mantenimiento programado: cambia su próxima fecha (YYYY-MM-DD). */
+export async function rescheduleMaintenance(
+  id: string,
+  nextDue: string
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { success: false, error: 'No autenticado' }
+
+  const { error } = await supabase
+    .from('maintenance')
+    .update({ next_due: nextDue || null })
+    .eq('id', id)
+  if (error) return { success: false, error: error.message }
+  revalidatePath('/maintenance')
+  revalidatePath('/')
+  return { success: true }
+}
+
+/**
+ * Marca hecho un preventivo recurrente: registra la fecha de hoy como "última"
+ * y AVANZA la próxima según el intervalo (hoy + N meses), sin resolverlo, para
+ * que el recurrente reaparezca en su próxima fecha. Si no tiene intervalo, la
+ * próxima queda vacía para reprogramarla a mano.
+ */
+export async function completeScheduledMaintenance(
+  id: string
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { success: false, error: 'No autenticado' }
+
+  const { data: issue } = await supabase
+    .from('maintenance')
+    .select('interval_months')
+    .eq('id', id)
+    .single()
+
+  const today = new Date()
+  const todayStr = today.toISOString().slice(0, 10)
+  let nextDue: string | null = null
+  const interval = issue?.interval_months
+  if (interval && interval > 0) {
+    const d = new Date(today)
+    d.setMonth(d.getMonth() + interval)
+    nextDue = d.toISOString().slice(0, 10)
+  }
+
+  const { error } = await supabase
+    .from('maintenance')
+    .update({ last_done: todayStr, next_due: nextDue })
+    .eq('id', id)
+  if (error) return { success: false, error: error.message }
+  revalidatePath('/maintenance')
+  revalidatePath('/')
+  return { success: true }
+}
+

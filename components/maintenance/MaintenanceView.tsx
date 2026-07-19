@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import { IncidenceCard } from './IncidenceCard'
 import { ScheduledCard } from './ScheduledCard'
+import { MaintenanceCalendar } from './MaintenanceCalendar'
 import { Pagination, paginate, pageCount } from '@/components/ui/Pagination'
 import type { MaintenanceIssue, Property, TeamMember } from '@/lib/types'
 
@@ -17,8 +18,12 @@ interface Props {
   teamMembers: TeamMember[]
 }
 
-type Tab = 'open' | 'resolved'
+type Tab = 'open' | 'resolved' | 'calendar'
 const PS = 5  // page size
+
+/** Prefer the real next_due column; fall back to the legacy encoded description. */
+const nextOf = (i: IssueWithJoins) =>
+  i.next_due ?? (i.description?.match(/next:([0-9-]+)/)?.[1] ?? '9999')
 
 export function MaintenanceView({ issues, properties, teamMembers }: Props) {
   const [tab,        setTab]        = useState<Tab>('open')
@@ -44,10 +49,7 @@ export function MaintenanceView({ issues, properties, teamMembers }: Props) {
   // Scheduled — sorted by next date
   const scheduled = filtered
     .filter(i => i.priority === 'scheduled' && i.status !== 'resolved')
-    .sort((a, b) => {
-      const getNext = (desc: string) => desc.match(/next:([^|]+)/)?.[1] ?? '9999'
-      return getNext(a.description).localeCompare(getNext(b.description))
-    })
+    .sort((a, b) => nextOf(a).localeCompare(nextOf(b)))
 
   // Incidences
   const incidences = filtered.filter(i => i.priority !== 'scheduled')
@@ -107,8 +109,18 @@ export function MaintenanceView({ issues, properties, teamMembers }: Props) {
           )}
         </button>
         <button
+          onClick={() => setTab('calendar')}
+          className="flex-1 py-2.5 text-sm font-medium transition-colors border-l border-[#e2e8f0]"
+          style={{
+            background: tab === 'calendar' ? '#ef4444' : 'white',
+            color:      tab === 'calendar' ? 'white'   : '#64748b',
+          }}
+        >
+          🗓️ Cal.
+        </button>
+        <button
           onClick={() => setTab('resolved')}
-          className="flex-1 py-2.5 text-sm font-medium transition-colors"
+          className="flex-1 py-2.5 text-sm font-medium transition-colors border-l border-[#e2e8f0]"
           style={{
             background: tab === 'resolved' ? '#ef4444' : 'white',
             color:      tab === 'resolved' ? 'white'   : '#64748b',
@@ -215,6 +227,9 @@ export function MaintenanceView({ issues, properties, teamMembers }: Props) {
           )}
         </div>
       )}
+
+      {/* ── Calendario tab (mantenimiento programado por su próxima fecha) ──── */}
+      {tab === 'calendar' && <MaintenanceCalendar issues={scheduled} />}
     </div>
   )
 }

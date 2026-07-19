@@ -73,6 +73,9 @@ export interface MaintenanceIssue {
   reported_by: string            // team_member id
   resolved_at: string | null
   notes: string
+  next_due: string | null        // programado: próxima fecha (YYYY-MM-DD)
+  last_done: string | null       // programado: última vez que se hizo
+  interval_months: number | null // programado: recurrencia en meses
   created_at: string
 }
 
