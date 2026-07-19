@@ -38,13 +38,13 @@ const nightsBetween = (ci: string, co: string) => Math.max(0, differenceInDays(p
 /** Builds both message variants (WhatsApp short + formal email) from a reservation. */
 export function buildGuestNotification(d: GuestNotifyData): GuestNotification {
   const nights = nightsBetween(d.checkIn, d.checkOut)
-  const guests = `${d.guests ?? '—'} huéspedes`
+  const guestsCount = `${d.guests ?? '—'}`
 
   const whatsappText =
 `Hola 👋 Les confirmamos el ingreso de huéspedes a *${d.apartment}*:
 
 👤 ${d.guestName}
-👥 ${guests}
+👥 ${guestsCount} huéspedes
 📅 ${shortDate(d.checkIn)} → ${shortDate(d.checkOut)} (${nights} noches)
 
 Autorizado por Casa Blue ☀️ ¡Gracias!`
@@ -52,12 +52,17 @@ Autorizado por Casa Blue ☀️ ¡Gracias!`
   const emailSubject = `Autorización de ingreso de huéspedes - ${d.apartment}`
 
   const emailBody =
-`Por medio de la presente, autorizo el ingreso y estadía de los siguientes huéspedes al ${d.apartment}, desde el ${longDate(d.checkIn)} hasta el ${longDate(d.checkOut)}:
+`Estimados,
 
-${d.guestName}
-${guests}
-Total ${nights} noches
+Por medio de la presente, autorizo el ingreso y estadía de los siguientes huéspedes al ${d.apartment}, del ${longDate(d.checkIn)} al ${longDate(d.checkOut)}:
 
+Huésped: ${d.guestName}
+N.º de huéspedes: ${guestsCount}
+Total: ${nights} noches
+
+Agradecemos su colaboración con el ingreso de los huéspedes.
+
+Cordialmente,
 ☀️ Casa Blue`
 
   return { whatsappText, emailSubject, emailBody }
