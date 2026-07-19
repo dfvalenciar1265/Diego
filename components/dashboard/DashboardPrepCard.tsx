@@ -1,12 +1,14 @@
 'use client'
 import { useState, useTransition } from 'react'
 import { updateTaskNotes } from '@/actions/tasks'
+import { NotifyBuildingButton } from './NotifyBuildingButton'
 import type { Task } from '@/lib/types'
 
 export type PrepTask = Task & {
   property?: { name: string }
   reservation?: {
     check_in: string
+    check_out: string
     notes: string | null
     guest_name: string | null
     guests: number | null
@@ -152,6 +154,19 @@ export function DashboardPrepCard({ task }: { task: PrepTask }) {
         <p className="mt-1.5 text-[11px] text-[#ef4444]">
           ⚠️ No se guardó. Revisa tu conexión.
         </p>
+      )}
+
+      {/* Avisar al edificio del ingreso del huésped (solo admin) */}
+      {res?.check_in && res?.check_out && (
+        <NotifyBuildingButton
+          data={{
+            apartment: propName,
+            guestName: res.guest_name ?? '—',
+            checkIn:   res.check_in,
+            checkOut:  res.check_out,
+            guests:    res.guests ?? null,
+          }}
+        />
       )}
 
     </div>
