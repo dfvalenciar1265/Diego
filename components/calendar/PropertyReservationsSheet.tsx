@@ -120,29 +120,35 @@ export function PropertyReservationsSheet({ property, reservations, onClose, onS
                   })}
                 </div>
 
-                {/* Reservation bars */}
+                {/* Reservation bars — a distinct rounded pill per stay, with a gap on
+                    the real check-in/check-out ends so consecutive reservations
+                    (a same-day turnover) read as two separate pills, not one blob. */}
                 {segments.map((s, i) => {
                   const blocked = s.r.status === 'blocked'
                   const bg      = blocked ? BLOCKED : (SRC[s.r.source] ?? SRC.direct)
                   const isPast  = s.r.check_out < todayStr
+                  const gapL    = s.roundL ? 3 : 0    // space at the real check-in end
+                  const gapR    = s.roundR ? 3 : 0    // space at the real check-out end
                   return (
                     <button
                       key={s.r.id + '-' + i}
                       onClick={() => canEdit && onSelect(s.r)}
                       disabled={!canEdit}
-                      className="absolute h-[22px] px-1.5 text-left overflow-hidden active:opacity-70"
+                      className="absolute h-[24px] pl-2 pr-1.5 text-left overflow-hidden active:opacity-70 flex items-center gap-1"
                       style={{
-                        left: `${s.leftPct}%`,
-                        width: `${s.widthPct}%`,
-                        top: 26,
+                        left:  `calc(${s.leftPct}% + ${gapL}px)`,
+                        width: `calc(${s.widthPct}% - ${gapL + gapR}px)`,
+                        top: 25,
                         background: bg,
                         color: 'white',
-                        borderRadius: `${s.roundL ? 9 : 0}px ${s.roundR ? 9 : 0}px ${s.roundR ? 9 : 0}px ${s.roundL ? 9 : 0}px`,
-                        opacity: isPast ? 0.5 : 1,
+                        borderRadius: `${s.roundL ? 12 : 3}px ${s.roundR ? 12 : 3}px ${s.roundR ? 12 : 3}px ${s.roundL ? 12 : 3}px`,
+                        opacity: isPast ? 0.55 : 1,
                       }}
                     >
-                      <span className="text-[10px] font-medium truncate block leading-[22px]">
-                        {blocked ? '🚫' : s.r.guest_name}
+                      {/* arrival dot marks where the stay begins (like Airbnb) */}
+                      {s.roundL && <span className="w-1.5 h-1.5 rounded-full bg-white/90 shrink-0" />}
+                      <span className="text-[10px] font-semibold truncate">
+                        {blocked ? '🚫 Bloqueado' : s.r.guest_name}
                       </span>
                     </button>
                   )
