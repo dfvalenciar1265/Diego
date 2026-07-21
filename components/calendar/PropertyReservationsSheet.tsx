@@ -101,14 +101,14 @@ export function PropertyReservationsSheet({ property, reservations, onClose, onS
             })
 
             return (
-              <div key={wi} className="relative border-b border-[#f1f5f9]" style={{ height: WEEK_H }}>
+              <div key={wi} className="relative border-b border-[#e2e8f0]" style={{ height: WEEK_H }}>
                 {/* Day cells */}
                 <div className="grid grid-cols-7 h-full">
                   {week.map(d => {
                     const inMonth = isSameMonth(d, month)
                     const today   = isToday(d)
                     return (
-                      <div key={toStr(d)} className="border-r border-[#f1f5f9] last:border-r-0 pt-1 flex justify-center">
+                      <div key={toStr(d)} className="border-r border-[#cbd5e1] last:border-r-0 pt-1 flex justify-center">
                         <span
                           className={`text-[11px] w-5 h-5 flex items-center justify-center rounded-full
                             ${today ? 'bg-[#f59e0b] text-white font-bold' : inMonth ? 'text-[#334155]' : 'text-[#cbd5e1]'}`}
