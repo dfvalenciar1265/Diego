@@ -12,6 +12,7 @@ import { canDo } from '@/lib/permissions'
 import { useUserRole } from '@/lib/user-context'
 import { ReservationBlock } from './ReservationBlock'
 import { ReservationForm } from './ReservationForm'
+import { PropertyReservationsSheet } from './PropertyReservationsSheet'
 
 // ── Layout constants ──────────────────────────────────────────────────────────
 const PROP_W  = 90    // sticky property-name column width (px)
@@ -33,6 +34,7 @@ export function CalendarView({ properties, reservations }: Props) {
   const [selectedReservation, setSelectedReservation] = useState<Reservation | null>(null)
   const [formOpen, setFormOpen]   = useState(false)
   const [selectedPropertyId, setSelectedPropertyId] = useState('')
+  const [listProperty, setListProperty] = useState<Property | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   const role    = useUserRole()
@@ -112,6 +114,8 @@ export function CalendarView({ properties, reservations }: Props) {
     setSelectedPropertyId(res.property_id)
     setFormOpen(true)
   }, [])
+  // Tapping an apartment name opens the list of that apartment's reservations.
+  const openList = useCallback((p: Property) => setListProperty(p), [])
   function openNewDirect() {
     setSelectedReservation(null)
     setSelectedPropertyId(properties[0]?.id ?? '')
@@ -168,6 +172,7 @@ export function CalendarView({ properties, reservations }: Props) {
           canEdit={canEdit}
           onCellClick={openNew}
           onReservationClick={openEdit}
+          onPropertyClick={openList}
         />
 
         {/* Legend */}
@@ -208,6 +213,14 @@ export function CalendarView({ properties, reservations }: Props) {
         properties={properties}
         defaultSource={selectedReservation ? undefined : 'direct'}
       />
+
+      {/* Reservas del apartamento — se abre al tocar el nombre del apto */}
+      <PropertyReservationsSheet
+        property={listProperty}
+        reservations={listProperty ? (byProp.get(listProperty.id) ?? []) : []}
+        onClose={() => setListProperty(null)}
+        onSelect={res => { setListProperty(null); openEdit(res) }}
+      />
     </div>
   )
 }
@@ -229,11 +242,12 @@ interface GridProps {
   canEdit:      boolean
   onCellClick:        (propertyId: string) => void
   onReservationClick: (res: Reservation) => void
+  onPropertyClick:    (property: Property) => void
 }
 
 const CalendarGrid = memo(function CalendarGrid({
   properties, byProp, month1, days, segments, totalW,
-  firstDayStr, lastDayStr, canEdit, onCellClick, onReservationClick,
+  firstDayStr, lastDayStr, canEdit, onCellClick, onReservationClick, onPropertyClick,
 }: GridProps) {
   const todayOffset = days.findIndex(d => isToday(d))
 
@@ -314,15 +328,18 @@ const CalendarGrid = memo(function CalendarGrid({
             className="flex items-stretch border-t border-[#f1f5f9] relative"
             style={{ height: ROW_H }}
           >
-            {/* Sticky property-name cell */}
-            <div
-              className="flex-shrink-0 flex items-center px-2 bg-white border-r border-[#e2e8f0] sticky left-0 z-10"
+            {/* Sticky property-name cell — tap to see this apartment's reservations */}
+            <button
+              onClick={() => onPropertyClick(property)}
+              className="flex-shrink-0 flex items-center gap-0.5 px-2 bg-white border-r border-[#e2e8f0]
+                         sticky left-0 z-10 text-left active:bg-[#f8fafc] transition-colors"
               style={{ width: PROP_W }}
             >
-              <p className="text-[11px] font-medium text-[#0f172a] leading-tight line-clamp-2">
+              <p className="text-[11px] font-medium text-[#0f172a] leading-tight line-clamp-2 flex-1 min-w-0">
                 {property.name}
               </p>
-            </div>
+              <span className="text-[#cbd5e1] text-[10px] shrink-0">›</span>
+            </button>
 
             {/* Day cells — click targets (empty days open new reservation form for admins) */}
             {days.map(day => {
