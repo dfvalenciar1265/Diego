@@ -1,122 +1,161 @@
 'use client'
-import { differenceInDays, parseISO, format } from 'date-fns'
+import { useState } from 'react'
+import {
+  startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval,
+  addMonths, subMonths, format, isSameMonth, isToday,
+} from 'date-fns'
+import { es } from 'date-fns/locale'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { useUserRole } from '@/lib/user-context'
 import type { Property, Reservation } from '@/lib/types'
 
-const SRC: Record<string, { label: string; color: string }> = {
-  airbnb: { label: 'Airbnb', color: '#ff385c' },
-  direct: { label: 'Directa', color: '#6366f1' },
-}
-const BLOCKED = { label: 'Bloqueado', color: '#94a3b8' }
+const WEEKDAYS = ['L', 'M', 'X', 'J', 'V', 'S', 'D']
+const SRC: Record<string, string> = { airbnb: '#ff385c', direct: '#6366f1' }
+const BLOCKED = '#94a3b8'
+const WEEK_H = 58   // px per week row
 
-const fmtCOP = (n: number) => `$${n.toLocaleString('es-CO')}`
-function shortDate(iso: string): string {
-  const [, m, d] = iso.split('-')
-  const months = ['', 'ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
-  return `${parseInt(d, 10)} ${months[parseInt(m, 10)]}`
-}
+const toStr = (d: Date) => format(d, 'yyyy-MM-dd')
 
 interface Props {
   property: Property | null
   reservations: Reservation[]
   onClose: () => void
-  /** Called when a row is tapped (admins only) — opens the reservation to edit. */
+  /** Tap a reservation bar (admins only) → open it to edit. */
   onSelect: (r: Reservation) => void
 }
 
-/** Bottom sheet listing all reservations of one apartment (upcoming first, then past). */
+/**
+ * Airbnb-style month calendar for a single apartment: reservations render as
+ * bars spanning their nights across the week rows (half-cell wedges on
+ * check-in/check-out), split automatically when a stay crosses a week boundary.
+ */
 export function PropertyReservationsSheet({ property, reservations, onClose, onSelect }: Props) {
-  const role           = useUserRole()
-  const canSeeFinances = role === 'admin' || role === 'maintenance'
-  const canEdit        = role === 'admin'
+  const role    = useUserRole()
+  const canEdit = role === 'admin'
+  const [month, setMonth] = useState(() => startOfMonth(new Date()))
+  const todayStr = toStr(new Date())
 
-  const today    = format(new Date(), 'yyyy-MM-dd')
-  const sorted   = [...reservations].sort((a, b) => a.check_in.localeCompare(b.check_in))
-  const upcoming = sorted.filter(r => r.check_out >= today)
-  const past     = sorted.filter(r => r.check_out < today).reverse()
+  const gridStart = startOfWeek(startOfMonth(month), { weekStartsOn: 1 })
+  const gridEnd   = endOfWeek(endOfMonth(month), { weekStartsOn: 1 })
+  const allDays   = eachDayOfInterval({ start: gridStart, end: gridEnd })
+  const weeks: Date[][] = []
+  for (let i = 0; i < allDays.length; i += 7) weeks.push(allDays.slice(i, i + 7))
 
   return (
     <Sheet open={property != null} onOpenChange={v => !v && onClose()}>
       <SheetContent
         side="bottom"
         className="rounded-t-2xl"
-        style={{ maxHeight: '85dvh', overflowY: 'auto', padding: '1rem 1rem env(safe-area-inset-bottom,1rem)' }}
+        style={{ height: '90dvh', overflowY: 'auto', padding: '1rem 0.75rem env(safe-area-inset-bottom,1rem)' }}
       >
-        <SheetHeader className="mb-3">
-          <SheetTitle>{property?.name ?? ''}</SheetTitle>
+        <SheetHeader className="mb-2 px-1">
+          <SheetTitle className="truncate">{property?.name ?? ''}</SheetTitle>
         </SheetHeader>
 
-        {reservations.length === 0 ? (
-          <div className="text-center py-10">
-            <p className="text-3xl mb-2">📭</p>
-            <p className="text-sm text-[#94a3b8]">Sin reservas para este apartamento</p>
-          </div>
-        ) : (
-          <div className="space-y-4 pb-4">
-            {upcoming.length > 0 && (
-              <Section title={`Próximas y actuales (${upcoming.length})`}>
-                {upcoming.map(r => (
-                  <Row key={r.id} r={r} canEdit={canEdit} canSeeFinances={canSeeFinances} onSelect={onSelect} />
-                ))}
-              </Section>
-            )}
-            {past.length > 0 && (
-              <Section title={`Pasadas (${past.length})`}>
-                {past.map(r => (
-                  <Row key={r.id} r={r} canEdit={canEdit} canSeeFinances={canSeeFinances} onSelect={onSelect} dim />
-                ))}
-              </Section>
-            )}
-          </div>
+        {/* Month navigator */}
+        <div className="flex items-center justify-between px-1 mb-2">
+          <button
+            onClick={() => setMonth(m => startOfMonth(subMonths(m, 1)))}
+            className="w-9 h-9 flex items-center justify-center text-[#6366f1] text-xl active:opacity-60"
+            aria-label="Mes anterior"
+          >‹</button>
+          <p className="text-sm font-bold capitalize text-[#0f172a]">
+            {format(month, 'MMMM yyyy', { locale: es })}
+          </p>
+          <button
+            onClick={() => setMonth(m => startOfMonth(addMonths(m, 1)))}
+            className="w-9 h-9 flex items-center justify-center text-[#6366f1] text-xl active:opacity-60"
+            aria-label="Mes siguiente"
+          >›</button>
+        </div>
+
+        {/* Weekday header */}
+        <div className="grid grid-cols-7 border-b border-[#e2e8f0]">
+          {WEEKDAYS.map(w => (
+            <div key={w} className="text-center text-[10px] font-semibold text-[#94a3b8] py-1">{w}</div>
+          ))}
+        </div>
+
+        {/* Weeks */}
+        <div>
+          {weeks.map((week, wi) => {
+            const ws = week.map(toStr)
+            const first = ws[0], last = ws[6]
+
+            // Reservation → bar segment clamped to this week (or [] if it doesn't touch it)
+            const segments = reservations.flatMap(r => {
+              if (r.check_out < first || r.check_in > last) return []
+              const inCI      = r.check_in >= first
+              const startCol  = inCI ? Math.max(0, ws.indexOf(r.check_in)) : 0
+              const startFrac = startCol + (inCI ? 0.5 : 0)        // arrive mid-day
+              const inCO      = r.check_out <= last
+              const endFrac   = inCO ? Math.max(0, ws.indexOf(r.check_out)) + 0.5 : 7   // leave mid-day
+              if (endFrac <= startFrac) return []
+              return [{
+                r,
+                leftPct:  (startFrac / 7) * 100,
+                widthPct: ((endFrac - startFrac) / 7) * 100,
+                roundL:   inCI,
+                roundR:   inCO,
+              }]
+            })
+
+            return (
+              <div key={wi} className="relative border-b border-[#f1f5f9]" style={{ height: WEEK_H }}>
+                {/* Day cells */}
+                <div className="grid grid-cols-7 h-full">
+                  {week.map(d => {
+                    const inMonth = isSameMonth(d, month)
+                    const today   = isToday(d)
+                    return (
+                      <div key={toStr(d)} className="border-r border-[#f1f5f9] last:border-r-0 pt-1 flex justify-center">
+                        <span
+                          className={`text-[11px] w-5 h-5 flex items-center justify-center rounded-full
+                            ${today ? 'bg-[#f59e0b] text-white font-bold' : inMonth ? 'text-[#334155]' : 'text-[#cbd5e1]'}`}
+                        >
+                          {format(d, 'd')}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+
+                {/* Reservation bars */}
+                {segments.map((s, i) => {
+                  const blocked = s.r.status === 'blocked'
+                  const bg      = blocked ? BLOCKED : (SRC[s.r.source] ?? SRC.direct)
+                  const isPast  = s.r.check_out < todayStr
+                  return (
+                    <button
+                      key={s.r.id + '-' + i}
+                      onClick={() => canEdit && onSelect(s.r)}
+                      disabled={!canEdit}
+                      className="absolute h-[22px] px-1.5 text-left overflow-hidden active:opacity-70"
+                      style={{
+                        left: `${s.leftPct}%`,
+                        width: `${s.widthPct}%`,
+                        top: 26,
+                        background: bg,
+                        color: 'white',
+                        borderRadius: `${s.roundL ? 9 : 0}px ${s.roundR ? 9 : 0}px ${s.roundR ? 9 : 0}px ${s.roundL ? 9 : 0}px`,
+                        opacity: isPast ? 0.5 : 1,
+                      }}
+                    >
+                      <span className="text-[10px] font-medium truncate block leading-[22px]">
+                        {blocked ? '🚫' : s.r.guest_name}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            )
+          })}
+        </div>
+
+        {canEdit && (
+          <p className="text-[10px] text-[#94a3b8] text-center mt-3">Tocá una reserva para ver o editarla</p>
         )}
       </SheetContent>
     </Sheet>
-  )
-}
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <p className="text-[10px] font-bold text-[#94a3b8] uppercase tracking-wide mb-2 px-1">{title}</p>
-      <div className="space-y-2">{children}</div>
-    </div>
-  )
-}
-
-function Row({
-  r, canEdit, canSeeFinances, onSelect, dim = false,
-}: {
-  r: Reservation
-  canEdit: boolean
-  canSeeFinances: boolean
-  onSelect: (r: Reservation) => void
-  dim?: boolean
-}) {
-  const blocked = r.status === 'blocked'
-  const src     = blocked ? BLOCKED : (SRC[r.source] ?? SRC.direct)
-  const nights  = Math.max(0, differenceInDays(parseISO(r.check_out), parseISO(r.check_in)))
-
-  return (
-    <button
-      onClick={() => canEdit && onSelect(r)}
-      disabled={!canEdit}
-      className={`w-full text-left flex items-stretch gap-3 bg-white border border-[#e2e8f0] rounded-xl px-3 py-2.5
-                  ${canEdit ? 'active:opacity-70' : ''} ${dim ? 'opacity-70' : ''}`}
-    >
-      <span className="w-1 rounded-full shrink-0" style={{ background: src.color }} />
-      <div className="flex-1 min-w-0 py-0.5">
-        <p className="text-sm font-semibold text-[#0f172a] truncate">
-          {blocked ? '🚫 Bloqueado' : (r.guest_name || '—')}
-        </p>
-        <p className="text-[11px] text-[#94a3b8]">
-          {shortDate(r.check_in)} → {shortDate(r.check_out)} · {nights}n · {src.label}
-        </p>
-      </div>
-      {canSeeFinances && !blocked && r.amount > 0 && (
-        <span className="text-xs font-semibold text-[#16a34a] shrink-0 self-center">{fmtCOP(r.amount)}</span>
-      )}
-      {canEdit && <span className="text-[#cbd5e1] shrink-0 self-center">›</span>}
-    </button>
   )
 }
