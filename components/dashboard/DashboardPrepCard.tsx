@@ -159,6 +159,8 @@ export function DashboardPrepCard({ task }: { task: PrepTask }) {
       {/* Avisar al edificio del ingreso del huésped (solo admin) */}
       {res?.check_in && res?.check_out && (
         <NotifyBuildingButton
+          taskId={task.id}
+          notifiedAt={task.building_notified_at ?? null}
           data={{
             apartment: propName,
             guestName: res.guest_name ?? '—',

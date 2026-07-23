@@ -74,6 +74,7 @@ export interface Task {
   photo_url: string | null
   completed_at: string | null
   cost: number | null            // optional cost (e.g. for misc tasks)
+  building_notified_at: string | null  // prep tasks: when the building was notified
   created_at: string
 }
 
