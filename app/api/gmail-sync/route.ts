@@ -133,16 +133,27 @@ async function syncHandler(req: NextRequest, fromCron: boolean) {
   for (const flag of emailResult.updated) {
     // Check if reservation already in DB
     const { data: existing } = await db
-      .from('reservations').select('id, notes')
+      .from('reservations').select('id, notes, pending_change')
       .eq('airbnb_code', flag.airbnb_code).single()
 
     if (existing) {
-      // Flag it as updated so the user knows to check Airbnb for new dates
-      const alreadyFlagged = existing.notes?.includes('⚠️ Fechas actualizadas')
-      if (!alreadyFlagged) {
-        const newNotes = (existing.notes ?? '') + ' | ⚠️ Fechas actualizadas — verificar en Airbnb'
-        await db.from('reservations').update({ notes: newNotes }).eq('id', existing.id)
+      const pending = existing.pending_change as { accepted_at?: string | null } | null
+      if (pending && !pending.accepted_at) {
+        // The guest's request was accepted — stamp it so the app can offer
+        // "Aplicar" with the exact change (guests/dates) already parsed.
+        await db.from('reservations')
+          .update({ pending_change: { ...pending, accepted_at: new Date().toISOString() } })
+          .eq('id', existing.id)
         updatedCount++
+      } else if (!pending) {
+        // No request on file (e.g. changed directly in Airbnb) — we can't know what
+        // changed, so fall back to flagging it for a manual check.
+        const alreadyFlagged = existing.notes?.includes('⚠️ Fechas actualizadas')
+        if (!alreadyFlagged) {
+          const newNotes = (existing.notes ?? '') + ' | ⚠️ Fechas actualizadas — verificar en Airbnb'
+          await db.from('reservations').update({ notes: newNotes }).eq('id', existing.id)
+          updatedCount++
+        }
       }
     } else {
       // Not in DB yet — search Gmail for the original confirmation and import it
@@ -190,31 +201,56 @@ async function syncHandler(req: NextRequest, fromCron: boolean) {
 
 // ─── Helper: note a change request on the matching reservation ───────────────
 
+/**
+ * Records a guest's change request on the matching reservation as `pending_change`.
+ * These emails carry no confirmation code, so we match on guest first name AND the
+ * apartment named in the email AND an active/future stay — and only when exactly
+ * ONE reservation matches. Anything ambiguous is skipped rather than risking the
+ * wrong booking. The change is only offered for applying once the
+ * "Se actualizó la reservación" email stamps accepted_at.
+ */
 async function handleChangeRequest(db: ServiceDb, req: ChangeRequestFlag): Promise<number> {
-  // Find the reservation by matching guest name (partial) and property name (partial).
-  // These emails don't include the confirmation code, so name-matching is the best we can do.
   const guestFirst = req.guest_name.split(/\s+/)[0].toLowerCase()
+  if (!guestFirst) return 0
 
-  const { data: candidates } = await db
+  // Resolve the apartment from the email's property line ("Marina rey 1104 · Apartamento…")
+  const { data: properties } = await db.from('properties').select('id, name')
+  const propHaystack = req.property_name.toLowerCase()
+  const property = ((properties ?? []) as { id: string; name: string }[])
+    .find(p => propHaystack.includes(p.name.toLowerCase()))
+
+  const today = new Date().toISOString().slice(0, 10)
+  let query = db
     .from('reservations')
-    .select('id, notes, guest_name')
+    .select('id, guest_name, pending_change')
     .ilike('guest_name', `%${guestFirst}%`)
     .eq('status', 'confirmed')
+    .gte('check_out', today)          // only active/future stays can still change
+  if (property) query = query.eq('property_id', property.id)
 
-  if (!candidates?.length) return 0
+  const { data: candidates } = await query
+  if (!candidates || candidates.length !== 1) return 0   // 0 or ambiguous → skip
 
-  // Among matches, flag those not already noted
-  let flagged = 0
-  const marker = `🔄 Cambio solicitado`
-  for (const r of candidates) {
-    if (r.notes?.includes(marker)) continue
-    const addition = ` | ${marker}: ${req.change_description} — ${req.alteration_url}`
-    await db.from('reservations')
-      .update({ notes: (r.notes ?? '') + addition })
-      .eq('id', r.id)
-    flagged++
+  const target = candidates[0]
+  const existing = target.pending_change as { description?: string; accepted_at?: string | null } | null
+  // Don't clobber a change that's already recorded and still waiting
+  if (existing && existing.description === req.change_description) return 0
+
+  const pending = {
+    guests_from:    req.guests_from,
+    guests_to:      req.guests_to,
+    check_in_from:  req.check_in_from,
+    check_in_to:    req.check_in_to,
+    check_out_from: req.check_out_from,
+    check_out_to:   req.check_out_to,
+    description:    req.change_description,
+    alteration_url: req.alteration_url,
+    requested_at:   new Date().toISOString(),
+    accepted_at:    null,
   }
-  return flagged
+
+  await db.from('reservations').update({ pending_change: pending }).eq('id', target.id)
+  return 1
 }
 
 // ─── Helper: insert a reservation if not already present ─────────────────────

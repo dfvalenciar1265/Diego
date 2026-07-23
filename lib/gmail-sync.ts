@@ -36,6 +36,13 @@ export interface ChangeRequestFlag {
   property_name:     string   // e.g. "Palmetto 1001 · Apartamento moderno..."
   change_description: string  // human-readable summary of what changed
   alteration_url:    string   // deep-link to approve/reject in Airbnb
+  // Structured values, so the change can actually be applied (null = not in this email)
+  guests_from:       number | null
+  guests_to:         number | null
+  check_in_from:     string | null   // YYYY-MM-DD
+  check_in_to:       string | null
+  check_out_from:    string | null
+  check_out_to:      string | null
 }
 
 export interface SyncEmailResult {
@@ -531,13 +538,38 @@ export function parseChangeRequestEmail(text: string): ChangeRequestFlag | null 
   if (origDates  && reqDates)    change_description += `${change_description ? ' | ' : ''}Fechas: ${origDates} → ${reqDates}`
   if (!change_description)       change_description = 'Ver solicitud en Airbnb'
 
+  // ── Structured values, so the change can be applied and not just displayed ──
+  /** "2 huéspedes" / "1 huésped" → 2 / 1 */
+  const guestCount = (s: string): number | null => {
+    const m = s.match(/(\d+)/)
+    return m ? parseInt(m[1], 10) : null
+  }
+  /** "lun, 2 jun – jue, 5 jun" → ['2026-06-02', '2026-06-05'] */
+  const dateRange = (s: string): [string | null, string | null] => {
+    const found: string[] = []
+    for (const m of s.matchAll(/(\d{1,2})\s+([a-záéíóúñ]{3,})/gi)) {
+      const mo = MONTH_MAP[m[2].toLowerCase().slice(0, 3)]
+      if (!mo) continue
+      found.push(toISODate(new Date(inferReservationYear(mo), mo - 1, Number(m[1]))))
+    }
+    return [found[0] ?? null, found[1] ?? null]
+  }
+
+  const [check_in_from, check_out_from] = origDates ? dateRange(origDates) : [null, null]
+  const [check_in_to,   check_out_to]   = reqDates  ? dateRange(reqDates)  : [null, null]
+
   // ── Deep-link to approve/reject ─────────────────────────────────────────
   const urlMatch = text.match(/airbnb\.com(?:\.co)?\/reservation\/alteration\/(\d+)/i)
   const alteration_url = urlMatch
     ? `https://www.airbnb.com.co/reservation/alteration/${urlMatch[1]}`
     : 'https://www.airbnb.com.co/hosting/reservations'
 
-  return { guest_name, property_name, change_description, alteration_url }
+  return {
+    guest_name, property_name, change_description, alteration_url,
+    guests_from: origGuests ? guestCount(origGuests) : null,
+    guests_to:   reqGuests  ? guestCount(reqGuests)  : null,
+    check_in_from, check_in_to, check_out_from, check_out_to,
+  }
 }
 
 // ─── Main export ──────────────────────────────────────────────────────────────

@@ -24,6 +24,25 @@ export interface Property {
 export type ReservationSource = 'airbnb' | 'direct'
 export type ReservationStatus = 'confirmed' | 'blocked' | 'cancelled'
 
+/**
+ * A change the guest requested through Airbnb, parsed from the
+ * "[Guest] quiere hacer un cambio" email. `accepted_at` is stamped when the
+ * "Se actualizó la reservación" email confirms the host accepted it — only then
+ * is it offered for one-tap applying.
+ */
+export interface PendingChange {
+  guests_from:    number | null
+  guests_to:      number | null
+  check_in_from:  string | null   // YYYY-MM-DD
+  check_in_to:    string | null
+  check_out_from: string | null
+  check_out_to:   string | null
+  description:    string          // "Huéspedes: 1 → 2"
+  alteration_url: string
+  requested_at:   string          // ISO timestamp
+  accepted_at:    string | null   // set by the "actualizada" email
+}
+
 export interface Reservation {
   id: string
   property_id: string
@@ -36,6 +55,7 @@ export interface Reservation {
   notes: string
   status: ReservationStatus
   airbnb_code: string | null
+  pending_change: PendingChange | null
   created_at: string
 }
 

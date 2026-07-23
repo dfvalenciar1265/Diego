@@ -4,6 +4,8 @@ import { getCurrentMember } from '@/lib/auth'
 import { getDashboardKPIs, getTodayCheckOuts } from '@/actions/dashboard'
 import { getTasks } from '@/actions/tasks'
 import { getMaintenance } from '@/actions/maintenance'
+import { getAcceptedChanges } from '@/actions/reservations'
+import { PendingChangeCard } from '@/components/dashboard/PendingChangeCard'
 import { getLowStockAlerts } from '@/actions/supplies'
 import { getPurchaseRequests } from '@/actions/purchases'
 import Link from 'next/link'
@@ -39,7 +41,7 @@ export default async function DashboardPage() {
 
   // All dashboard data fetched concurrently (no waterfall)
   const supabase = await createClient()
-  const [prepTasksRaw, kpis, todayTasks, stockAlerts, pendingPurchases, checkOuts, maintenanceAll] = await Promise.all([
+  const [prepTasksRaw, kpis, todayTasks, stockAlerts, pendingPurchases, checkOuts, maintenanceAll, acceptedChanges] = await Promise.all([
     // Prep tasks for today's check-ins — ALL statuses (done tasks show with ✓)
     supabase
       .from('tasks')
@@ -54,6 +56,7 @@ export default async function DashboardPage() {
     getPurchaseRequests('pending'),
     getTodayCheckOuts(),
     getMaintenance(),
+    getAcceptedChanges(),
   ])
 
   // Unresolved REPORTED incidences surfaced on the home so an urgent report isn't
@@ -113,6 +116,20 @@ export default async function DashboardPage() {
             <div className="space-y-2.5">
               {checkOuts.map(co => (
                 <CheckoutCard key={co.id} co={co} />
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Cambios de reserva aceptados en Airbnb, esperando aplicarse acá */}
+        {acceptedChanges.length > 0 && (
+          <section className="bg-[#eff6ff] border border-[#bfdbfe] rounded-xl p-4">
+            <p className="text-xs font-semibold text-[#1d4ed8] uppercase tracking-wide mb-3">
+              🔄 Cambios de reserva por aplicar ({acceptedChanges.length})
+            </p>
+            <div className="space-y-2">
+              {acceptedChanges.map(r => (
+                <PendingChangeCard key={r.id} reservation={r} />
               ))}
             </div>
           </section>
