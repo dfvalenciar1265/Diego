@@ -35,6 +35,7 @@ export function CalendarView({ properties, reservations }: Props) {
   const [formOpen, setFormOpen]   = useState(false)
   const [selectedPropertyId, setSelectedPropertyId] = useState('')
   const [listProperty, setListProperty] = useState<Property | null>(null)
+  const [query, setQuery] = useState('')
   const scrollRef = useRef<HTMLDivElement>(null)
 
   const role    = useUserRole()
@@ -92,6 +93,22 @@ export function CalendarView({ properties, reservations }: Props) {
     setBaseMonth(startOfMonth(new Date()))
   }, [])
 
+  // ── Guest search ────────────────────────────────────────────────────────────
+  // All reservations are already in memory, so this is instant and accent-blind
+  // ("jose" finds "José"). Picking a result jumps the calendar to its month.
+  const propName = useMemo(() => new Map(properties.map(p => [p.id, p.name])), [properties])
+  const results = useMemo(() => {
+    // NFD + strip combining marks → "José" and "Jose" both become "jose"
+    const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+    const q = norm(query.trim())
+    if (q.length < 2) return []
+    return reservations
+      .filter(r => norm(r.guest_name ?? '').includes(q))
+      .sort((a, b) => b.check_in.localeCompare(a.check_in))
+      .slice(0, 8)
+  }, [query, reservations])
+  const shortD = (iso: string) => format(parseISO(iso), 'd MMM', { locale: es })
+
   // Group reservations by property for fast lookup
   const byProp = useMemo(() => {
     const map = new Map<string, Reservation[]>()
@@ -127,8 +144,57 @@ export function CalendarView({ properties, reservations }: Props) {
     setSelectedPropertyId('')
   }
 
+  function selectResult(r: Reservation) {
+    setBaseMonth(startOfMonth(parseISO(r.check_in)))
+    setQuery('')
+    openEdit(r)
+  }
+
   return (
     <div className="relative">
+
+      {/* ── Buscar reserva por huésped ──────────────────────────────────────── */}
+      <div className="px-4 pt-3">
+        <div className="relative">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm">🔍</span>
+          <input
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder="Buscar reserva por huésped…"
+            className="w-full text-sm bg-white border border-[#e2e8f0] rounded-xl pl-9 pr-9 py-2.5
+                       focus:outline-none focus:ring-1 focus:ring-[#6366f1] placeholder:text-[#c4c9d4]"
+          />
+          {query && (
+            <button
+              onClick={() => setQuery('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-[#94a3b8] text-sm active:opacity-60"
+              aria-label="Limpiar búsqueda"
+            >✕</button>
+          )}
+        </div>
+
+        {query.trim().length >= 2 && (
+          <div className="mt-2 bg-white border border-[#e2e8f0] rounded-xl overflow-hidden shadow-sm">
+            {results.length === 0 ? (
+              <p className="px-3 py-3 text-xs text-[#94a3b8]">Sin reservas para “{query.trim()}”</p>
+            ) : results.map(r => (
+              <button
+                key={r.id}
+                onClick={() => selectResult(r)}
+                className="w-full text-left px-3 py-2.5 border-b border-[#f1f5f9] last:border-0 active:bg-[#f8fafc]"
+              >
+                <p className="text-xs font-semibold text-[#0f172a] truncate">
+                  {r.status === 'blocked' ? '🚫 Bloqueado' : (r.guest_name || '—')}
+                </p>
+                <p className="text-[11px] text-[#94a3b8] truncate">
+                  {propName.get(r.property_id) ?? '—'} · {shortD(r.check_in)} → {shortD(r.check_out)}
+                </p>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
       <div ref={scrollRef} className="overflow-x-auto pb-4">
 
         {/* ── Month navigation ──────────────────────────────────────────────── */}
