@@ -1,5 +1,5 @@
 'use client'
-import { useState, useTransition } from 'react'
+import { useRef, useState, useTransition } from 'react'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -23,6 +23,9 @@ export function ReservationForm({
 }: Props) {
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState('')
+  // Focus the title on open instead of the first field — otherwise the apartment
+  // <select> grabs focus and pops the native picker as soon as the sheet opens.
+  const titleRef = useRef<HTMLDivElement>(null)
   const role = useUserRole()
   const canSeeFinances = role === 'admin' || role === 'maintenance'
 
@@ -56,9 +59,11 @@ export function ReservationForm({
 
   return (
     <Sheet open={open} onOpenChange={v => !v && onClose()} key={reservation?.id ?? 'new'}>
-      <SheetContent side="bottom" className="rounded-t-2xl" style={{ maxHeight: '90dvh', overflowY: 'auto', padding: '1rem 1rem env(safe-area-inset-bottom,1rem)' }}>
+      <SheetContent side="bottom" className="rounded-t-2xl" initialFocus={titleRef} style={{ maxHeight: '90dvh', overflowY: 'auto', padding: '1rem 1rem env(safe-area-inset-bottom,1rem)' }}>
         <SheetHeader className="mb-4">
-          <SheetTitle>{title}</SheetTitle>
+          <div ref={titleRef} tabIndex={-1} className="outline-none">
+            <SheetTitle>{title}</SheetTitle>
+          </div>
         </SheetHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4 pb-6">

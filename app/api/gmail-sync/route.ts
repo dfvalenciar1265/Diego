@@ -132,9 +132,30 @@ async function syncHandler(req: NextRequest, fromCron: boolean) {
   // ── 2. Process "Reservación actualizada" emails ──────────────────────────
   for (const flag of emailResult.updated) {
     // Check if reservation already in DB
-    const { data: existing } = await db
-      .from('reservations').select('id, notes, pending_change')
-      .eq('airbnb_code', flag.airbnb_code).single()
+    let existing: { id: string; notes: string | null; pending_change: unknown } | null = null
+
+    if (flag.airbnb_code) {
+      const { data } = await db
+        .from('reservations').select('id, notes, pending_change')
+        .eq('airbnb_code', flag.airbnb_code).maybeSingle()
+      existing = data
+    }
+
+    // Fallback when the email carried no confirmation code: match by guest name,
+    // but ONLY among reservations that already have a change request waiting to
+    // be accepted — and only if exactly one matches.
+    if (!existing && flag.guest_name && flag.guest_name !== 'Desconocido') {
+      const first = flag.guest_name.split(/\s+/)[0].toLowerCase()
+      const { data: cands } = await db
+        .from('reservations').select('id, notes, pending_change')
+        .ilike('guest_name', `%${first}%`)
+        .eq('status', 'confirmed')
+        .not('pending_change', 'is', null)
+      const waiting = (cands ?? []).filter(
+        c => !(c.pending_change as { accepted_at?: string | null } | null)?.accepted_at
+      )
+      if (waiting.length === 1) existing = waiting[0]
+    }
 
     if (existing) {
       const pending = existing.pending_change as { accepted_at?: string | null } | null
@@ -155,7 +176,7 @@ async function syncHandler(req: NextRequest, fromCron: boolean) {
           updatedCount++
         }
       }
-    } else {
+    } else if (flag.airbnb_code) {
       // Not in DB yet — search Gmail for the original confirmation and import it
       const confirmation = await fetchConfirmationByCode(accessToken, flag.airbnb_code)
       if (confirmation) {

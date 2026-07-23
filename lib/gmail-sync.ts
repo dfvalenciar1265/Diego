@@ -20,9 +20,14 @@ export interface ParsedReservation {
   status: 'confirmed'
 }
 
-/** From "Reservación actualizada" emails — no dates available */
+/**
+ * From "Reservación actualizada" emails — no dates available. The confirmation
+ * code is only present when the itinerary link survives HTML stripping, so it
+ * may be null; the guest name is then used to match a reservation that already
+ * has a change request waiting to be accepted.
+ */
 export interface UpdatedReservationFlag {
-  airbnb_code: string
+  airbnb_code: string | null
   guest_name: string
 }
 
@@ -483,14 +488,18 @@ export function parseUpdateEmail(text: string): UpdatedReservationFlag | null {
   const textLc = text.toLowerCase()
   if (!textLc.includes('actualizó la reservación') && !textLc.includes('se actualizó')) return null
 
-  // Code from the "Accede al itinerario" URL (preserved by stripHtml via href extraction)
+  // Code from the "Accede al itinerario" URL (preserved by stripHtml via href extraction).
+  // Optional: Airbnb doesn't always expose it, and dropping the whole email when it's
+  // missing was silently losing every acceptance.
   const codeMatch = text.match(/reservations\/details\/([A-Z0-9]{8,12})/i)
-  if (!codeMatch) return null
-  const airbnb_code = codeMatch[1]
+  const airbnb_code = codeMatch ? codeMatch[1] : null
 
   // Guest name: "SE ACTUALIZÓ LA RESERVACIÓN CON [Name]"
   const nameMatch = text.match(/(?:SE ACTUALIZÓ|se actualizó|actualizó)\s+la\s+reservaci[oó]n\s+con\s+([^\n]+)/i)
   const guest_name = nameMatch ? nameMatch[1].trim().split(/\s{2,}/)[0] : 'Desconocido'
+
+  // Without a code AND without a name there's nothing to match on.
+  if (!airbnb_code && guest_name === 'Desconocido') return null
 
   return { airbnb_code, guest_name }
 }
