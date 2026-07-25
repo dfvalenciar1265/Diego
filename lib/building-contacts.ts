@@ -40,14 +40,16 @@ export function buildGuestNotification(d: GuestNotifyData): GuestNotification {
   const nights = nightsBetween(d.checkIn, d.checkOut)
   const guestsCount = `${d.guests ?? '—'}`
 
+  // No emojis: they get mangled to "�" when the message goes through the wa.me /
+  // mailto URL on some clients. Plain text + line breaks reads clean everywhere.
   const whatsappText =
-`Hola 👋 Les confirmamos el ingreso de huéspedes a *${d.apartment}*:
+`Hola, les confirmamos el ingreso de huéspedes a *${d.apartment}*:
 
-👤 ${d.guestName}
-👥 ${guestsCount} huéspedes
-📅 ${shortDate(d.checkIn)} → ${shortDate(d.checkOut)} (${nights} noches)
+Huésped: ${d.guestName}
+Huéspedes: ${guestsCount}
+Fechas: ${shortDate(d.checkIn)} a ${shortDate(d.checkOut)} (${nights} noches)
 
-Autorizado por Casa Blue ☀️ ¡Gracias!`
+Autorizado por Casa Blue. ¡Gracias!`
 
   const emailSubject = `Autorización de ingreso de huéspedes - ${d.apartment}`
 
@@ -63,7 +65,7 @@ Total: ${nights} noches
 Agradecemos su colaboración con el ingreso de los huéspedes.
 
 Cordialmente,
-☀️ Casa Blue`
+Casa Blue`
 
   return { whatsappText, emailSubject, emailBody }
 }
@@ -75,5 +77,8 @@ export function waLink(number: string, text: string): string {
 
 /** mailto link with subject + body pre-filled (opens the mail app; user taps Send). */
 export function mailtoLink(to: string, subject: string, body: string): string {
-  return `mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+  // Mail clients need CRLF line breaks in a mailto body; plain \n collapses to a
+  // single run-on paragraph in Gmail/Apple Mail.
+  const crlfBody = body.replace(/\r?\n/g, '\r\n')
+  return `mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(crlfBody)}`
 }
