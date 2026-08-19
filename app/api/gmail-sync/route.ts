@@ -18,6 +18,7 @@ import {
   getAccessToken,
   fetchAirbnbEmails,
   fetchConfirmationByCode,
+  resolvePropertyId,
   type ParsedReservation,
   type ChangeRequestFlag,
 } from '@/lib/gmail-sync'
@@ -237,8 +238,14 @@ async function handleChangeRequest(db: ServiceDb, req: ChangeRequestFlag): Promi
   // Resolve the apartment from the email's property line ("Marina rey 1104 · Apartamento…")
   const { data: properties } = await db.from('properties').select('id, name')
   const propHaystack = req.property_name.toLowerCase()
-  const property = ((properties ?? []) as { id: string; name: string }[])
-    .find(p => propHaystack.includes(p.name.toLowerCase()))
+  const propList = (properties ?? []) as { id: string; name: string }[]
+  let property = propList.find(p => propHaystack.includes(p.name.toLowerCase()))
+  // Fallback for listings whose email name differs from the app name (e.g. the
+  // "Loft Moderno … Ángel del Mar" listing = Cartagena Beach Crespo 1214).
+  if (!property) {
+    const aliasId = resolvePropertyId(req.property_name)
+    if (aliasId) property = propList.find(p => p.id === aliasId)
+  }
 
   const today = new Date().toISOString().slice(0, 10)
   let query = db

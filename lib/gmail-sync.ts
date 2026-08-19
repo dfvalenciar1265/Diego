@@ -75,6 +75,30 @@ const ROOM_TO_PROPERTY: Record<string, string> = {
   '675576989308773376': '4b10f347-cf1b-4b89-81b6-b73c41d697a3', // Apto 1303
 }
 
+/**
+ * Fallback for listings whose Airbnb room ID isn't in ROOM_TO_PROPERTY yet:
+ * match a distinctive, accent-normalized part of the listing name to a property.
+ * The room ID above is the reliable key — add it when known; this is the net so
+ * emails still land on the right apartment in the meantime.
+ */
+const NAME_ALIASES: { needle: string; property_id: string }[] = [
+  // Cartagena Beach Crespo 1214 — Airbnb listing "Loft Moderno vista Mar … Ángel del Mar"
+  { needle: 'angel del mar',          property_id: '2be6deec-8061-453e-b1ae-ce0bd177fadd' },
+  { needle: 'loft moderno vista mar', property_id: '2be6deec-8061-453e-b1ae-ce0bd177fadd' },
+]
+
+const stripAccents = (s: string) =>
+  s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+
+/** Resolves the internal property from an email: room ID first, listing-name alias otherwise. */
+export function resolvePropertyId(text: string): string | null {
+  const roomId = getRoomId(text)
+  if (roomId && ROOM_TO_PROPERTY[roomId]) return ROOM_TO_PROPERTY[roomId]
+  const norm = stripAccents(text)
+  for (const a of NAME_ALIASES) if (norm.includes(a.needle)) return a.property_id
+  return null
+}
+
 // ─── HTML helpers ─────────────────────────────────────────────────────────────
 
 /**
@@ -658,8 +682,7 @@ export async function fetchAirbnbEmails(
         const parsed = parseConfirmationEmail(text)
         if (!parsed) { dParseFail++; continue }
 
-        const roomId = getRoomId(text)
-        const property_id = roomId ? ROOM_TO_PROPERTY[roomId] : undefined
+        const property_id = resolvePropertyId(text) ?? undefined
         if (!property_id) { skippedNoRoom++; continue }
 
         confirmed.push({ ...parsed, property_id })
@@ -701,8 +724,7 @@ export async function fetchConfirmationByCode(
     const parsed = parseConfirmationEmail(text)
     if (!parsed || parsed.airbnb_code !== code) continue
 
-    const roomId = getRoomId(text)
-    const property_id = roomId ? ROOM_TO_PROPERTY[roomId] : undefined
+    const property_id = resolvePropertyId(text) ?? undefined
     if (!property_id) return null
 
     return { ...parsed, property_id }
