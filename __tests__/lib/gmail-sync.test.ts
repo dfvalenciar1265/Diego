@@ -117,6 +117,45 @@ describe('parseConfirmationEmail', () => {
     const noCode = confirmationFixture().replace(/Código de confirmación: \w+/, 'Código de confirmación:')
     expect(parseConfirmationEmail(noCode)).toBeNull()
   })
+
+  // Regression: Airbnb writes September as "sept." — the only Spanish month
+  // abbreviated with 4 letters. MONTH_MAP only knew "sep", so every reservation
+  // touching September failed to parse and the email was dropped without a trace.
+  describe('September abbreviations', () => {
+    it('parses "sept." in the full-date format', () => {
+      const r = parseConfirmationEmail(confirmationFixture({
+        checkIn: '12 sept. 2026', checkOut: '15 sept. 2026',
+      }))
+      expect(r).not.toBeNull()
+      expect(r!.check_in).toBe('2026-09-12')
+      expect(r!.check_out).toBe('2026-09-15')
+    })
+
+    it('parses "sept" in the HTML short-date format', () => {
+      const body = [
+        'Subject: Reservación confirmada: Dora Reyes llega el 30 sept.',
+        '',
+        'Código de confirmación: HMT39YMMKW',
+        'Huésped: Dora Reyes',
+        'mié, 30 sept',
+        'vie, 2 oct',
+        'GANAS $660,585.84',
+      ].join('\n')
+      const r = parseConfirmationEmail(body)
+      expect(r).not.toBeNull()
+      expect(r!.check_in.endsWith('-09-30')).toBe(true)
+      expect(r!.check_out.endsWith('-10-02')).toBe(true)
+    })
+
+    it('still parses the "sep" and "septiembre" spellings', () => {
+      for (const [ci, co] of [['1 sep. 2026', '3 sep. 2026'],
+                              ['1 de septiembre de 2026', '3 de septiembre de 2026']]) {
+        const r = parseConfirmationEmail(confirmationFixture({ checkIn: ci, checkOut: co }))
+        expect(r!.check_in).toBe('2026-09-01')
+        expect(r!.check_out).toBe('2026-09-03')
+      }
+    })
+  })
 })
 
 // ── parseCancellationEmail ─────────────────────────────────────────────────────

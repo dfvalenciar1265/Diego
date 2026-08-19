@@ -302,7 +302,10 @@ const MONTH_MAP: Record<string, number> = {
   jun: 6, junio: 6, june: 6,
   jul: 7, julio: 7, july: 7,
   ago: 8, agosto: 8, aug: 8, august: 8,
-  sep: 9, septiembre: 9, september: 9,
+  // "sept" is the abbreviation Airbnb's Spanish emails actually use ("12 sept.") and
+  // the only Spanish month abbreviated with 4 letters — without it every reservation
+  // touching September failed to parse and the email was dropped silently.
+  sep: 9, sept: 9, set: 9, septiembre: 9, september: 9,
   oct: 10, octubre: 10, october: 10,
   nov: 11, noviembre: 11, november: 11,
   dic: 12, diciembre: 12, dec: 12, december: 12,
