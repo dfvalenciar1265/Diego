@@ -73,6 +73,7 @@ const ROOM_TO_PROPERTY: Record<string, string> = {
   '772410685942787007': '823591d2-e4a9-4893-bd01-f1394a38545d', // Marina Rey 1104
   '857001462739188238': 'b73c70dd-204b-42f1-a1e1-674de53eca84', // Conquistador 1821
   '675576989308773376': '4b10f347-cf1b-4b89-81b6-b73c41d697a3', // Apto 1303
+  '1382459783562419089': '2be6deec-8061-453e-b1ae-ce0bd177fadd', // Cartagena Beach Crespo 1214
 }
 
 /**
