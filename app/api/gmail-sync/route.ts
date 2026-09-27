@@ -9,7 +9,8 @@
  *   1. Imports new "Reservación confirmada" emails → insert reservations + auto-create tasks
  *   2. Processes "Reservación actualizada" emails → flag existing reservations OR import if missing
  *   3. Processes "quiere hacer un cambio" emails → notes change request on reservation
- *   4. Auto-completes tasks whose scheduled date is in the past
+ *   4. Repairs active reservations left without their cleaning/preparation tasks
+ *   5. Auto-completes tasks whose scheduled date is in the past
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
@@ -23,17 +24,11 @@ import {
   type ChangeRequestFlag,
 } from '@/lib/gmail-sync'
 import { completeOverdueTasks } from '@/actions/tasks'
+import { cleaningTaskFor, preparationTaskFor, missingTurnoverTasks } from '@/lib/turnover-tasks'
 
 // Use a loose type for the service client to avoid complex generic mismatches
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type ServiceDb = any
-
-// Day before a date (YYYY-MM-DD)
-function dayBefore(date: string): string {
-  const d = new Date(date + 'T12:00:00')
-  d.setDate(d.getDate() - 1)
-  return d.toISOString().slice(0, 10)
-}
 
 // ─── Shared sync handler ──────────────────────────────────────────────────────
 
@@ -192,7 +187,13 @@ async function syncHandler(req: NextRequest, fromCron: boolean) {
     changeRequestCount += await handleChangeRequest(db, req)
   }
 
-  // ── 4. Auto-complete past tasks ──────────────────────────────────────────
+  // ── 4. Repair reservations without turnover tasks ───────────────────────
+  // The task insert right after a reservation insert can fail on its own (that's
+  // how the 27-sep check-in at Tocahagua 1208 ended up with no prep and no cleaning:
+  // counted as a check-in on the home but missing from "Preparación hoy").
+  const repairedTasks = await repairMissingTurnoverTasks(db)
+
+  // ── 5. Auto-complete past tasks ──────────────────────────────────────────
   // Any cleaning/preparation task whose date has already passed gets marked done
   // automatically so the task list stays clean.
   const completedTasks = await completeOverdueTasks()
@@ -205,6 +206,7 @@ async function syncHandler(req: NextRequest, fromCron: boolean) {
     updated_count: updatedCount,
     cancelled_count: cancelledCount,
     change_requests: changeRequestCount,
+    repaired_tasks: repairedTasks,
     completed_tasks: completedTasks,
     emails_parsed: emailResult.confirmed.length + emailResult.updated.length + emailResult.cancelled.length + emailResult.change_requests.length,
     threads_fetched: emailResult.threads_fetched,
@@ -306,32 +308,38 @@ async function insertReservationIfNew(
     .from('reservations').insert(r).select('id').single()
   if (error || !inserted) return false
 
-  // Auto-create cleaning + preparation tasks
-  const prepDate =
-    dayBefore(r.check_in) >= r.check_out
-      ? r.check_in        // back-to-back: prep same day as check-in
-      : dayBefore(r.check_in)
-
-  await db.from('tasks').insert([
-    {
-      property_id:    r.property_id,
-      reservation_id: inserted.id,
-      type:           'cleaning',
-      scheduled_for:  r.check_out,
-      status:         'pending',
-      notes:          `Limpieza post-estadía — ${r.guest_name}`,
-    },
-    {
-      property_id:    r.property_id,
-      reservation_id: inserted.id,
-      type:           'preparation',
-      scheduled_for:  prepDate,
-      status:         'pending',
-      notes:          `Preparación para ${r.guest_name} (check-in ${r.check_in})`,
-    },
-  ])
+  // Auto-create cleaning + preparation tasks (a failure here is repaired by step 4)
+  const reservation = { ...r, id: inserted.id }
+  const { error: taskError } = await db.from('tasks')
+    .insert([cleaningTaskFor(reservation), preparationTaskFor(reservation)])
+  if (taskError) console.error('[gmail-sync] task insert failed for', r.airbnb_code, taskError.message)
 
   return true
+}
+
+// ─── Helper: give active reservations their missing turnover tasks ───────────
+
+async function repairMissingTurnoverTasks(db: ServiceDb): Promise<number> {
+  const today = new Date().toISOString().slice(0, 10)
+  const { data, error } = await db
+    .from('reservations')
+    .select('id, property_id, guest_name, check_in, check_out, tasks(type)')
+    .eq('status', 'confirmed')
+    .gte('check_out', today)
+  if (error) {
+    console.error('[gmail-sync] repair query failed', error.message)
+    return 0
+  }
+
+  const rows = missingTurnoverTasks(data ?? [], today)
+  if (rows.length === 0) return 0
+
+  const { error: insertError } = await db.from('tasks').insert(rows)
+  if (insertError) {
+    console.error('[gmail-sync] repair insert failed', insertError.message)
+    return 0
+  }
+  return rows.length
 }
 
 // ─── Route handlers ───────────────────────────────────────────────────────────
