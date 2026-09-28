@@ -29,6 +29,7 @@ export interface ParsedReservation {
 export interface UpdatedReservationFlag {
   airbnb_code: string | null
   guest_name: string
+  email_date: string   // ISO — when Airbnb sent it (orders it against change requests)
 }
 
 /**
@@ -48,6 +49,7 @@ export interface ChangeRequestFlag {
   check_in_to:       string | null
   check_out_from:    string | null
   check_out_to:      string | null
+  email_date:        string          // ISO — when the guest asked (newer requests win)
 }
 
 export interface SyncEmailResult {
@@ -90,6 +92,19 @@ const NAME_ALIASES: { needle: string; property_id: string }[] = [
 
 const stripAccents = (s: string) =>
   s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+
+/**
+ * Does a reservation's guest name belong to the name an Airbnb email uses?
+ * Emails carry only the first name(s) ("Carl", "María Fernanda"), so the
+ * reservation name must START with it as whole words — a substring match glued
+ * old requests from "Carl" onto "Carlos" and from "Alex" onto "Alexandra".
+ */
+export function guestNameMatches(reservationName: string, emailName: string): boolean {
+  const norm = (s: string) => stripAccents(s).replace(/\s+/g, ' ').trim()
+  const full = norm(reservationName)
+  const first = norm(emailName)
+  return first.length > 0 && (full === first || full.startsWith(first + ' '))
+}
 
 /** Resolves the internal property from an email: room ID first, listing-name alias otherwise. */
 export function resolvePropertyId(text: string): string | null {
@@ -183,6 +198,7 @@ interface GmailMessagePart {
 }
 
 interface GmailMessage {
+  internalDate?: string   // ms since epoch, as a string
   payload?: {
     headers?: Array<{ name: string; value: string }>
     mimeType?: string
@@ -257,20 +273,28 @@ export async function getMessagePlaintext(
   return messageToPlaintext(await res.json() as GmailMessage)
 }
 
+export interface EmailMessage {
+  text: string
+  date: Date   // when Gmail received it
+}
+
 /**
- * Fetches a thread's first message as plaintext in a SINGLE request.
- * `threads/{id}?format=full` returns every message with its full payload,
- * so we avoid the previous two-step (minimal thread → full message) round-trip.
+ * Fetches EVERY message of a thread (plaintext + received date) in a single request.
+ * Gmail threads Airbnb emails that share a subject — every "Reservación actualizada"
+ * for different guests lands in one thread — so reading only the first message
+ * silently dropped the rest (Marina Rey's 3→7 oct date change was never seen).
  */
-async function getThreadPlaintext(accessToken: string, threadId: string): Promise<string> {
+async function getThreadMessages(accessToken: string, threadId: string): Promise<EmailMessage[]> {
   const res = await fetch(
     `https://gmail.googleapis.com/gmail/v1/users/me/threads/${threadId}?format=full`,
     { headers: { Authorization: `Bearer ${accessToken}` } }
   )
-  if (!res.ok) return ''
+  if (!res.ok) return []
   const t = await res.json() as { messages?: GmailMessage[] }
-  const first = t.messages?.[0]
-  return first ? messageToPlaintext(first) : ''
+  return (t.messages ?? []).map(m => ({
+    text: messageToPlaintext(m),
+    date: m.internalDate ? new Date(Number(m.internalDate)) : new Date(),
+  }))
 }
 
 /** Runs an async mapper over items with bounded concurrency, preserving order. */
@@ -322,17 +346,17 @@ function toISODate(d: Date): string {
 }
 
 /**
- * When HTML-stripped emails omit the year, infer it:
- *   - Month ≥ current month → current year  (upcoming)
- *   - Month < current month by ≤ 3 → current year  (recent past)
- *   - Month < current month by > 3 → next year  (far-future booking)
+ * When an email omits the year ("mié, 30 sept"), infer it from the date the email
+ * was SENT: a confirmation or change request is always about a stay on or after
+ * that day, so the year is the first one that puts day/month there (a week of
+ * slack for same-day bookings and time zones). Inferring from *today* instead
+ * moved 2025 stays into 2026 when old emails were imported (1303 "1–4 oct").
  */
-function inferReservationYear(month: number): number {
-  const now = new Date()
-  const currentYear  = now.getFullYear()
-  const currentMonth = now.getMonth() + 1
-  if (month >= currentMonth) return currentYear
-  return currentMonth - month > 3 ? currentYear + 1 : currentYear
+export function inferReservationYear(month: number, day: number, emailDate: Date = new Date()): number {
+  const floor = new Date(emailDate.getTime() - 7 * 86400000)
+  const y = floor.getFullYear()
+  const floorDay = new Date(y, floor.getMonth(), floor.getDate())
+  return new Date(y, month - 1, day) >= floorDay ? y : y + 1
 }
 
 function getRoomId(text: string): string | null {
@@ -350,7 +374,10 @@ let _stepCounters = { failCode: 0, failGuest: 0, failDates: 0 }
  * Parses a "Reservación confirmada" email body (plaintext OR HTML-stripped).
  * Returns null if the email can't be parsed or is a cancellation.
  */
-export function parseConfirmationEmail(text: string): Omit<ParsedReservation, 'property_id'> | null {
+export function parseConfirmationEmail(
+  text: string,
+  emailDate: Date = new Date(),
+): Omit<ParsedReservation, 'property_id'> | null {
   // Case-insensitive guard — Airbnb now sends ALL-CAPS headers ("CÓDIGO DE CONFIRMACIÓN")
   const textLc = text.toLowerCase()
   if (!textLc.includes('código de confirmación') && !textLc.includes('confirmation code')) return null
@@ -411,7 +438,7 @@ export function parseConfirmationEmail(text: string): Omit<ParsedReservation, 'p
     while ((match = shortDatePattern.exec(text)) !== null) {
       const m = MONTH_MAP[match[2].toLowerCase()]
       if (!m) continue
-      const year = inferReservationYear(m)
+      const year = inferReservationYear(m, Number(match[1]), emailDate)
       dates.push(new Date(year, m - 1, Number(match[1])))
     }
   }
@@ -512,7 +539,7 @@ export function parseCancellationEmail(text: string): string | null {
  * Parses a "Reservación actualizada" email body (plaintext OR HTML-stripped).
  * These emails don't contain dates — only the code (in the URL) and guest name.
  */
-export function parseUpdateEmail(text: string): UpdatedReservationFlag | null {
+export function parseUpdateEmail(text: string, emailDate: Date = new Date()): UpdatedReservationFlag | null {
   const textLc = text.toLowerCase()
   if (!textLc.includes('actualizó la reservación') && !textLc.includes('se actualizó')) return null
 
@@ -529,14 +556,14 @@ export function parseUpdateEmail(text: string): UpdatedReservationFlag | null {
   // Without a code AND without a name there's nothing to match on.
   if (!airbnb_code && guest_name === 'Desconocido') return null
 
-  return { airbnb_code, guest_name }
+  return { airbnb_code, guest_name, email_date: emailDate.toISOString() }
 }
 
 /**
  * Parses a "[Guest] quiere hacer un cambio en su reservación" email.
  * These emails have no confirmation code — the host must act via Airbnb.
  */
-export function parseChangeRequestEmail(text: string): ChangeRequestFlag | null {
+export function parseChangeRequestEmail(text: string, emailDate: Date = new Date()): ChangeRequestFlag | null {
   const textLc = text.toLowerCase()
   if (!textLc.includes('quiere hacer un cambio') && !textLc.includes('wants to make a change')) return null
 
@@ -549,9 +576,10 @@ export function parseChangeRequestEmail(text: string): ChangeRequestFlag | null 
   const guest_name = nameMatch ? nameMatch[1].trim() : 'Desconocido'
 
   // ── Property name ───────────────────────────────────────────────────────
-  // After the city line ("Cartagena\nPalmetto 1001 · …")
+  // After the city line ("Cartagena\nPalmetto 1001 · …"); the real emails use CRLF
+  // and put whitespace-only lines in between, so skip those too.
   const propMatch = text.match(
-    /(?:Cartagena|Medell[ií]n|Bogot[aá]|Barranquilla|Santa\s+Marta)[^\n]*\n+([^\n]+)/i
+    /(?:Cartagena|Medell[ií]n|Bogot[aá]|Barranquilla|Santa\s+Marta)[^\n]*\n(?:[^\S\n]*\n)*[^\S\n]*([^\n]*\S[^\n]*)/i
   )
   const property_name = propMatch ? propMatch[1].trim() : ''
 
@@ -581,13 +609,18 @@ export function parseChangeRequestEmail(text: string): ChangeRequestFlag | null 
     const m = s.match(/(\d+)/)
     return m ? parseInt(m[1], 10) : null
   }
-  /** "lun, 2 jun – jue, 5 jun" → ['2026-06-02', '2026-06-05'] */
+  /**
+   * "lun, 2 jun – jue, 5 jun"                  → ['2026-06-02', '2026-06-05']
+   * "14 de nov de 2026 - 17 de nov de 2026"    → ['2026-11-14', '2026-11-17']
+   */
   const dateRange = (s: string): [string | null, string | null] => {
     const found: string[] = []
-    for (const m of s.matchAll(/(\d{1,2})\s+([a-záéíóúñ]{3,})/gi)) {
-      const mo = MONTH_MAP[m[2].toLowerCase().slice(0, 3)]
+    for (const m of s.matchAll(/(\d{1,2})\s+(?:de\s+)?([a-záéíóúñ]{3,})\.?(?:\s+(?:de\s+)?(\d{4}))?/gi)) {
+      const mo = MONTH_MAP[m[2].toLowerCase()] ?? MONTH_MAP[m[2].toLowerCase().slice(0, 3)]
       if (!mo) continue
-      found.push(toISODate(new Date(inferReservationYear(mo), mo - 1, Number(m[1]))))
+      const day = Number(m[1])
+      const year = m[3] ? Number(m[3]) : inferReservationYear(mo, day, emailDate)
+      found.push(toISODate(new Date(year, mo - 1, day)))
     }
     return [found[0] ?? null, found[1] ?? null]
   }
@@ -606,6 +639,7 @@ export function parseChangeRequestEmail(text: string): ChangeRequestFlag | null 
     guests_from: origGuests ? guestCount(origGuests) : null,
     guests_to:   reqGuests  ? guestCount(reqGuests)  : null,
     check_in_from, check_in_to, check_out_from, check_out_to,
+    email_date: emailDate.toISOString(),
   }
 }
 
@@ -646,11 +680,11 @@ export async function fetchAirbnbEmails(
     pageToken = nextPageToken
     threadsFetched += threads.length
 
-    // Fetch all thread bodies for this page concurrently (bounded), then parse
-    // synchronously. One request per thread instead of two, ~10 at a time.
-    const texts = await mapWithConcurrency(threads, 10, t => getThreadPlaintext(accessToken, t.id))
+    // Fetch all threads for this page concurrently (bounded), then parse every
+    // message of every thread synchronously, each with the date it was sent.
+    const perThread = await mapWithConcurrency(threads, 10, t => getThreadMessages(accessToken, t.id))
 
-    for (const text of texts) {
+    for (const { text, date } of perThread.flat()) {
       if (!text) { dEmptyText++; continue }
 
       // Determine email type by content (case-insensitive — Airbnb uses ALL CAPS in some formats)
@@ -677,13 +711,13 @@ export async function fetchAirbnbEmails(
       }
 
       if (isUpdate) {
-        const flag = parseUpdateEmail(text)
+        const flag = parseUpdateEmail(text, date)
         if (flag) updated.push(flag)
       } else if (isChangeRequest) {
-        const req = parseChangeRequestEmail(text)
+        const req = parseChangeRequestEmail(text, date)
         if (req) change_requests.push(req)
       } else {
-        const parsed = parseConfirmationEmail(text)
+        const parsed = parseConfirmationEmail(text, date)
         if (!parsed) { dParseFail++; continue }
 
         const property_id = resolvePropertyId(text) ?? undefined
@@ -719,19 +753,18 @@ export async function fetchConfirmationByCode(
   const { threads = [] } = await gmailSearch(accessToken, query)
 
   for (const thread of threads) {
-    const text = await getThreadPlaintext(accessToken, thread.id)
-    if (!text) continue
+    for (const { text, date } of await getThreadMessages(accessToken, thread.id)) {
+      if (!text.includes(code)) continue
+      if (text.includes('SE ACTUALIZÓ') || text.includes('actualizó')) continue
 
-    if (!text.includes(code)) continue
-    if (text.includes('SE ACTUALIZÓ') || text.includes('actualizó')) continue
+      const parsed = parseConfirmationEmail(text, date)
+      if (!parsed || parsed.airbnb_code !== code) continue
 
-    const parsed = parseConfirmationEmail(text)
-    if (!parsed || parsed.airbnb_code !== code) continue
+      const property_id = resolvePropertyId(text) ?? undefined
+      if (!property_id) return null
 
-    const property_id = resolvePropertyId(text) ?? undefined
-    if (!property_id) return null
-
-    return { ...parsed, property_id }
+      return { ...parsed, property_id }
+    }
   }
   return null
 }

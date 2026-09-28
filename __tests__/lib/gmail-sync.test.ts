@@ -5,6 +5,8 @@ import {
   parseUpdateEmail,
   parseChangeRequestEmail,
   mapWithConcurrency,
+  inferReservationYear,
+  guestNameMatches,
 } from '@/lib/gmail-sync'
 
 // ── Fixture builders ──────────────────────────────────────────────────────────
@@ -158,6 +160,60 @@ describe('parseConfirmationEmail', () => {
   })
 })
 
+// ── Year inference (emails without a year) ─────────────────────────────────────
+
+// Regression: the year used to be inferred from TODAY, so importing an Oct-2025
+// confirmation ("llega el 1 oct") in May 2026 created a phantom 1–4 oct 2026 stay
+// in Apto 1303 — and a phantom cleaning — over a real booking.
+describe('inferReservationYear', () => {
+  it('uses the year the email was sent, not the current one', () => {
+    expect(inferReservationYear(10, 1, new Date('2025-10-01T17:49:22Z'))).toBe(2025)
+    expect(inferReservationYear(12, 6, new Date('2025-11-30T04:29:28Z'))).toBe(2025)
+  })
+
+  it('rolls into the next year for stays after New Year', () => {
+    expect(inferReservationYear(1, 2, new Date('2026-09-17T12:00:00Z'))).toBe(2027)
+  })
+
+  it('keeps a same-week stay in the same year', () => {
+    expect(inferReservationYear(9, 28, new Date('2026-09-30T12:00:00Z'))).toBe(2026)
+  })
+})
+
+describe('parseConfirmationEmail with the email date', () => {
+  it('places a short-format stay in the year the email was sent', () => {
+    const body = [
+      'Subject: Reservación confirmada: Ana Pérez llega el 1 oct.',
+      '',
+      'Código de confirmación: HMOLD12345',
+      'Huésped: Ana Pérez',
+      'mié, 1 oct',
+      'sáb, 4 oct',
+      'GANAS $1,008,071.00',
+    ].join('\n')
+    const r = parseConfirmationEmail(body, new Date('2025-10-01T17:49:22Z'))
+    expect(r!.check_in).toBe('2025-10-01')
+    expect(r!.check_out).toBe('2025-10-04')
+  })
+})
+
+// ── guestNameMatches ───────────────────────────────────────────────────────────
+
+describe('guestNameMatches', () => {
+  it('matches the first name(s) the email uses, accents and case aside', () => {
+    expect(guestNameMatches('Santiago Calderón Vargas', 'SANTIAGO')).toBe(true)
+    expect(guestNameMatches('Maria Fernanda Vargas Salazar', 'María Fernanda')).toBe(true)
+    expect(guestNameMatches('Eddie Williams', 'Eddie')).toBe(true)
+  })
+
+  // Regression: a substring match attached old requests to the wrong guests.
+  it('does not match a longer name that merely starts the same', () => {
+    expect(guestNameMatches('Carlos Niño', 'Carl')).toBe(false)
+    expect(guestNameMatches('Alexandra Marin', 'Alex')).toBe(false)
+    expect(guestNameMatches('Juan Sebastian Palacio Mosquera', 'Sebastian')).toBe(false)
+  })
+})
+
 // ── parseCancellationEmail ─────────────────────────────────────────────────────
 
 describe('parseCancellationEmail', () => {
@@ -220,6 +276,50 @@ describe('parseChangeRequestEmail', () => {
 
   it('returns null when the email is not a change request', () => {
     expect(parseChangeRequestEmail('correo normal')).toBeNull()
+  })
+
+  // Regression: Airbnb's current format ("14 de nov de 2026 - 17 de nov de 2026",
+  // whitespace-only lines after the city) left the new dates and the apartment empty,
+  // so an accepted date change could never be applied.
+  it('reads dates written as "14 de nov de 2026" and the apartment after blank lines', () => {
+    const text = [
+      'Subject: Santi quiere hacer un cambio en su reservación',
+      'SANTI QUIERE HACER UN CAMBIO EN SU RESERVACIÓN',
+      '   SANTI',
+      '   ',
+      '   Cartagena',
+      '   ',
+      '   Palmetto 1001 · Apartamento moderno, frente al mar en',
+      'FECHAS ORIGINALES',
+      '',
+      '14 de nov de 2026 - 17 de nov de 2026',
+      '',
+      'FECHAS SOLICITADAS',
+      '',
+      '20 de nov de 2026 - 23 de nov de 2026',
+      'https://www.airbnb.com.co/reservation/alteration/1766340639610329503',
+    ].join('\r\n')   // the real emails come with CRLF line endings
+    const sent = new Date('2026-09-03T02:03:33Z')
+    const r = parseChangeRequestEmail(text, sent)
+    expect(r!.property_name).toContain('Palmetto 1001')
+    expect(r!.check_in_from).toBe('2026-11-14')
+    expect(r!.check_out_from).toBe('2026-11-17')
+    expect(r!.check_in_to).toBe('2026-11-20')
+    expect(r!.check_out_to).toBe('2026-11-23')
+    expect(r!.email_date).toBe(sent.toISOString())
+  })
+
+  it('still reads the short "lun, 2 jun – jue, 5 jun" format, year from the email', () => {
+    const text = [
+      'Subject: Judah quiere hacer un cambio en su reservación',
+      'Fechas originales',
+      'lun, 29 dic – jue, 1 ene',
+      'Fechas solicitadas',
+      'mar, 30 dic – vie, 2 ene',
+    ].join('\n')
+    const r = parseChangeRequestEmail(text, new Date('2026-10-10T12:00:00Z'))
+    expect(r!.check_in_to).toBe('2026-12-30')
+    expect(r!.check_out_to).toBe('2027-01-02')
   })
 })
 

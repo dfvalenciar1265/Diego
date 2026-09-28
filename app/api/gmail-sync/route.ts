@@ -7,8 +7,10 @@
  *
  * For each sync run:
  *   1. Imports new "Reservación confirmada" emails → insert reservations + auto-create tasks
- *   2. Processes "Reservación actualizada" emails → flag existing reservations OR import if missing
- *   3. Processes "quiere hacer un cambio" emails → notes change request on reservation
+ *   2. Processes "quiere hacer un cambio" emails → notes change request on reservation
+ *   3. Processes "Reservación actualizada" emails → marks the request accepted, flags the
+ *      reservation, or imports it if missing (after 2, so a request and its acceptance
+ *      arriving in the same run pair up)
  *   4. Repairs active reservations left without their cleaning/preparation tasks
  *   5. Auto-completes tasks whose scheduled date is in the past
  */
@@ -20,6 +22,7 @@ import {
   fetchAirbnbEmails,
   fetchConfirmationByCode,
   resolvePropertyId,
+  guestNameMatches,
   type ParsedReservation,
   type ChangeRequestFlag,
 } from '@/lib/gmail-sync'
@@ -125,7 +128,17 @@ async function syncHandler(req: NextRequest, fromCron: boolean) {
     }
   }
 
-  // ── 2. Process "Reservación actualizada" emails ──────────────────────────
+  // ── 2. Process "[Guest] quiere hacer un cambio" emails ──────────────────
+  // Before the updates: when the request and its acceptance arrive in the same
+  // run, the acceptance must find the request already recorded.
+  // Reservations whose request is already reflected — their "actualizada" email
+  // below is that same change, not something new to verify.
+  const alreadyApplied = new Set<string>()
+  for (const req of emailResult.change_requests) {
+    changeRequestCount += await handleChangeRequest(db, req, alreadyApplied)
+  }
+
+  // ── 3. Process "Reservación actualizada" emails ──────────────────────────
   for (const flag of emailResult.updated) {
     // Check if reservation already in DB
     let existing: { id: string; notes: string | null; pending_change: unknown } | null = null
@@ -141,28 +154,34 @@ async function syncHandler(req: NextRequest, fromCron: boolean) {
     // but ONLY among reservations that already have a change request waiting to
     // be accepted — and only if exactly one matches.
     if (!existing && flag.guest_name && flag.guest_name !== 'Desconocido') {
-      const first = flag.guest_name.split(/\s+/)[0].toLowerCase()
+      // Name compared in JS (accent-insensitive); the rows with a pending change are few.
       const { data: cands } = await db
-        .from('reservations').select('id, notes, pending_change')
-        .ilike('guest_name', `%${first}%`)
+        .from('reservations').select('id, guest_name, notes, pending_change')
         .eq('status', 'confirmed')
         .not('pending_change', 'is', null)
       const waiting = (cands ?? []).filter(
-        c => !(c.pending_change as { accepted_at?: string | null } | null)?.accepted_at
+        c => guestNameMatches(c.guest_name, flag.guest_name) &&
+             !(c.pending_change as { accepted_at?: string | null } | null)?.accepted_at
       )
       if (waiting.length === 1) existing = waiting[0]
     }
 
     if (existing) {
-      const pending = existing.pending_change as { accepted_at?: string | null } | null
+      const pending = existing.pending_change as { accepted_at?: string | null; requested_at?: string } | null
       if (pending && !pending.accepted_at) {
+        // An update sent before the request was made belongs to an earlier change.
+        if (pending.requested_at && flag.email_date < pending.requested_at) continue
         // The guest's request was accepted — stamp it so the app can offer
         // "Aplicar" with the exact change (guests/dates) already parsed.
         await db.from('reservations')
-          .update({ pending_change: { ...pending, accepted_at: new Date().toISOString() } })
+          .update({ pending_change: { ...pending, accepted_at: flag.email_date } })
           .eq('id', existing.id)
         updatedCount++
       } else if (!pending) {
+        if (alreadyApplied.has(existing.id)) continue
+        // Long manual resyncs re-read old updates whose change was applied long
+        // ago; only recent ones (the cron's 7-day window) can still need a check.
+        if (Date.now() - new Date(flag.email_date).getTime() > 7 * 86400000) continue
         // No request on file (e.g. changed directly in Airbnb) — we can't know what
         // changed, so fall back to flagging it for a manual check.
         const alreadyFlagged = existing.notes?.includes('⚠️ Fechas actualizadas')
@@ -180,11 +199,6 @@ async function syncHandler(req: NextRequest, fromCron: boolean) {
         if (inserted) newCount++
       }
     }
-  }
-
-  // ── 3. Process "[Guest] quiere hacer un cambio" emails ──────────────────
-  for (const req of emailResult.change_requests) {
-    changeRequestCount += await handleChangeRequest(db, req)
   }
 
   // ── 4. Repair reservations without turnover tasks ───────────────────────
@@ -233,9 +247,12 @@ async function syncHandler(req: NextRequest, fromCron: boolean) {
  * wrong booking. The change is only offered for applying once the
  * "Se actualizó la reservación" email stamps accepted_at.
  */
-async function handleChangeRequest(db: ServiceDb, req: ChangeRequestFlag): Promise<number> {
-  const guestFirst = req.guest_name.split(/\s+/)[0].toLowerCase()
-  if (!guestFirst) return 0
+async function handleChangeRequest(
+  db: ServiceDb,
+  req: ChangeRequestFlag,
+  alreadyApplied: Set<string>,
+): Promise<number> {
+  if (!req.guest_name.trim()) return 0
 
   // Resolve the apartment from the email's property line ("Marina rey 1104 · Apartamento…")
   const { data: properties } = await db.from('properties').select('id, name')
@@ -252,19 +269,45 @@ async function handleChangeRequest(db: ServiceDb, req: ChangeRequestFlag): Promi
   const today = new Date().toISOString().slice(0, 10)
   let query = db
     .from('reservations')
-    .select('id, guest_name, pending_change')
-    .ilike('guest_name', `%${guestFirst}%`)
+    .select('id, guest_name, check_in, check_out, guests, pending_change')
     .eq('status', 'confirmed')
     .gte('check_out', today)          // only active/future stays can still change
   if (property) query = query.eq('property_id', property.id)
 
-  const { data: candidates } = await query
-  if (!candidates || candidates.length !== 1) return 0   // 0 or ambiguous → skip
+  const { data: rows } = await query
+  type Candidate = { id: string; guest_name: string; check_in: string; check_out: string; guests: number | null; pending_change: unknown }
+  let candidates = ((rows ?? []) as Candidate[]).filter(c => guestNameMatches(c.guest_name, req.guest_name))
+
+  // A request already reflected in one of them was handled (by the one-tap apply
+  // or by hand). Checked before narrowing: once applied, the booking no longer
+  // looks like the "from" side, and a namesake still would (two Julieths, 1303).
+  const asksSomething = req.guests_to != null || req.check_in_to != null || req.check_out_to != null
+  const reflects = (c: Candidate) => asksSomething &&
+    (req.guests_to == null || req.guests_to === c.guests) &&
+    (req.check_in_to == null || req.check_in_to === c.check_in) &&
+    (req.check_out_to == null || req.check_out_to === c.check_out)
+  const applied = candidates.filter(reflects)
+  if (applied.length > 0) {
+    for (const c of applied) alreadyApplied.add(c.id)
+    return 0
+  }
+
+  // Two guests with the same first name: keep the one whose CURRENT booking is
+  // what the request says it changes from.
+  if (candidates.length > 1) {
+    candidates = candidates.filter(c =>
+      (req.guests_from == null || c.guests === req.guests_from) &&
+      (req.check_in_from == null || c.check_in === req.check_in_from) &&
+      (req.check_out_from == null || c.check_out === req.check_out_from))
+  }
+  if (candidates.length !== 1) return 0   // 0 or still ambiguous → skip
 
   const target = candidates[0]
-  const existing = target.pending_change as { description?: string; accepted_at?: string | null } | null
+  const existing = target.pending_change as { description?: string; requested_at?: string } | null
   // Don't clobber a change that's already recorded and still waiting
   if (existing && existing.description === req.change_description) return 0
+  // Don't let an older request (re-read by a long resync) replace a newer one
+  if (existing?.requested_at && existing.requested_at > req.email_date) return 0
 
   const pending = {
     guests_from:    req.guests_from,
@@ -275,7 +318,7 @@ async function handleChangeRequest(db: ServiceDb, req: ChangeRequestFlag): Promi
     check_out_to:   req.check_out_to,
     description:    req.change_description,
     alteration_url: req.alteration_url,
-    requested_at:   new Date().toISOString(),
+    requested_at:   req.email_date,
     accepted_at:    null,
   }
 
@@ -308,7 +351,11 @@ async function insertReservationIfNew(
     .from('reservations').insert(r).select('id').single()
   if (error || !inserted) return false
 
-  // Auto-create cleaning + preparation tasks (a failure here is repaired by step 4)
+  // Auto-create cleaning + preparation tasks (a failure here is repaired by step 4).
+  // A stay that already ended (old email caught by a long resync) needs none —
+  // they'd only pile up as stale pending preparations.
+  const today = new Date().toISOString().slice(0, 10)
+  if (r.check_out < today) return true
   const reservation = { ...r, id: inserted.id }
   const { error: taskError } = await db.from('tasks')
     .insert([cleaningTaskFor(reservation), preparationTaskFor(reservation)])
