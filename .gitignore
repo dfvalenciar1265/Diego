@@ -54,3 +54,9 @@ checkov-stderr.txt
 semgrep-report.json
 security-report-*.html
 precommit-scan-*.md
+
+# playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
