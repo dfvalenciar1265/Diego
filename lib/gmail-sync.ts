@@ -76,7 +76,7 @@ const ROOM_TO_PROPERTY: Record<string, string> = {
   '857001462739188238': 'b73c70dd-204b-42f1-a1e1-674de53eca84', // Conquistador 1821
   '675576989308773376': '4b10f347-cf1b-4b89-81b6-b73c41d697a3', // Apto 1303
   '1382459783562419089': '2be6deec-8061-453e-b1ae-ce0bd177fadd', // Cartagena Beach Crespo 1214
-  '1790943886451737230': '0b6170ff-6049-4e21-b6bc-c4237cc2c0f6', // Mar Adentro 1305 (ID del borrador; confirmar al publicar)
+  '1790943886451737230': '0b6170ff-6049-4e21-b6bc-c4237cc2c0f6', // Mar Adentro 1305
 }
 
 /**
