@@ -10,6 +10,7 @@ export type BuildingContact = { method: 'whatsapp' | 'email'; targets: string[] 
  */
 export const BUILDING_CONTACTS: Record<string, BuildingContact> = {
   'Marina Rey 1104':   { method: 'whatsapp', targets: ['573053591169'] },
+  'Mar Adentro 1305':  { method: 'whatsapp', targets: ['573205325033'] },
   'Tocahagua 1208':    { method: 'whatsapp', targets: ['573117135074'] },
   'Tocahagua 708':     { method: 'whatsapp', targets: ['573117135074'] },
   'Apto 1303':         { method: 'whatsapp', targets: ['573014401513'] },                       // "Torres 1303"

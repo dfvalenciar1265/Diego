@@ -2,6 +2,7 @@
 export const CLEANING_PRICES: Record<string, number> = {
   'Apto 1303':         55000,
   'Conquistador 1821': 45000,
+  'Mar Adentro 1305':  45000,
   'Marina Rey 1104':   45000,
   'Palmetto 1001':     45000,
   'Tocahagua 1208':    35000,
