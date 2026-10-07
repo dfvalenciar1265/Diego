@@ -76,6 +76,7 @@ const ROOM_TO_PROPERTY: Record<string, string> = {
   '857001462739188238': 'b73c70dd-204b-42f1-a1e1-674de53eca84', // Conquistador 1821
   '675576989308773376': '4b10f347-cf1b-4b89-81b6-b73c41d697a3', // Apto 1303
   '1382459783562419089': '2be6deec-8061-453e-b1ae-ce0bd177fadd', // Cartagena Beach Crespo 1214
+  '1790943886451737230': '0b6170ff-6049-4e21-b6bc-c4237cc2c0f6', // Mar Adentro 1305
 }
 
 /**
@@ -88,6 +89,9 @@ const NAME_ALIASES: { needle: string; property_id: string }[] = [
   // Cartagena Beach Crespo 1214 — Airbnb listing "Loft Moderno vista Mar … Ángel del Mar"
   { needle: 'angel del mar',          property_id: '2be6deec-8061-453e-b1ae-ce0bd177fadd' },
   { needle: 'loft moderno vista mar', property_id: '2be6deec-8061-453e-b1ae-ce0bd177fadd' },
+  // Mar Adentro 1305 — Airbnb listing "Bocagrande · 2 hab, 2 baños · piscina en azotea"
+  { needle: 'mar adentro',            property_id: '0b6170ff-6049-4e21-b6bc-c4237cc2c0f6' },
+  { needle: 'piscina en azotea',      property_id: '0b6170ff-6049-4e21-b6bc-c4237cc2c0f6' },
 ]
 
 const stripAccents = (s: string) =>

@@ -25,8 +25,9 @@ const PROPERTY_ORDER: Record<string, number> = {
   'Marina Rey 1104':            4,
   'Conquistador 1821':          5,
   'Apto 1303':                  6,
-  'Cartagena Beach Crespo 1214':7,
-  'Cibeles':                    8,
+  'Mar Adentro 1305':           7,
+  'Cartagena Beach Crespo 1214':8,
+  'Cibeles':                    9,
 }
 
 function sortProperties(list: Property[]): Property[] {
