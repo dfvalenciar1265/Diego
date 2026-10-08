@@ -62,7 +62,7 @@ export async function listMaintenance(
 
 export async function createMaintenance(
   db: Db,
-  input: { propertyId: string; title: string; description: string; priority: MaintenancePriority },
+  input: { propertyId: string; title: string; description: string; priority: MaintenancePriority; reportedBy?: string },
 ): Promise<{ created: boolean; issue: MaintenanceOut }> {
   const { data: open, error: openError } = await db
     .from('maintenance').select(FIELDS)
@@ -78,7 +78,8 @@ export async function createMaintenance(
       title: input.title,
       description: input.description,
       priority: input.priority,
-      reported_by: await diegoId(db),
+      // The MCP knows who is connected; the GPT's shared key doesn't, so those stay Diego's
+      reported_by: input.reportedBy ?? await diegoId(db),
       notes: 'Creado desde ChatGPT.',
     })
     .select(FIELDS)

@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { checkApiKey } from './auth'
+import type { ServiceResult } from './service'
 
 export const jsonResponse = (data: unknown, status = 200) => NextResponse.json(data, { status })
 export const errorResponse = (status: number, error: string) => NextResponse.json({ error }, { status })
@@ -26,4 +27,9 @@ export async function readJson(req: NextRequest): Promise<unknown> {
   } catch {
     return undefined
   }
+}
+
+/** Resultado del servicio → respuesta HTTP del API del GPT. */
+export function toResponse(result: ServiceResult): NextResponse {
+  return result.ok ? jsonResponse(result.data, result.status) : errorResponse(result.status, result.error)
 }
