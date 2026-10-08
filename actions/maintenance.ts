@@ -2,6 +2,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import type { MaintenanceIssue, MaintenanceStatus } from '@/lib/types'
+import { advanceNextDue } from '@/lib/maintenance-schedule'
 
 export async function getMaintenance(filters?: {
   status?: MaintenanceStatus
@@ -102,15 +103,8 @@ export async function completeScheduledMaintenance(
     .eq('id', id)
     .single()
 
-  const today = new Date()
-  const todayStr = today.toISOString().slice(0, 10)
-  let nextDue: string | null = null
-  const interval = issue?.interval_months
-  if (interval && interval > 0) {
-    const d = new Date(today)
-    d.setMonth(d.getMonth() + interval)
-    nextDue = d.toISOString().slice(0, 10)
-  }
+  const todayStr = new Date().toISOString().slice(0, 10)
+  const nextDue = advanceNextDue(todayStr, issue?.interval_months)
 
   const { error } = await supabase
     .from('maintenance')
