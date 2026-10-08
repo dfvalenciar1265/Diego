@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { lookupEmailByName } from '@/actions/team'
+import { safeNextPath } from '@/lib/safe-next'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -37,7 +38,8 @@ export default function LoginPage() {
         return
       }
 
-      router.push('/')
+      // Back to where the sign-in was asked for (e.g. the "Autorizar" screen), else home
+      router.push(safeNextPath(new URLSearchParams(window.location.search).get('next')) ?? '/')
     } finally {
       setLoading(false)
     }
