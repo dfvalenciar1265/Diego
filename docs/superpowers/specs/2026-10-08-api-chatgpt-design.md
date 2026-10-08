@@ -164,8 +164,9 @@ Si no se resuelve, se compara igual por código y se reporta el apartamento como
 Airbnb `cancelled` y la app `cancelled` (o inexistente) → coincide, no se reporta.
 Las diferencias de nombre (tildes, apellidos, mayúsculas) no se reportan.
 
-**"Hoy"** en todo el API (fecha de las notas, `last_done`, `resolved_at` se guarda en ISO) es la fecha
-en Colombia (`America/Bogota`), no la de UTC: después de las 7 p. m. UTC ya es otro día.
+**"Hoy"** en el API (fecha de las notas y `last_done`) es la fecha en Colombia (`America/Bogota`),
+no la de UTC: desde las 7 p. m. de Colombia, en UTC ya es el día siguiente. `resolved_at` se sigue
+guardando como fecha y hora ISO, igual que en la app.
 
 ## 6. Nota en la reserva (`lib/gpt-api/notes.ts`)
 
