@@ -96,7 +96,7 @@ Cuerpo: `{ status?, note?, cost? }` (al menos uno).
 - Id inexistente → `404`.
 
 ### `GET /api/gpt/reservations?from=&to=&property=`
-Reservas de la app que se cruzan con el rango (`check_in <= to` y `check_out >= from`), de todos los estados
+Reservas de la app con noches dentro del rango (`check_in <= to` y `check_out > from`; por defecto de hoy a 60 días), de todos los estados
 y orígenes, para que el GPT pueda consultarlas. Devuelve: `airbnb_code`, `guest_name`, `property`,
 `check_in`, `check_out`, `guests`, `status`, `source`, `notes`. **Nunca** `amount`.
 
@@ -112,7 +112,8 @@ Cuerpo:
   ]
 }
 ```
-- `code`, `guests` opcionales; `status` ∈ `confirmed | cancelled`.
+- `code`, `guests` opcionales; `status` ∈ `confirmed | cancelled` (por defecto `confirmed`).
+- `dry_run: true` (opcional) = solo mirar: devuelve las diferencias sin dejar ni quitar notas.
 - Lista vacía → `400` ("La lista de Airbnb llegó vacía; no comparo para no marcar todo como faltante").
 - Rango máximo 120 días; máximo 300 reservas; `check_out > check_in`.
 
@@ -121,7 +122,7 @@ Respuesta:
 {
   "summary": { "airbnb": 14, "app": 13, "matching": 11, "differences": 3, "unmatched": 0 },
   "differences": [
-    { "type": "dates_differ", "code": "HMABC12345", "guest_name": "Laura",
+    { "types": ["dates_differ"], "code": "HMABC12345", "guest_name": "Laura",
       "property": "Palmetto 1001",
       "airbnb": { "check_in": "2026-10-10", "check_out": "2026-10-13" },
       "app":    { "check_in": "2026-10-10", "check_out": "2026-10-12" },
@@ -135,7 +136,11 @@ Respuesta:
 
 ## 5. Reglas de comparación (`lib/gpt-api/compare.ts`)
 
-**Reservas de la app que entran:** `source = 'airbnb'`, que se cruzan con `[from, to]`, en estado
+**Reservas de la app que se cargan:** las que se cruzan con el rango ampliado 30 días a cada lado (por si las
+fechas cambiaron mucho) más las que tienen alguno de los códigos de la lista. "Se cruza con el rango" = tiene
+noches dentro: `check_in <= to` y `check_out > from`.
+
+**Reservas de la app que entran a la comparación:** `source = 'airbnb'`, que se cruzan con `[from, to]`, en estado
 `confirmed` o `cancelled` (las canceladas sirven para emparejar, no para reportar "no apareció").
 Quedan fuera los bloqueos (`status = 'blocked'`) y las reservas directas (`source = 'direct'`): son
 reservas directas y no aparecen como reservas en Airbnb.
@@ -150,7 +155,7 @@ Si no se resuelve, se compara igual por código y se reporta el apartamento como
    cruzan, entre las reservas de la app aún no emparejadas. Solo si hay **exactamente un** candidato;
    si hay 0 → se trata como "falta en la app"; si hay más de 1 → va a `unmatched` con el motivo.
 
-**Tipos de diferencia** (una reserva puede tener varias; se reportan juntas en un solo `message`):
+**Tipos de diferencia** (una reserva puede tener varias: van todas en `types` y juntas en un solo `message`):
 
 | `type` | Condición | Nota en la app |
 |---|---|---|
@@ -206,8 +211,7 @@ guardando como fecha y hora ISO, igual que en la app.
    de `/properties`; prioridades urgent/normal/scheduled con los criterios del contexto compartido;
    confirmar con Diego antes de crear o cerrar pendientes; mostrar las diferencias en tabla; nunca
    inventar arreglos.
-3. Acciones → Importar desde URL → `/api/gpt/openapi.json` en el dominio de producción de la app en Vercel
-   (la guía lleva la dirección completa, que se confirma en Vercel al implementar).
+3. Acciones → Importar desde URL → `https://diegoprueba.vercel.app/api/gpt/openapi.json` (dominio de producción).
 4. Autenticación → Clave de API → Bearer → pegar la clave.
 5. **Texto para el modo agente** (incluido en la guía): entrar a Airbnb → Hoy → Reservaciones, rango de
    fechas, y devolver la lista en un bloque con columnas fijas (código, huésped, anuncio, llegada, salida,
