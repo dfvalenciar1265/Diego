@@ -98,12 +98,12 @@ describe('parseConfirmationEmail', () => {
       'sáb, 30 may',
       'GANAS $500,000',
     ].join('\n')
-    const r = parseConfirmationEmail(body)
+    // The year is inferred from when the email was sent. Without that date the parser
+    // falls back to today, and from 3–6 June each year "26 may" would land a year later.
+    const r = parseConfirmationEmail(body, new Date('2026-05-10T15:00:00Z'))
     expect(r).not.toBeNull()
-    // both dates land in the same (inferred) year, check_in < check_out
-    expect(r!.check_in < r!.check_out).toBe(true)
-    expect(r!.check_in.endsWith('-05-26')).toBe(true)
-    expect(r!.check_out.endsWith('-05-30')).toBe(true)
+    expect(r!.check_in).toBe('2026-05-26')
+    expect(r!.check_out).toBe('2026-05-30')
   })
 
   it('stores only times + cancellation in notes (no guests/code)', () => {
@@ -143,10 +143,12 @@ describe('parseConfirmationEmail', () => {
         'vie, 2 oct',
         'GANAS $660,585.84',
       ].join('\n')
-      const r = parseConfirmationEmail(body)
+      // Sent before the stay, as real confirmations are. Relying on today's date made this
+      // fail from 8 Oct 2026: "30 sept" fell behind the 7-day floor and moved to 2027.
+      const r = parseConfirmationEmail(body, new Date('2026-09-20T15:00:00Z'))
       expect(r).not.toBeNull()
-      expect(r!.check_in.endsWith('-09-30')).toBe(true)
-      expect(r!.check_out.endsWith('-10-02')).toBe(true)
+      expect(r!.check_in).toBe('2026-09-30')
+      expect(r!.check_out).toBe('2026-10-02')
     })
 
     it('still parses the "sep" and "septiembre" spellings', () => {
