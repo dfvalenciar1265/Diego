@@ -3,6 +3,28 @@
 Cómo conectar tu GPT "AirAdmin" a la app para manejar mantenimiento y revisar que las reservas
 de Airbnb coincidan con la app. Diseño: `docs/superpowers/specs/2026-10-08-api-chatgpt-design.md`.
 
+## 0. Recomendado: conectar AirAdmin como complemento (MCP)
+
+OpenAI retira los GPT personalizados el **11 de diciembre de 2026**. El reemplazo es el servidor
+MCP de la app, que hace lo mismo que el GPT y además sabe quién está conectado.
+
+**En ChatGPT (una sola vez):**
+1. **Complementos** → **Añadir** → **Crear servidor MCP personalizado**.
+2. Nombre `AirAdmin`, descripción `Mantenimiento y revisión de reservas de mis apartamentos`.
+3. Conexión: punto público `https://diegoprueba.vercel.app/api/mcp`. Autenticación: **OAuth**.
+4. Acepta el aviso y **Crear como complemento**.
+5. ChatGPT abre AirAdmin: inicia sesión con tu nombre y contraseña y pulsa **Autorizar**.
+
+**En Claude:** Configuración → Conectores → Añadir conector personalizado → la misma URL; al
+conectar, inicia sesión y autoriza igual.
+
+Solo los **administradores** de AirAdmin pueden conectarse. ChatGPT te pide confirmar antes de
+cada herramienta que escribe (crear o cerrar pendientes, dejar notas). Las herramientas se llaman
+`list_properties`, `list_maintenance`, `create_maintenance`, `update_maintenance`,
+`list_reservations` y `compare_reservations`; el uso diario (secciones 4 y 5) es igual que con el GPT.
+
+Las secciones 1 a 3 son del GPT anterior, que sigue funcionando hasta el 11 de diciembre.
+
 ## 1. Poner la clave en Vercel (una sola vez)
 
 1. Vercel → proyecto de la app → **Settings → Environment Variables**.
