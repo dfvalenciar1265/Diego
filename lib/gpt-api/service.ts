@@ -3,13 +3,19 @@
  * y refresca las pantallas afectadas. Las rutas /api/gpt/* y /api/mcp solo traducen el resultado.
  */
 import { revalidatePath } from 'next/cache'
+import { guestNameMatches } from '@/lib/gmail-sync'
 import { compareReservations } from './compare'
+import { shortDate } from './dates'
 import type { Db } from './db'
 import { createMaintenance, listMaintenance, updateMaintenance } from './maintenance'
 import { listProperties, resolveProperty } from './properties'
 import { applyDiffNotes, listReservations, loadForCompare } from './reservations'
 import {
+  checkinSlot, checkoutSlot, reservationsTurningOver, setTaskNotes, withCheckinTime, withCheckoutTime,
+} from './turnovers'
+import {
   isUuid, parseCompareBody, parseMaintenanceFilter, parseMaintenancePatch, parseNewMaintenance, parseRange,
+  parseTimeChange, parseTurnoverDate,
 } from './validate'
 
 export type ServiceResult<T = unknown> =
@@ -135,3 +141,74 @@ export async function compareReservationsTool(db: Db, body: unknown, today: stri
     notes_cleared: cleared,
   })
 }
+
+function refreshTurnovers() {
+  revalidatePath('/')
+  revalidatePath('/cleaning')
+  revalidatePath('/tasks')
+}
+
+/** Salidas y llegadas de un día con su hora actual (por defecto hoy). */
+export async function turnoversTool(db: Db, query: { date?: string | null }, today: string) {
+  const date = parseTurnoverDate(query.date, today)
+  if (!date.ok) return failed(400, date.error)
+  const properties = await listProperties(db)
+  const nameOf = (id: string) => properties.find(p => p.id === id)?.name ?? '—'
+  const [checkouts, checkins] = await Promise.all([
+    reservationsTurningOver(db, 'checkout', date.value),
+    reservationsTurningOver(db, 'checkin', date.value),
+  ])
+  return done({
+    date: date.value,
+    checkouts: checkouts.map(r => checkoutSlot(r, date.value, nameOf(r.property_id))),
+    checkins: checkins.map(r => checkinSlot(r, nameOf(r.property_id))),
+  })
+}
+
+/**
+ * Cambia la hora de salida (tarea de limpieza) o de llegada (tarea de preparación) de la reserva
+ * que sale o llega ese día en el apartamento, igual que los lápices de la portada.
+ */
+async function changeTurnoverTime(db: Db, kind: 'checkout' | 'checkin', body: unknown, today: string) {
+  const input = parseTimeChange(body, today)
+  if (!input.ok) return failed(400, input.error)
+  const property = resolveProperty(input.value.property, await listProperties(db))
+  if (!property) return unknownProperty(input.value.property)
+  const { date, time, guest_name: guest } = input.value
+  const word = kind === 'checkout' ? 'salida' : 'llegada'
+
+  let matches = await reservationsTurningOver(db, kind, date, property.id)
+  if (guest) matches = matches.filter(r => guestNameMatches(r.guest_name, guest) || guestNameMatches(guest, r.guest_name))
+  if (matches.length === 0) {
+    return failed(404, `${property.name} no tiene ${word}${guest ? ` de ${guest}` : ''} el ${shortDate(date)}.`)
+  }
+  if (matches.length > 1) {
+    return failed(409, `${property.name} tiene ${matches.length} ${word}s el ${shortDate(date)} (${matches.map(r => r.guest_name).join(', ')}). Indica el huésped en guest_name.`)
+  }
+  const reservation = matches[0]
+
+  if (kind === 'checkout') {
+    const slot = checkoutSlot(reservation, date, property.name)
+    if (!slot.cleaning_task_id) {
+      return failed(409, `La salida de ${slot.guest_name} en ${property.name} no tiene tarea de limpieza el ${shortDate(date)}; corre la sincronización de Gmail para repararla.`)
+    }
+    await setTaskNotes(db, slot.cleaning_task_id, withCheckoutTime(time))
+    refreshTurnovers()
+    return done({ date, ...slot, previous_time: slot.time, time, time_source: 'app' })
+  }
+
+  const slot = checkinSlot(reservation, property.name)
+  if (!slot.preparation_task_id) {
+    return failed(409, `La llegada de ${slot.guest_name} a ${property.name} no tiene tarea de preparación; corre la sincronización de Gmail para repararla.`)
+  }
+  const task = reservation.tasks?.find(t => t.id === slot.preparation_task_id)
+  await setTaskNotes(db, slot.preparation_task_id, withCheckinTime(task?.notes ?? null, time))
+  refreshTurnovers()
+  return done({ date, ...slot, previous_time: slot.time, time, time_source: 'app' })
+}
+
+export const setCheckoutTimeTool = (db: Db, body: unknown, today: string) =>
+  changeTurnoverTime(db, 'checkout', body, today)
+
+export const setCheckinTimeTool = (db: Db, body: unknown, today: string) =>
+  changeTurnoverTime(db, 'checkin', body, today)

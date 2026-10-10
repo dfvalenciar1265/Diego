@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   parseCompareBody, parseRange, parseNewMaintenance, parseMaintenancePatch,
-  parseMaintenanceFilter, isUuid,
+  parseMaintenanceFilter, isUuid, parseTurnoverDate, parseTimeChange,
 } from '@/lib/gpt-api/validate'
 
 const item = {
@@ -113,5 +113,37 @@ describe('isUuid', () => {
   it('recognizes Supabase ids', () => {
     expect(isUuid('2be6deec-8061-453e-b1ae-ce0bd177fadd')).toBe(true)
     expect(isUuid('123')).toBe(false)
+  })
+})
+
+describe('parseTurnoverDate', () => {
+  it('defaults to today and accepts up to 30 days ahead', () => {
+    expect(parseTurnoverDate(null, '2026-10-10')).toEqual({ ok: true, value: '2026-10-10' })
+    expect(parseTurnoverDate('2026-11-09', '2026-10-10')).toEqual({ ok: true, value: '2026-11-09' })
+  })
+
+  it('rejects the past, far dates and bad formats', () => {
+    expect(parseTurnoverDate('2026-10-09', '2026-10-10')).toEqual({ ok: false, error: 'Solo se pueden ver o cambiar horas de hoy en adelante.' })
+    expect(parseTurnoverDate('2026-11-10', '2026-10-10').ok).toBe(false)
+    expect(parseTurnoverDate('10/10/2026', '2026-10-10').ok).toBe(false)
+  })
+})
+
+describe('parseTimeChange', () => {
+  it('reads apartment, time, optional date and guest', () => {
+    expect(parseTimeChange({ property: 'Palmetto 1001', time: '10am' }, '2026-10-10')).toEqual({
+      ok: true, value: { property: 'Palmetto 1001', time: '10:00', date: '2026-10-10', guest_name: null },
+    })
+    expect(parseTimeChange({ property: 'Palmetto 1001', time: '6:30 pm', date: '2026-10-11', guest_name: 'Laura' }, '2026-10-10')).toEqual({
+      ok: true, value: { property: 'Palmetto 1001', time: '18:30', date: '2026-10-11', guest_name: 'Laura' },
+    })
+  })
+
+  it('explains what is wrong', () => {
+    expect(parseTimeChange({ property: 'Palmetto 1001', time: 'tarde' }, '2026-10-10')).toEqual({
+      ok: false, error: '"time" debe ser una hora como 10am, 3:30 pm o 15:30.',
+    })
+    expect(parseTimeChange({ time: '10am' }, '2026-10-10')).toEqual({ ok: false, error: 'Falta "property".' })
+    expect(parseTimeChange({ property: 'Palmetto 1001', time: '10am', date: 20261011 }, '2026-10-10').ok).toBe(false)
   })
 })

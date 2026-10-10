@@ -25,15 +25,16 @@ describe('registerTools', () => {
   const calls: { name: string; config: { annotations?: { readOnlyHint?: boolean } } }[] = []
   registerTools({ registerTool: (name: string, config: never) => { calls.push({ name, config }) } } as unknown as McpServer)
 
-  it('exposes the six GPT actions', () => {
+  it('exposes the six GPT actions plus the check-out / check-in times', () => {
     expect(calls.map(c => c.name)).toEqual([
       'list_properties', 'list_maintenance', 'create_maintenance',
       'update_maintenance', 'list_reservations', 'compare_reservations',
+      'list_turnovers', 'set_checkout_time', 'set_checkin_time',
     ])
   })
 
   it('marks only the reading tools as read-only', () => {
     const readOnly = calls.filter(c => c.config.annotations?.readOnlyHint).map(c => c.name)
-    expect(readOnly).toEqual(['list_properties', 'list_maintenance', 'list_reservations'])
+    expect(readOnly).toEqual(['list_properties', 'list_maintenance', 'list_reservations', 'list_turnovers'])
   })
 })

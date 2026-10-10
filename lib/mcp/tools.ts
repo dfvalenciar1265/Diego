@@ -1,5 +1,6 @@
 /**
- * Herramientas del MCP de AirAdmin: las mismas 6 del GPT, sobre lib/gpt-api/service.ts.
+ * Herramientas del MCP de AirAdmin: las 6 del GPT más las horas de salida y llegada, sobre
+ * lib/gpt-api/service.ts.
  * Las de solo lectura van con readOnlyHint; ChatGPT confirma con el usuario las demás.
  * Los esquemas describen los tipos; la validación con mensajes en español la hace el servicio.
  */
@@ -9,7 +10,8 @@ import { todayInBogota } from '@/lib/gpt-api/dates'
 import { serviceDb } from '@/lib/gpt-api/db'
 import {
   compareReservationsTool, createMaintenanceTool, listMaintenanceTool, listReservationsTool,
-  propertiesTool, updateMaintenanceTool, type ServiceResult,
+  propertiesTool, setCheckinTimeTool, setCheckoutTimeTool, turnoversTool, updateMaintenanceTool,
+  type ServiceResult,
 } from '@/lib/gpt-api/service'
 import { memberFromAuth } from './auth'
 
@@ -25,6 +27,12 @@ const airbnbReservation = z.object({
   check_out: date,
   guests: z.number().int().nullable().optional(),
   status: z.enum(['confirmed', 'cancelled']).optional(),
+})
+const timeChange = z.object({
+  property: z.string().describe('Nombre exacto del apartamento (list_properties)'),
+  time: z.string().describe('Hora, por ejemplo 10am, 3:30 pm o 15:30'),
+  date: date.optional().describe('Fecha AAAA-MM-DD; por defecto hoy, hasta 30 días adelante'),
+  guest_name: z.string().optional().describe('Solo si ese día hay más de una reserva en el apartamento'),
 })
 
 /** Resultado del servicio → resultado de herramienta MCP (errores con isError, en español). */
@@ -109,4 +117,27 @@ export function registerTools(server: McpServer) {
     }),
     annotations: { ...WRITE, idempotentHint: true },
   }, (body) => run(() => compareReservationsTool(serviceDb(), body, todayInBogota())))
+
+  server.registerTool('list_turnovers', {
+    title: 'Salidas y llegadas del día',
+    description: 'Salidas (check-out) y llegadas (check-in) de un día con su hora actual, como "Salidas de hoy" y "Preparación hoy" de la app. time_source: app = la fijó alguien en la app; reservation = la del correo de Airbnb; default = 12:00 salida / 15:00 llegada. Por defecto hoy.',
+    inputSchema: z.object({
+      date: date.optional().describe('Fecha AAAA-MM-DD; por defecto hoy, hasta 30 días adelante'),
+    }),
+    annotations: READ,
+  }, ({ date: day }) => run(() => turnoversTool(serviceDb(), { date: day }, todayInBogota())))
+
+  server.registerTool('set_checkout_time', {
+    title: 'Cambiar hora de salida',
+    description: 'Cambia la hora de salida (check-out) del huésped que sale ese día del apartamento. Queda en la tarea de limpieza, igual que el lápiz de "Salidas de hoy". Por defecto hoy.',
+    inputSchema: timeChange,
+    annotations: { ...WRITE, idempotentHint: true },
+  }, (body) => run(() => setCheckoutTimeTool(serviceDb(), body, todayInBogota())))
+
+  server.registerTool('set_checkin_time', {
+    title: 'Cambiar hora de llegada (preparación)',
+    description: 'Cambia la hora de llegada (check-in) del huésped que llega ese día al apartamento, la que usa el equipo para la preparación. Queda en la tarea de preparación conservando su nota, igual que el lápiz de "Preparación hoy". Por defecto hoy.',
+    inputSchema: timeChange,
+    annotations: { ...WRITE, idempotentHint: true },
+  }, (body) => run(() => setCheckinTimeTool(serviceDb(), body, todayInBogota())))
 }
