@@ -3,6 +3,7 @@
  */
 import type { MaintenancePriority, MaintenanceStatus } from '@/lib/types'
 import { isIsoDate, addDays, daysBetween } from './dates'
+import { parseClockTime } from './turnovers'
 
 export type Parsed<T> = { ok: true; value: T } | { ok: false; error: string }
 type Failure = { ok: false; error: string }
@@ -20,6 +21,7 @@ export const LIMITS = {
   property: 200,
   code: 20,
   guests: 50,
+  turnoverDays: 30,
 } as const
 
 const PRIORITIES = ['urgent', 'normal', 'scheduled'] as const
@@ -58,6 +60,14 @@ export interface MaintenancePatch {
   status?: MaintenanceStatus
   note?: string
   cost?: number
+}
+
+/** Cambio de hora de salida o de llegada de un apartamento en un día. */
+export interface TimeChangeInput {
+  property: string
+  time: string          // "HH:MM"
+  date: string          // YYYY-MM-DD
+  guest_name: string | null
 }
 
 /** `active` = abiertos + en progreso. */
@@ -199,4 +209,32 @@ export function parseMaintenanceFilter(status: string | null): Parsed<Maintenanc
   if (!status) return ok('active')
   if (!oneOf(status, FILTERS)) return fail('"status" debe ser "active", "open", "in_progress" o "resolved".')
   return ok(status)
+}
+
+/** Día de las salidas/llegadas: por defecto hoy; de hoy a 30 días adelante. */
+export function parseTurnoverDate(date: string | null | undefined, today: string): Parsed<string> {
+  const d = date || today
+  if (!isIsoDate(d)) return fail('"date" debe ser una fecha AAAA-MM-DD.')
+  if (d < today) return fail('Solo se pueden ver o cambiar horas de hoy en adelante.')
+  if (daysBetween(today, d) > LIMITS.turnoverDays) return fail(`Solo hasta ${LIMITS.turnoverDays} días adelante.`)
+  return ok(d)
+}
+
+export function parseTimeChange(body: unknown, today: string): Parsed<TimeChangeInput> {
+  if (!isRecord(body)) return fail('El cuerpo debe ser un objeto JSON.')
+  const property = text(body.property, 'property', LIMITS.name, true)
+  if (!property.ok) return property
+  const rawTime = text(body.time, 'time', 20, true)
+  if (!rawTime.ok) return rawTime
+  const time = parseClockTime(rawTime.value)
+  if (!time) return fail('"time" debe ser una hora como 10am, 3:30 pm o 15:30.')
+  const rawDate = body.date
+  if (rawDate !== undefined && rawDate !== null && typeof rawDate !== 'string') {
+    return fail('"date" debe ser una fecha AAAA-MM-DD.')
+  }
+  const date = parseTurnoverDate(rawDate, today)
+  if (!date.ok) return date
+  const guest = text(body.guest_name, 'guest_name', LIMITS.name, false)
+  if (!guest.ok) return guest
+  return ok({ property: property.value, time, date: date.value, guest_name: guest.value || null })
 }
