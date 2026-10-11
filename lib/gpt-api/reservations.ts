@@ -8,7 +8,7 @@ import type { Db } from './db'
 import { clearDiffNote, setDiffNote } from './notes'
 import type { Range } from './validate'
 
-const FIELDS = 'id, airbnb_code, guest_name, property_id, check_in, check_out, guests, status, source, notes'
+const FIELDS = 'id, airbnb_code, guest_name, property_id, check_in, check_out, guests, amount, status, source, notes'
 
 /** Reservas con noches dentro del rango (check_in <= to y check_out > from). */
 export async function listReservations(db: Db, range: Range, propertyId?: string): Promise<AppReservation[]> {

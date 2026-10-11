@@ -16,6 +16,7 @@ export interface AppReservation {
   check_in: string
   check_out: string
   guests: number | null
+  amount?: number | null
   status: ReservationStatus
   source: ReservationSource
   notes: string | null

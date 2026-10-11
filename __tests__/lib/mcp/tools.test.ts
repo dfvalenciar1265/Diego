@@ -22,7 +22,7 @@ describe('toToolResult', () => {
 })
 
 describe('registerTools', () => {
-  const calls: { name: string; config: { annotations?: { readOnlyHint?: boolean } } }[] = []
+  const calls: { name: string; config: { annotations?: { readOnlyHint?: boolean; destructiveHint?: boolean } } }[] = []
   registerTools({ registerTool: (name: string, config: never) => { calls.push({ name, config }) } } as unknown as McpServer)
 
   it('exposes the six GPT actions plus the check-out / check-in times', () => {
@@ -30,11 +30,16 @@ describe('registerTools', () => {
       'list_properties', 'list_maintenance', 'create_maintenance',
       'update_maintenance', 'list_reservations', 'compare_reservations',
       'list_turnovers', 'set_checkout_time', 'set_checkin_time',
+      'create_reservation', 'update_reservation', 'cancel_reservation',
     ])
   })
 
   it('marks only the reading tools as read-only', () => {
     const readOnly = calls.filter(c => c.config.annotations?.readOnlyHint).map(c => c.name)
     expect(readOnly).toEqual(['list_properties', 'list_maintenance', 'list_reservations', 'list_turnovers'])
+  })
+
+  it('marks only cancelling a reservation as destructive', () => {
+    expect(calls.filter(c => c.config.annotations?.destructiveHint).map(c => c.name)).toEqual(['cancel_reservation'])
   })
 })

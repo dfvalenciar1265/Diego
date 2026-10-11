@@ -1,7 +1,7 @@
 /**
  * Validación de lo que manda ChatGPT. Los errores van en español: el GPT se los explica a Diego.
  */
-import type { MaintenancePriority, MaintenanceStatus } from '@/lib/types'
+import type { MaintenancePriority, MaintenanceStatus, ReservationSource } from '@/lib/types'
 import { isIsoDate, addDays, daysBetween } from './dates'
 import { parseClockTime } from './turnovers'
 
@@ -22,6 +22,8 @@ export const LIMITS = {
   code: 20,
   guests: 50,
   turnoverDays: 30,
+  stayNights: 120,
+  amount: 1_000_000_000,
 } as const
 
 const PRIORITIES = ['urgent', 'normal', 'scheduled'] as const
@@ -237,4 +239,134 @@ export function parseTimeChange(body: unknown, today: string): Parsed<TimeChange
   const guest = text(body.guest_name, 'guest_name', LIMITS.name, false)
   if (!guest.ok) return guest
   return ok({ property: property.value, time, date: date.value, guest_name: guest.value || null })
+}
+
+const RESERVATION_CODE = /^[A-Z0-9]{8,12}$/
+
+export interface NewReservationInput {
+  property: string
+  source: ReservationSource
+  guest_name: string
+  check_in: string
+  check_out: string
+  guests: number | null
+  amount: number
+  code: string | null
+  note: string
+}
+
+/** Cambios a una reserva: solo los campos enviados. */
+export interface ReservationPatch {
+  id: string
+  guest_name?: string
+  guests?: number | null
+  check_in?: string
+  check_out?: string
+  amount?: number
+  note?: string
+}
+
+/** Llegada y salida reales, salida después de la llegada, máximo 120 noches. */
+export function checkStay(checkIn: unknown, checkOut: unknown): Parsed<{ check_in: string; check_out: string }> {
+  if (!isIsoDate(checkIn)) return fail('"check_in" debe ser una fecha AAAA-MM-DD.')
+  if (!isIsoDate(checkOut)) return fail('"check_out" debe ser una fecha AAAA-MM-DD.')
+  if (checkOut <= checkIn) return fail('"check_out" debe ser posterior a "check_in".')
+  if (daysBetween(checkIn, checkOut) > LIMITS.stayNights) return fail(`Máximo ${LIMITS.stayNights} noches por reserva.`)
+  return ok({ check_in: checkIn, check_out: checkOut })
+}
+
+function parseGuestCount(v: unknown): Parsed<number | null> {
+  if (v === undefined || v === null) return ok(null)
+  if (typeof v !== 'number' || !Number.isInteger(v) || v < 1 || v > LIMITS.guests) {
+    return fail(`"guests" debe ser un entero entre 1 y ${LIMITS.guests}.`)
+  }
+  return ok(v)
+}
+
+function parseAmount(v: unknown): Parsed<number> {
+  if (typeof v !== 'number' || !Number.isFinite(v) || v < 0 || v > LIMITS.amount) {
+    return fail('"amount" debe ser un número mayor o igual a 0 (pesos colombianos).')
+  }
+  return ok(Math.round(v * 100) / 100)
+}
+
+const reservationIdError = '"id" debe ser el id de la reserva (de list_reservations).'
+
+export function parseNewReservation(body: unknown): Parsed<NewReservationInput> {
+  if (!isRecord(body)) return fail('El cuerpo debe ser un objeto JSON.')
+  const property = text(body.property, 'property', LIMITS.name, true)
+  if (!property.ok) return property
+  const source = body.source
+  if (!oneOf(source, ['direct', 'airbnb'] as const)) return fail('"source" debe ser "direct" o "airbnb".')
+  const guest = text(body.guest_name, 'guest_name', LIMITS.name, true)
+  if (!guest.ok) return guest
+  const stay = checkStay(body.check_in, body.check_out)
+  if (!stay.ok) return stay
+  const guests = parseGuestCount(body.guests)
+  if (!guests.ok) return guests
+  const amount = body.amount === undefined || body.amount === null ? ok(0) : parseAmount(body.amount)
+  if (!amount.ok) return amount
+  const rawCode = text(body.code, 'code', LIMITS.code, false)
+  if (!rawCode.ok) return rawCode
+  const code = rawCode.value.replace(/\s+/g, '').toUpperCase() || null
+  if (source === 'airbnb' && !code) return fail('Las reservas de Airbnb necesitan el código de confirmación HM… en "code".')
+  if (source === 'airbnb' && code && !RESERVATION_CODE.test(code)) {
+    return fail('"code" debe ser el código de Airbnb (8 a 12 letras y números).')
+  }
+  const note = text(body.note, 'note', LIMITS.text, false)
+  if (!note.ok) return note
+  return ok({
+    property: property.value,
+    source,
+    guest_name: guest.value,
+    ...stay.value,
+    guests: guests.value,
+    amount: amount.value,
+    code: source === 'airbnb' ? code : null,
+    note: note.value,
+  })
+}
+
+export function parseReservationPatch(body: unknown): Parsed<ReservationPatch> {
+  if (!isRecord(body)) return fail('El cuerpo debe ser un objeto JSON.')
+  const id = body.id
+  if (typeof id !== 'string' || !isUuid(id)) return fail(reservationIdError)
+  const patch: ReservationPatch = { id }
+  if (body.guest_name !== undefined) {
+    const guest = text(body.guest_name, 'guest_name', LIMITS.name, true)
+    if (!guest.ok) return guest
+    patch.guest_name = guest.value
+  }
+  if (body.guests !== undefined) {
+    const guests = parseGuestCount(body.guests)
+    if (!guests.ok) return guests
+    patch.guests = guests.value
+  }
+  for (const field of ['check_in', 'check_out'] as const) {
+    const value = body[field]
+    if (value === undefined) continue
+    if (!isIsoDate(value)) return fail(`"${field}" debe ser una fecha AAAA-MM-DD.`)
+    patch[field] = value
+  }
+  if (body.amount !== undefined) {
+    const amount = parseAmount(body.amount)
+    if (!amount.ok) return amount
+    patch.amount = amount.value
+  }
+  if (body.note !== undefined) {
+    const note = text(body.note, 'note', LIMITS.text, true)
+    if (!note.ok) return note
+    patch.note = note.value
+  }
+  if (Object.keys(patch).length === 1) {
+    return fail('Envía al menos un cambio: guest_name, guests, check_in, check_out, amount o note.')
+  }
+  return ok(patch)
+}
+
+export function parseReservationId(body: unknown): Parsed<string> {
+  if (!isRecord(body)) return fail(reservationIdError)
+  const id = body.id
+  if (typeof id !== 'string' || !isUuid(id)) return fail(reservationIdError)
+  return ok(id)
 }

@@ -1,6 +1,6 @@
 /**
- * Herramientas del MCP de AirAdmin: las 6 del GPT más las horas de salida y llegada, sobre
- * lib/gpt-api/service.ts.
+ * Herramientas del MCP de AirAdmin: las 6 del GPT, las horas de salida y llegada y las reservas
+ * (crear, modificar, cancelar), sobre lib/gpt-api/service.ts.
  * Las de solo lectura van con readOnlyHint; ChatGPT confirma con el usuario las demás.
  * Los esquemas describen los tipos; la validación con mensajes en español la hace el servicio.
  */
@@ -11,7 +11,7 @@ import { serviceDb } from '@/lib/gpt-api/db'
 import {
   compareReservationsTool, createMaintenanceTool, listMaintenanceTool, listReservationsTool,
   propertiesTool, setCheckinTimeTool, setCheckoutTimeTool, turnoversTool, updateMaintenanceTool,
-  type ServiceResult,
+  cancelReservationTool, createReservationTool, updateReservationTool, type ServiceResult,
 } from '@/lib/gpt-api/service'
 import { memberFromAuth } from './auth'
 
@@ -140,4 +140,46 @@ export function registerTools(server: McpServer) {
     inputSchema: timeChange,
     annotations: { ...WRITE, idempotentHint: true },
   }, (body) => run(() => setCheckinTimeTool(serviceDb(), body, todayInBogota())))
+
+  server.registerTool('create_reservation', {
+    title: 'Crear reserva',
+    description: 'Crea una reserva directa o de Airbnb con sus tareas de limpieza y preparación, como el formulario de la app. Airbnb exige el código HM…; no crea si el código ya existe ni si se cruza con otra reserva del apartamento.',
+    inputSchema: z.object({
+      property: z.string().describe('Nombre exacto del apartamento (list_properties)'),
+      source: z.enum(['direct', 'airbnb']).describe('direct = reserva directa; airbnb = de Airbnb'),
+      guest_name: z.string(),
+      check_in: date,
+      check_out: date,
+      guests: z.number().int().optional(),
+      amount: z.number().optional().describe('Monto total en pesos colombianos'),
+      code: z.string().optional().describe('Código de confirmación HM… (obligatorio si source = airbnb)'),
+      note: z.string().optional().describe('Nota que se agrega a la reserva'),
+    }),
+    annotations: { ...WRITE, idempotentHint: false },
+  }, (body, ctx) => run(() =>
+    createReservationTool(serviceDb(), body, todayInBogota(), memberFromAuth(ctx.http?.authInfo)?.name)))
+
+  server.registerTool('update_reservation', {
+    title: 'Modificar reserva',
+    description: 'Cambia el huésped, el número de huéspedes, las fechas o el monto de una reserva, o le agrega una nota (no reemplaza las notas). Si cambian las fechas mueve sus tareas. No cambia el apartamento: para eso cancela y crea de nuevo.',
+    inputSchema: z.object({
+      id: z.string().describe('id de la reserva (de list_reservations o create_reservation)'),
+      guest_name: z.string().optional(),
+      guests: z.number().int().nullable().optional(),
+      check_in: date.optional(),
+      check_out: date.optional(),
+      amount: z.number().optional().describe('Monto total en pesos colombianos'),
+      note: z.string().optional().describe('Nota que se agrega al final'),
+    }),
+    annotations: { ...WRITE, idempotentHint: false },
+  }, (body) => run(() => updateReservationTool(serviceDb(), body, todayInBogota())))
+
+  server.registerTool('cancel_reservation', {
+    title: 'Cancelar (borrar) reserva',
+    description: 'Cancela una reserva como "Eliminar" en la app: queda cancelada y se borran sus tareas de limpieza y preparación. No la borra del todo, para que la sincronización de Gmail no la vuelva a importar.',
+    inputSchema: z.object({
+      id: z.string().describe('id de la reserva (de list_reservations)'),
+    }),
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+  }, (body) => run(() => cancelReservationTool(serviceDb(), body)))
 }

@@ -9,13 +9,18 @@ import { shortDate } from './dates'
 import type { Db } from './db'
 import { createMaintenance, listMaintenance, updateMaintenance } from './maintenance'
 import { listProperties, resolveProperty } from './properties'
+import {
+  appendReservationNote, cancelReservationRow, conflictMessage, creationNotes, findReservationByCode,
+  findReservationById, insertReservation, reservationConflicts, toReservationOut, updateReservationRow,
+  type ReservationRow,
+} from './reservation-writes'
 import { applyDiffNotes, listReservations, loadForCompare } from './reservations'
 import {
   checkinSlot, checkoutSlot, reservationsTurningOver, setTaskNotes, withCheckinTime, withCheckoutTime,
 } from './turnovers'
 import {
   isUuid, parseCompareBody, parseMaintenanceFilter, parseMaintenancePatch, parseNewMaintenance, parseRange,
-  parseTimeChange, parseTurnoverDate,
+  parseTimeChange, parseTurnoverDate, checkStay, parseNewReservation, parseReservationId, parseReservationPatch,
 } from './validate'
 
 export type ServiceResult<T = unknown> =
@@ -98,12 +103,14 @@ export async function listReservationsTool(
     ...range.value,
     count: rows.length,
     reservations: rows.map(r => ({
+      id: r.id,
       airbnb_code: r.airbnb_code,
       guest_name: r.guest_name,
       property: nameOf.get(r.property_id) ?? null,
       check_in: r.check_in,
       check_out: r.check_out,
       guests: r.guests,
+      amount: Number(r.amount ?? 0),
       status: r.status,
       source: r.source,
       notes: r.notes,
@@ -212,3 +219,103 @@ export const setCheckoutTimeTool = (db: Db, body: unknown, today: string) =>
 
 export const setCheckinTimeTool = (db: Db, body: unknown, today: string) =>
   changeTurnoverTime(db, 'checkin', body, today)
+
+function refreshReservations() {
+  revalidatePath('/calendar')
+  revalidatePath('/')
+  revalidatePath('/cleaning')
+  revalidatePath('/tasks')
+}
+
+const STATUS_ES: Record<string, string> = { confirmed: 'confirmada', blocked: 'bloqueo', cancelled: 'cancelada' }
+const stayText = (r: { check_in: string; check_out: string }) => `${shortDate(r.check_in)} a ${shortDate(r.check_out)}`
+
+/** Crea una reserva (directa o de Airbnb) con sus tareas; nunca duplica un código ni se cruza con otra. */
+export async function createReservationTool(db: Db, body: unknown, today: string, createdBy = 'ChatGPT') {
+  const input = parseNewReservation(body)
+  if (!input.ok) return failed(400, input.error)
+  const v = input.value
+  const property = resolveProperty(v.property, await listProperties(db))
+  if (!property) return unknownProperty(v.property)
+
+  if (v.code) {
+    const existing = await findReservationByCode(db, v.code)
+    if (existing) {
+      return failed(409, `Ya existe la reserva ${v.code} de ${existing.guest_name} (${stayText(existing)}, ${STATUS_ES[existing.status] ?? existing.status}); no creo otra. Para cambiarla usa update_reservation con id ${existing.id}.`)
+    }
+  }
+  const conflicts = await reservationConflicts(db, property.id, v)
+  if (conflicts.length > 0) return failed(409, conflictMessage(property.name, conflicts))
+
+  const { reservation, tasks_created } = await insertReservation(db, {
+    property_id: property.id,
+    source: v.source,
+    airbnb_code: v.code,
+    guest_name: v.guest_name,
+    check_in: v.check_in,
+    check_out: v.check_out,
+    guests: v.guests,
+    amount: v.amount,
+    notes: creationNotes(createdBy, today, v.note),
+    status: 'confirmed',
+  }, today)
+  refreshReservations()
+  return done({ reservation: toReservationOut(reservation, property.name), tasks_created }, 201)
+}
+
+/** Cambia huésped, huéspedes, fechas o monto, o agrega una nota; mueve las tareas si cambian las fechas. */
+export async function updateReservationTool(db: Db, body: unknown, today: string) {
+  const parsed = parseReservationPatch(body)
+  if (!parsed.ok) return failed(400, parsed.error)
+  const patch = parsed.value
+  const current = await findReservationById(db, patch.id)
+  if (!current) return failed(404, 'No existe esa reserva.')
+  if (current.status === 'cancelled') {
+    return failed(409, 'Esa reserva está cancelada; si hace falta, créala de nuevo con create_reservation.')
+  }
+
+  const stay = checkStay(patch.check_in ?? current.check_in, patch.check_out ?? current.check_out)
+  if (!stay.ok) return failed(400, stay.error)
+  const datesChanged = stay.value.check_in !== current.check_in || stay.value.check_out !== current.check_out
+  const propertyName = (await listProperties(db)).find(p => p.id === current.property_id)?.name ?? '—'
+  if (datesChanged) {
+    const conflicts = await reservationConflicts(db, current.property_id, stay.value, current.id)
+    if (conflicts.length > 0) return failed(409, conflictMessage(propertyName, conflicts))
+  }
+
+  const update: Partial<Omit<ReservationRow, 'id'>> = { ...stay.value }
+  if (patch.guest_name !== undefined) update.guest_name = patch.guest_name
+  if (patch.guests !== undefined) update.guests = patch.guests
+  if (patch.amount !== undefined) update.amount = patch.amount
+  if (patch.note) update.notes = appendReservationNote(current.notes, patch.note)
+
+  const result = await updateReservationRow(db, current.id, update, datesChanged, today)
+  refreshReservations()
+  return done({
+    reservation: toReservationOut(result.reservation, propertyName),
+    previous: {
+      guest_name: current.guest_name,
+      check_in: current.check_in,
+      check_out: current.check_out,
+      guests: current.guests,
+      amount: Number(current.amount ?? 0),
+    },
+    tasks_moved: result.tasks_moved,
+    tasks_created: result.tasks_created,
+  })
+}
+
+/** "Borrar" como la app: la reserva queda cancelada y se borran sus tareas. */
+export async function cancelReservationTool(db: Db, body: unknown) {
+  const id = parseReservationId(body)
+  if (!id.ok) return failed(400, id.error)
+  const current = await findReservationById(db, id.value)
+  if (!current) return failed(404, 'No existe esa reserva.')
+  const propertyName = (await listProperties(db)).find(p => p.id === current.property_id)?.name ?? '—'
+  if (current.status === 'cancelled') {
+    return done({ already_cancelled: true, reservation: toReservationOut(current, propertyName), tasks_deleted: 0 })
+  }
+  const { reservation, tasks_deleted } = await cancelReservationRow(db, current.id)
+  refreshReservations()
+  return done({ already_cancelled: false, reservation: toReservationOut(reservation, propertyName), tasks_deleted })
+}
