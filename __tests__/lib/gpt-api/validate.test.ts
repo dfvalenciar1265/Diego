@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   parseCompareBody, parseRange, parseNewMaintenance, parseMaintenancePatch,
   parseMaintenanceFilter, isUuid, parseTurnoverDate, parseTimeChange,
+  checkStay, parseNewReservation, parseReservationPatch, parseReservationId,
 } from '@/lib/gpt-api/validate'
 
 const item = {
@@ -145,5 +146,66 @@ describe('parseTimeChange', () => {
     })
     expect(parseTimeChange({ time: '10am' }, '2026-10-10')).toEqual({ ok: false, error: 'Falta "property".' })
     expect(parseTimeChange({ property: 'Palmetto 1001', time: '10am', date: 20261011 }, '2026-10-10').ok).toBe(false)
+  })
+})
+
+const ID = '2be6deec-8061-453e-b1ae-ce0bd177fadd'
+const direct = { property: 'Palmetto 1001', source: 'direct', guest_name: 'Carlos Ruiz', check_in: '2026-10-20', check_out: '2026-10-23' }
+
+describe('checkStay', () => {
+  it('accepts a real stay and rejects backwards or too-long ones', () => {
+    expect(checkStay('2026-10-20', '2026-10-23')).toEqual({ ok: true, value: { check_in: '2026-10-20', check_out: '2026-10-23' } })
+    expect(checkStay('2026-10-23', '2026-10-20')).toEqual({ ok: false, error: '"check_out" debe ser posterior a "check_in".' })
+    expect(checkStay('2026-10-20', '2027-02-18').ok).toBe(false)
+    expect(checkStay('2026-02-30', '2026-03-02').ok).toBe(false)
+  })
+})
+
+describe('parseNewReservation', () => {
+  it('fills defaults for a direct booking and ignores a code there', () => {
+    expect(parseNewReservation({ ...direct, code: 'HMABC12345' })).toEqual({
+      ok: true,
+      value: { ...direct, guests: null, amount: 0, code: null, note: '' },
+    })
+  })
+
+  it('requires and normalizes the Airbnb code', () => {
+    expect(parseNewReservation({ ...direct, source: 'airbnb' })).toEqual({
+      ok: false, error: 'Las reservas de Airbnb necesitan el código de confirmación HM… en "code".',
+    })
+    const r = parseNewReservation({ ...direct, source: 'airbnb', code: ' hmabc 12345 ', guests: 2, amount: 850000, note: 'Pagó por Nequi' })
+    expect(r.ok && r.value).toMatchObject({ code: 'HMABC12345', guests: 2, amount: 850000, note: 'Pagó por Nequi' })
+    expect(parseNewReservation({ ...direct, source: 'airbnb', code: 'HM-1' }).ok).toBe(false)
+  })
+
+  it('rejects bad sources, guests and amounts', () => {
+    expect(parseNewReservation({ ...direct, source: 'booking' })).toEqual({ ok: false, error: '"source" debe ser "direct" o "airbnb".' })
+    expect(parseNewReservation({ ...direct, guests: 0 }).ok).toBe(false)
+    expect(parseNewReservation({ ...direct, amount: -5 }).ok).toBe(false)
+    expect(parseNewReservation({ ...direct, guest_name: ' ' })).toEqual({ ok: false, error: 'Falta "guest_name".' })
+  })
+})
+
+describe('parseReservationPatch', () => {
+  it('keeps only the fields sent', () => {
+    expect(parseReservationPatch({ id: ID, check_out: '2026-10-24', amount: 900000 })).toEqual({
+      ok: true, value: { id: ID, check_out: '2026-10-24', amount: 900000 },
+    })
+    expect(parseReservationPatch({ id: ID, guests: null })).toEqual({ ok: true, value: { id: ID, guests: null } })
+  })
+
+  it('needs a valid id and at least one change', () => {
+    expect(parseReservationPatch({ id: 'x', amount: 1 })).toEqual({ ok: false, error: '"id" debe ser el id de la reserva (de list_reservations).' })
+    expect(parseReservationPatch({ id: ID })).toEqual({
+      ok: false, error: 'Envía al menos un cambio: guest_name, guests, check_in, check_out, amount o note.',
+    })
+    expect(parseReservationPatch({ id: ID, check_in: '20-10-2026' }).ok).toBe(false)
+  })
+})
+
+describe('parseReservationId', () => {
+  it('reads the reservation id', () => {
+    expect(parseReservationId({ id: ID })).toEqual({ ok: true, value: ID })
+    expect(parseReservationId({}).ok).toBe(false)
   })
 })
