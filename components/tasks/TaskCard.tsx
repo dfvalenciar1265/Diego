@@ -53,7 +53,7 @@ export function TaskCard({ task }: Props) {
               </span>
             )}
           </div>
-          <p className="text-xs text-[#94a3b8] mt-0.5">
+          <p className="text-xs text-[#64748b] mt-0.5">
             {task.assignee?.name ?? 'Sin asignar'} · {formatDate(task.scheduled_for)}
           </p>
           {task.notes && (

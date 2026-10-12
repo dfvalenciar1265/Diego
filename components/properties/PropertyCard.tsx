@@ -38,12 +38,12 @@ export function PropertyCard({ property }: Props) {
             <div className="flex items-center gap-2">
               <p className="font-semibold text-[#0f172a] truncate">{property.name}</p>
               {!property.active && (
-                <span className="text-[10px] bg-[#f1f5f9] text-[#94a3b8] px-1.5 py-0.5 rounded-full font-medium flex-shrink-0">
+                <span className="text-[10px] bg-[#f1f5f9] text-[#64748b] px-1.5 py-0.5 rounded-full font-medium flex-shrink-0">
                   Oculto
                 </span>
               )}
             </div>
-            <p className="text-sm text-[#94a3b8] truncate">{property.address}</p>
+            <p className="text-sm text-[#64748b] truncate">{property.address}</p>
           </div>
 
           {/* Active toggle — admin only */}
@@ -61,13 +61,13 @@ export function PropertyCard({ property }: Props) {
               />
             </button>
           ) : (
-            <span className="text-[#94a3b8] text-lg">›</span>
+            <span className="text-[#64748b] text-lg">›</span>
           )}
         </div>
 
         {property.access_code && (
           <div className="mt-3 flex items-center gap-2">
-            <span className="text-xs text-[#94a3b8]">Acceso:</span>
+            <span className="text-xs text-[#64748b]">Acceso:</span>
             <span className="text-xs font-mono bg-[#f8fafc] border border-[#e2e8f0]
                              rounded px-2 py-0.5 text-[#0f172a]">
               {property.access_code}

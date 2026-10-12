@@ -104,7 +104,7 @@ export function AdminReport({ initialRows, initialYear, initialMonth }: Props) {
           <p className="text-sm font-bold text-[#0f172a] capitalize">
             {isPending ? '…' : `${MONTHS[month - 1]} ${year}`}
           </p>
-          <p className="text-[10px] text-[#94a3b8] uppercase tracking-wide">Costo de administración</p>
+          <p className="text-[10px] text-[#64748b] uppercase tracking-wide">Costo de administración</p>
         </div>
         <button
           onClick={() => navigate(1)}
@@ -124,16 +124,16 @@ export function AdminReport({ initialRows, initialYear, initialMonth }: Props) {
       {props.length === 0 ? (
         <div className="text-center py-12">
           <p className="text-4xl mb-3">🏢</p>
-          <p className="text-[#94a3b8]">Sin ingresos en {MONTHS[month - 1]} {year} para prorratear</p>
+          <p className="text-[#64748b]">Sin ingresos en {MONTHS[month - 1]} {year} para prorratear</p>
         </div>
       ) : (
         <>
           {/* ── Table (single grid so Q1/Q2 columns line up) ─────────────── */}
           <div className="grid grid-cols-[1fr_auto_auto] bg-white rounded-xl border border-[#e2e8f0] overflow-hidden shadow-sm">
             {/* Header */}
-            <div className="px-3 py-2 text-[10px] font-bold text-[#94a3b8] uppercase tracking-wide bg-[#f8fafc] border-b border-[#e2e8f0]">Apartamento</div>
-            <div className="px-3 py-2 text-[10px] font-bold text-[#94a3b8] uppercase tracking-wide text-right bg-[#f8fafc] border-b border-[#e2e8f0]">Q1 (1–15)</div>
-            <div className="px-3 py-2 text-[10px] font-bold text-[#94a3b8] uppercase tracking-wide text-right bg-[#f8fafc] border-b border-[#e2e8f0]">Q2 (16–fin)</div>
+            <div className="px-3 py-2 text-[10px] font-bold text-[#64748b] uppercase tracking-wide bg-[#f8fafc] border-b border-[#e2e8f0]">Apartamento</div>
+            <div className="px-3 py-2 text-[10px] font-bold text-[#64748b] uppercase tracking-wide text-right bg-[#f8fafc] border-b border-[#e2e8f0]">Q1 (1–15)</div>
+            <div className="px-3 py-2 text-[10px] font-bold text-[#64748b] uppercase tracking-wide text-right bg-[#f8fafc] border-b border-[#e2e8f0]">Q2 (16–fin)</div>
 
             {props.map((p, i) => {
               const cell = `px-3 py-3 ${i % 2 === 0 ? 'bg-white' : 'bg-[#fafafa]'}`
@@ -146,7 +146,7 @@ export function AdminReport({ initialRows, initialYear, initialMonth }: Props) {
                   <div className={`${cell} text-right`}>
                     {p.q1Admin > 0 ? (
                       <>
-                        <p className="text-[10px] text-[#94a3b8]">{fmtPct(p.q1Pct)}</p>
+                        <p className="text-[10px] text-[#64748b]">{fmtPct(p.q1Pct)}</p>
                         <p className="text-xs font-semibold text-[#d97706]">{fmtCOP(p.q1Admin)}</p>
                       </>
                     ) : (
@@ -156,7 +156,7 @@ export function AdminReport({ initialRows, initialYear, initialMonth }: Props) {
                   <div className={`${cell} text-right`}>
                     {p.q2Admin > 0 ? (
                       <>
-                        <p className="text-[10px] text-[#94a3b8]">{fmtPct(p.q2Pct)}</p>
+                        <p className="text-[10px] text-[#64748b]">{fmtPct(p.q2Pct)}</p>
                         <p className="text-xs font-semibold text-[#d97706]">{fmtCOP(p.q2Admin)}</p>
                       </>
                     ) : (

@@ -72,7 +72,7 @@ export function PropertyReservationsSheet({ property, reservations, onClose, onS
         {/* Weekday header */}
         <div className="grid grid-cols-7 border-b border-[#e2e8f0]">
           {WEEKDAYS.map(w => (
-            <div key={w} className="text-center text-[10px] font-semibold text-[#94a3b8] py-1">{w}</div>
+            <div key={w} className="text-center text-[10px] font-semibold text-[#64748b] py-1">{w}</div>
           ))}
         </div>
 
@@ -159,7 +159,7 @@ export function PropertyReservationsSheet({ property, reservations, onClose, onS
         </div>
 
         {canEdit && (
-          <p className="text-[10px] text-[#94a3b8] text-center mt-3">Tocá una reserva para ver o editarla</p>
+          <p className="text-[10px] text-[#64748b] text-center mt-3">Tocá una reserva para ver o editarla</p>
         )}
       </SheetContent>
     </Sheet>

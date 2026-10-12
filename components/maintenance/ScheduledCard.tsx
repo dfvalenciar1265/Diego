@@ -94,7 +94,7 @@ export function ScheduledCard({ issue }: Props) {
         </div>
         <div className="flex-1 min-w-0">
           <p className="font-semibold text-[#0f172a] text-sm leading-tight">{issue.title}</p>
-          <p className="text-xs text-[#94a3b8] truncate">{issue.property?.name ?? '—'}</p>
+          <p className="text-xs text-[#64748b] truncate">{issue.property?.name ?? '—'}</p>
         </div>
         <span
           className="text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0"
@@ -108,7 +108,7 @@ export function ScheduledCard({ issue }: Props) {
       <div className="grid grid-cols-2 gap-2 mb-3">
         {/* PRÓXIMO — editable (reprogramar) */}
         <div className="bg-[#f8fafc] rounded-xl p-2.5">
-          <p className="text-[10px] text-[#94a3b8] font-semibold mb-1">PRÓXIMO</p>
+          <p className="text-[10px] text-[#64748b] font-semibold mb-1">PRÓXIMO</p>
           {canManage && editingDate ? (
             <input
               type="date"
@@ -131,7 +131,7 @@ export function ScheduledCard({ issue }: Props) {
         </div>
         {/* ÚLTIMO */}
         <div className="bg-[#f8fafc] rounded-xl p-2.5">
-          <p className="text-[10px] text-[#94a3b8] font-semibold mb-1">ÚLTIMO</p>
+          <p className="text-[10px] text-[#64748b] font-semibold mb-1">ÚLTIMO</p>
           <p className="text-sm font-bold text-[#0f172a]">{fmtDate(lastDone)}</p>
         </div>
       </div>

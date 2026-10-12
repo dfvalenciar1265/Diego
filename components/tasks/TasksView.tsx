@@ -130,13 +130,15 @@ export function TasksView({ tasks, properties, teamMembers }: Props) {
           {pendingTasks.length === 0 ? (
             <div className="text-center py-12">
               <p className="text-4xl mb-3">✅</p>
-              <p className="text-[#94a3b8]">No hay tareas pendientes</p>
+              <p className="text-[#64748b]">No hay tareas pendientes</p>
             </div>
           ) : (
             <>
-              {pagedPending.map(t => (
-                <OtherTaskCard key={t.id} task={t} teamMembers={teamMembers} onEdit={() => setEditing(t)} />
-              ))}
+              <div className="card-grid">
+                {pagedPending.map(t => (
+                  <OtherTaskCard key={t.id} task={t} teamMembers={teamMembers} onEdit={() => setEditing(t)} />
+                ))}
+              </div>
               <Pagination page={pendPage} total={pendPages} onChange={setPendPage} accent="#ff385c" />
               <p className="text-center text-xs text-[#c4c9d4]">
                 {pendingTasks.length} tarea{pendingTasks.length !== 1 ? 's' : ''} pendiente{pendingTasks.length !== 1 ? 's' : ''}
@@ -163,13 +165,15 @@ export function TasksView({ tasks, properties, teamMembers }: Props) {
           {doneTasks.length === 0 ? (
             <div className="text-center py-12">
               <p className="text-4xl mb-3">📋</p>
-              <p className="text-[#94a3b8]">No hay tareas terminadas</p>
+              <p className="text-[#64748b]">No hay tareas terminadas</p>
             </div>
           ) : (
             <>
-              {pagedDone.map(t => (
-                <OtherTaskCard key={t.id} task={t} teamMembers={teamMembers} onEdit={() => setEditing(t)} />
-              ))}
+              <div className="card-grid">
+                {pagedDone.map(t => (
+                  <OtherTaskCard key={t.id} task={t} teamMembers={teamMembers} onEdit={() => setEditing(t)} />
+                ))}
+              </div>
               <Pagination page={donePage} total={donePages} onChange={setDonePage} accent="#ff385c" />
               <p className="text-center text-xs text-[#c4c9d4]">
                 {doneTasks.length} tarea{doneTasks.length !== 1 ? 's' : ''} completada{doneTasks.length !== 1 ? 's' : ''}

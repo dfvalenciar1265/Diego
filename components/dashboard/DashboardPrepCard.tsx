@@ -101,9 +101,9 @@ export function DashboardPrepCard({ task }: { task: PrepTask }) {
 
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-[#0f172a] leading-tight truncate">{propName}</p>
-          <p className="text-xs text-[#94a3b8] truncate">{guestName}</p>
+          <p className="text-xs text-[#64748b] truncate">{guestName}</p>
           {(guests != null || checkIn) && (
-            <p className="text-[11px] text-[#94a3b8] leading-tight mt-0.5">
+            <p className="text-[11px] text-[#64748b] leading-tight mt-0.5">
               {guests != null && <span>👥 {guests}</span>}
               {guests != null && checkIn && <span> · </span>}
               {checkIn && <span className="text-[#ff385c] font-medium">check-in {checkIn}</span>}

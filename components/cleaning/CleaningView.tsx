@@ -195,8 +195,8 @@ export function CleaningView({ tasks, staff, weekTasks, weekStart, todayISO, cur
         <div className="space-y-5">
           {todayTasks.length === 0 && tomorrowTasks.length === 0 && laterTasks.length === 0 ? (
             <div className="text-center py-12">
-              <Sparkles className="mx-auto mb-3 text-[#94a3b8]" size={40} />
-              <p className="text-[#94a3b8]">No hay limpiezas pendientes</p>
+              <Sparkles className="mx-auto mb-3 text-[#64748b]" size={40} />
+              <p className="text-[#64748b]">No hay limpiezas pendientes</p>
             </div>
           ) : (
             <>
@@ -242,11 +242,13 @@ export function CleaningView({ tasks, staff, weekTasks, weekStart, todayISO, cur
           {doneTasks.length === 0 ? (
             <div className="text-center py-12">
               <p className="text-4xl mb-3">✅</p>
-              <p className="text-[#94a3b8]">No hay limpiezas terminadas recientes</p>
+              <p className="text-[#64748b]">No hay limpiezas terminadas recientes</p>
             </div>
           ) : (
             <>
-              {pagedDone.map(t => <DoneCleaningCard key={t.id} task={t} />)}
+              <div className="card-grid">
+                {pagedDone.map(t => <DoneCleaningCard key={t.id} task={t} />)}
+              </div>
               <Pagination page={donePage} total={donePages} onChange={setDonePage} />
               <p className="text-center text-xs text-[#c4c9d4]">
                 {doneTasks.length} limpieza{doneTasks.length !== 1 ? 's' : ''} terminada{doneTasks.length !== 1 ? 's' : ''} (últimos 30 días)
@@ -276,7 +278,7 @@ function Section({
         </span>
         <div className="flex-1 h-px" style={{ background: line }} />
       </div>
-      <div className="space-y-3">{children}</div>
+      <div className="card-grid">{children}</div>
     </div>
   )
 }
@@ -292,7 +294,7 @@ function DoneCleaningCard({ task }: { task: CleaningTask }) {
         </div>
         <div className="flex-1 min-w-0">
           <p className="font-semibold text-[#0f172a] text-sm leading-tight">{task.property?.name ?? '—'}</p>
-          <p className="text-xs text-[#94a3b8]">
+          <p className="text-xs text-[#64748b]">
             {task.assignee?.name ?? 'Sin asignar'} · {fmtDatetime(task.completed_at)}
           </p>
         </div>
@@ -415,7 +417,7 @@ function CleaningTaskCard({
         </div>
         <div className="flex-1 min-w-0">
           <p className="font-semibold text-[#0f172a] text-sm leading-tight">{task.property?.name ?? '—'}</p>
-          <p className="text-xs text-[#94a3b8] truncate">{guestName}</p>
+          <p className="text-xs text-[#64748b] truncate">{guestName}</p>
         </div>
         <span
           className="text-[10px] font-medium px-2 py-0.5 rounded-full flex-shrink-0"
@@ -431,7 +433,7 @@ function CleaningTaskCard({
       {/* Dates */}
       <div className="grid grid-cols-2 gap-2 mb-3">
         <div className="bg-[#f8fafc] rounded-xl p-2.5">
-          <p className="text-[10px] text-[#94a3b8] font-semibold mb-1.5">CHECK-IN</p>
+          <p className="text-[10px] text-[#64748b] font-semibold mb-1.5">CHECK-IN</p>
           <div className="flex items-baseline gap-1.5 flex-wrap">
             <span className="text-sm font-bold text-[#0f172a]">{shortDate(res?.check_in)}</span>
             {ciTime && (
@@ -441,7 +443,7 @@ function CleaningTaskCard({
         </div>
 
         <div className="bg-[#f8fafc] rounded-xl p-2.5">
-          <p className="text-[10px] text-[#94a3b8] font-semibold mb-1.5">CHECK-OUT</p>
+          <p className="text-[10px] text-[#64748b] font-semibold mb-1.5">CHECK-OUT</p>
           <div className="flex items-baseline gap-1.5 flex-wrap">
             <span className="text-sm font-bold text-[#0f172a]">{shortDate(res?.check_out)}</span>
             {editingCoTime ? (
@@ -488,7 +490,7 @@ function CleaningTaskCard({
 
       {/* Future cleaning: read-only preview (can't start/finish before check-out day) */}
       {locked && (
-        <p className="mt-1 text-[11px] text-[#94a3b8] text-center bg-[#f8fafc] rounded-lg py-1.5">
+        <p className="mt-1 text-[11px] text-[#64748b] text-center bg-[#f8fafc] rounded-lg py-1.5">
           📅 Programada — disponible el día del check-out
         </p>
       )}
@@ -512,7 +514,7 @@ function CleaningTaskCard({
             👤 ¿Quién va a limpiar?
           </p>
           {staff.length === 0 ? (
-            <p className="text-xs text-[#94a3b8]">No hay personal registrado</p>
+            <p className="text-xs text-[#64748b]">No hay personal registrado</p>
           ) : (
             staff.map(m => (
               <button
@@ -533,7 +535,7 @@ function CleaningTaskCard({
           )}
           <button
             onClick={() => setPicking(false)}
-            className="w-full text-xs text-[#94a3b8] py-1 hover:text-[#64748b] transition-colors"
+            className="w-full text-xs text-[#64748b] py-1 hover:text-[#64748b] transition-colors"
           >
             Cancelar
           </button>

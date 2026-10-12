@@ -167,7 +167,7 @@ export function CalendarView({ properties, reservations }: Props) {
           {query && (
             <button
               onClick={() => setQuery('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-[#94a3b8] text-sm active:opacity-60"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-[#64748b] text-sm active:opacity-60"
               aria-label="Limpiar búsqueda"
             >✕</button>
           )}
@@ -176,7 +176,7 @@ export function CalendarView({ properties, reservations }: Props) {
         {query.trim().length >= 2 && (
           <div className="mt-2 bg-white border border-[#e2e8f0] rounded-xl overflow-hidden shadow-sm">
             {results.length === 0 ? (
-              <p className="px-3 py-3 text-xs text-[#94a3b8]">Sin reservas para “{query.trim()}”</p>
+              <p className="px-3 py-3 text-xs text-[#64748b]">Sin reservas para “{query.trim()}”</p>
             ) : results.map(r => (
               <button
                 key={r.id}
@@ -186,7 +186,7 @@ export function CalendarView({ properties, reservations }: Props) {
                 <p className="text-xs font-semibold text-[#0f172a] truncate">
                   {r.status === 'blocked' ? '🚫 Bloqueado' : (r.guest_name || '—')}
                 </p>
-                <p className="text-[11px] text-[#94a3b8] truncate">
+                <p className="text-[11px] text-[#64748b] truncate">
                   {propName.get(r.property_id) ?? '—'} · {shortD(r.check_in)} → {shortD(r.check_out)}
                 </p>
               </button>
@@ -201,7 +201,7 @@ export function CalendarView({ properties, reservations }: Props) {
         <div className="flex items-center justify-between px-4 py-3 sticky left-0 bg-[#f8fafc] z-20">
           <button
             onClick={() => setBaseMonth(m => startOfMonth(subMonths(m, 1)))}
-            className="w-10 h-10 flex items-center justify-center text-[#94a3b8] text-xl hover:text-[#0f172a] transition-colors"
+            className="w-10 h-10 flex items-center justify-center text-[#64748b] text-xl hover:text-[#0f172a] transition-colors"
             aria-label="Mes anterior"
           >‹</button>
           <div className="flex items-center gap-2 min-w-0">
@@ -220,7 +220,7 @@ export function CalendarView({ properties, reservations }: Props) {
           </div>
           <button
             onClick={() => setBaseMonth(m => startOfMonth(addMonths(m, 1)))}
-            className="w-10 h-10 flex items-center justify-center text-[#94a3b8] text-xl hover:text-[#0f172a] transition-colors"
+            className="w-10 h-10 flex items-center justify-center text-[#64748b] text-xl hover:text-[#0f172a] transition-colors"
             aria-label="Mes siguiente"
           >›</button>
         </div>
@@ -245,15 +245,15 @@ export function CalendarView({ properties, reservations }: Props) {
         <div className="flex gap-4 px-4 pt-3 sticky left-0">
           <div className="flex items-center gap-1">
             <div className="w-3 h-3 rounded-sm bg-[#ff385c]" />
-            <span className="text-xs text-[#94a3b8]">Airbnb</span>
+            <span className="text-xs text-[#64748b]">Airbnb</span>
           </div>
           <div className="flex items-center gap-1">
             <div className="w-3 h-3 rounded-sm bg-[#6366f1]" />
-            <span className="text-xs text-[#94a3b8]">Directa</span>
+            <span className="text-xs text-[#64748b]">Directa</span>
           </div>
           <div className="flex items-center gap-1">
             <div className="w-3 h-3 rounded-sm bg-[#94a3b8]" />
-            <span className="text-xs text-[#94a3b8]">Bloqueado</span>
+            <span className="text-xs text-[#64748b]">Bloqueado</span>
           </div>
         </div>
       </div>
@@ -262,7 +262,7 @@ export function CalendarView({ properties, reservations }: Props) {
       {canEdit && (
         <button
           onClick={openNewDirect}
-          className="fixed bottom-[4.5rem] right-4 z-30 w-14 h-14 rounded-full shadow-lg
+          className="fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] right-4 md:bottom-8 md:right-8 z-30 w-14 h-14 rounded-full shadow-lg
                      flex items-center justify-center transition-transform active:scale-95"
           style={{ background: '#6366f1' }}
           aria-label="Nueva reserva directa"
@@ -376,7 +376,7 @@ const CalendarGrid = memo(function CalendarGrid({
               </span>
               <span
                 className={`w-6 h-6 flex items-center justify-center rounded-full text-[11px] font-medium
-                  ${today ? 'bg-[#f59e0b] text-white' : wknd ? 'text-[#cbd5e1]' : 'text-[#94a3b8]'}`}
+                  ${today ? 'bg-[#f59e0b] text-white' : wknd ? 'text-[#cbd5e1]' : 'text-[#64748b]'}`}
               >
                 {format(day, 'd')}
               </span>
@@ -472,7 +472,7 @@ const CalendarGrid = memo(function CalendarGrid({
       )}
 
       {properties.length === 0 && (
-        <div className="text-center py-12 text-[#94a3b8] text-sm">
+        <div className="text-center py-12 text-[#64748b] text-sm">
           No hay apartamentos registrados
         </div>
       )}

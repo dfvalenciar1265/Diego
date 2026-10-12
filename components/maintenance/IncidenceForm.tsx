@@ -84,7 +84,7 @@ export function IncidenceForm({ open, onClose, properties }: Props) {
                   <div className="text-center py-2 px-1 rounded-lg border border-[#e2e8f0] text-xs
                                   font-medium cursor-pointer peer-checked:border-[#ff385c]
                                   peer-checked:bg-[#fff5f5] peer-checked:text-[#ff385c]
-                                  text-[#94a3b8] transition-colors">
+                                  text-[#64748b] transition-colors">
                     {p === 'urgent' ? '🔴 Urgente' : p === 'normal' ? '🟡 Normal' : '🔵 Program.'}
                   </div>
                 </label>
@@ -116,7 +116,7 @@ export function IncidenceForm({ open, onClose, properties }: Props) {
               ) : (
                 <button type="button" onClick={() => fileRef.current?.click()}
                         className="w-full h-24 rounded-xl border-2 border-dashed border-[#e2e8f0]
-                                   flex flex-col items-center justify-center gap-1 text-[#94a3b8]">
+                                   flex flex-col items-center justify-center gap-1 text-[#64748b]">
                   <span className="text-2xl">📷</span>
                   <span className="text-xs">Toca para agregar foto</span>
                 </button>

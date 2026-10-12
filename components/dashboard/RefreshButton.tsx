@@ -17,7 +17,7 @@ export function RefreshButton() {
       onClick={handleRefresh}
       title="Actualizar"
       className="w-7 h-7 flex items-center justify-center rounded-full
-                 text-[#94a3b8] hover:text-[#64748b] hover:bg-[#f1f5f9]
+                 text-[#64748b] hover:text-[#64748b] hover:bg-[#f1f5f9]
                  active:scale-95 transition-all"
     >
       <svg

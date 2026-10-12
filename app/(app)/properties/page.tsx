@@ -18,10 +18,12 @@ export default async function PropertiesPage() {
         {properties.length === 0 ? (
           <div className="text-center py-12">
             <p className="text-4xl mb-3">🏠</p>
-            <p className="text-[#94a3b8]">Aún no tienes apartamentos</p>
+            <p className="text-[#64748b]">Aún no tienes apartamentos</p>
           </div>
         ) : (
-          properties.map(p => <PropertyCard key={p.id} property={p} />)
+          <div className="card-grid">
+            {properties.map(p => <PropertyCard key={p.id} property={p} />)}
+          </div>
         )}
 
         {/* Personal por roles */}

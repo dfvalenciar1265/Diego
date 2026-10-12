@@ -15,7 +15,7 @@ export function OccupancyBar({ name, occupied, total }: Props) {
         <div className="h-full rounded-full transition-all"
              style={{ width: `${pct}%`, backgroundColor: color }} />
       </div>
-      <p className="text-xs text-[#94a3b8] w-8 text-right flex-shrink-0">
+      <p className="text-xs text-[#64748b] w-8 text-right flex-shrink-0">
         {occupied}/{total}
       </p>
     </div>

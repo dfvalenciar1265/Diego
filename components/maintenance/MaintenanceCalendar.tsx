@@ -106,7 +106,7 @@ export function MaintenanceCalendar({ issues }: { issues: SchedIssue[] }) {
                 {items.length > 0 && (
                   <span className="mt-0.5 flex items-center gap-0.5">
                     <span className="w-1.5 h-1.5 rounded-full" style={{ background: DOT[level] }} />
-                    {items.length > 1 && <span className="text-[8px] font-bold text-[#94a3b8]">{items.length}</span>}
+                    {items.length > 1 && <span className="text-[8px] font-bold text-[#64748b]">{items.length}</span>}
                   </span>
                 )}
               </div>
@@ -117,12 +117,12 @@ export function MaintenanceCalendar({ issues }: { issues: SchedIssue[] }) {
 
       {/* This month's list */}
       {monthItems.length === 0 ? (
-        <p className="text-center text-xs text-[#94a3b8] py-6 capitalize">
+        <p className="text-center text-xs text-[#64748b] py-6 capitalize">
           Sin preventivos en {format(month, 'MMMM', { locale: es })}
         </p>
       ) : (
         <div className="space-y-2">
-          <p className="text-[10px] font-bold text-[#94a3b8] uppercase tracking-wide px-1">
+          <p className="text-[10px] font-bold text-[#64748b] uppercase tracking-wide px-1">
             En {format(month, 'MMMM', { locale: es })} ({monthItems.length})
           </p>
           {monthItems.map(({ i, nd }) => {
@@ -134,7 +134,7 @@ export function MaintenanceCalendar({ issues }: { issues: SchedIssue[] }) {
                   <p className="text-xs font-semibold text-[#0f172a] truncate">
                     {i.property?.name ?? '—'} · {i.title}
                   </p>
-                  <p className="text-[11px] text-[#94a3b8]">{fmtDate(nd)}</p>
+                  <p className="text-[11px] text-[#64748b]">{fmtDate(nd)}</p>
                 </div>
               </div>
             )

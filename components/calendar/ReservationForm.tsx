@@ -147,7 +147,7 @@ export function ReservationForm({
                 placeholder="HM12345678"
                 className="mt-1"
               />
-              <p className="text-[11px] text-[#94a3b8] mt-1">
+              <p className="text-[11px] text-[#64748b] mt-1">
                 Ponlo para que la reserva se cancele sola si cancelan en Airbnb.
               </p>
             </div>

@@ -23,7 +23,7 @@ export function StockItem({ item }: Props) {
                      ${isLow ? 'bg-[#fff5f5] -mx-4 px-4 rounded-lg' : ''}`}>
       <div className="flex-1">
         <p className="text-sm font-medium text-[#0f172a]">{item.supply?.name}</p>
-        <p className="text-xs text-[#94a3b8]">
+        <p className="text-xs text-[#64748b]">
           Mínimo: {item.min_qty} {item.supply?.unit}
           {isLow && <span className="text-[#ef4444] font-semibold ml-2">⚠️ Stock bajo</span>}
         </p>

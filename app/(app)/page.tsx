@@ -85,7 +85,7 @@ export default async function DashboardPage() {
             <h1 className="text-lg font-bold text-[#0f172a]">
               {greeting}, {member.name?.split(' ')[0] ?? 'Diego'} 👋
             </h1>
-            <p className="text-xs text-[#94a3b8] capitalize">{today}</p>
+            <p className="text-xs text-[#64748b] capitalize">{today}</p>
           </div>
           <div className="flex items-center gap-2">
             <RefreshButton />
@@ -107,13 +107,14 @@ export default async function DashboardPage() {
                  color="#f97316" subtitle="hoy" icon="✅" />
       </div>
 
-      <div className="px-4 pt-4 space-y-4">
+      {/* Phone: stacked. lg+: two balanced columns, same reading order (CSS columns) */}
+      <div className="px-4 pt-4 space-y-4 lg:space-y-0 lg:columns-2 lg:gap-4 [&>*]:break-inside-avoid lg:[&>*]:mb-4">
 
         {/* Check-out times — quick view for admin to plan cleaning staff */}
         {checkOuts.length > 0 && (
           <section className="bg-white border border-[#e2e8f0] rounded-xl p-4
                               shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
-            <p className="text-xs font-semibold text-[#94a3b8] uppercase tracking-wide mb-3">
+            <p className="text-xs font-semibold text-[#64748b] uppercase tracking-wide mb-3">
               🚪 Check-outs de hoy — horarios
             </p>
             <div className="space-y-2.5">
@@ -143,7 +144,7 @@ export default async function DashboardPage() {
           <section className="bg-white border border-[#e2e8f0] rounded-xl p-4
                               shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
             <div className="flex items-center justify-between mb-3">
-              <p className="text-xs font-semibold text-[#94a3b8] uppercase tracking-wide">
+              <p className="text-xs font-semibold text-[#64748b] uppercase tracking-wide">
                 🔧 Mantenimiento pendiente ({openMaintenance.length})
               </p>
               <Link href="/maintenance" className="text-[11px] font-semibold text-[#6366f1] shrink-0">
@@ -154,7 +155,7 @@ export default async function DashboardPage() {
               {openMaintenance.slice(0, 5).map(m => <MaintenanceAlertItem key={m.id} issue={m} />)}
             </div>
             {openMaintenance.length > 5 && (
-              <p className="text-[11px] text-[#94a3b8] mt-2">+{openMaintenance.length - 5} más</p>
+              <p className="text-[11px] text-[#64748b] mt-2">+{openMaintenance.length - 5} más</p>
             )}
           </section>
         )}
@@ -173,7 +174,7 @@ export default async function DashboardPage() {
         {pendingPurchases.length > 0 && (
           <section className="bg-white border border-[#e2e8f0] rounded-xl p-4
                               shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
-            <p className="text-xs font-semibold text-[#94a3b8] uppercase tracking-wide mb-3">
+            <p className="text-xs font-semibold text-[#64748b] uppercase tracking-wide mb-3">
               🛒 Compras pendientes ({pendingPurchases.length})
             </p>
             <div className="space-y-2">
@@ -187,7 +188,7 @@ export default async function DashboardPage() {
         {/* Tareas de hoy — solo preparación y otras (limpieza va en su propia sección) */}
         {(prepTasks.length > 0 || otherTasks.length > 0) && (
         <section>
-          <p className="text-xs font-semibold text-[#94a3b8] uppercase tracking-wide mb-3">
+          <p className="text-xs font-semibold text-[#64748b] uppercase tracking-wide mb-3">
             ✅ Tareas de hoy ({prepTasks.length + otherTasks.length})
           </p>
 
@@ -214,7 +215,7 @@ export default async function DashboardPage() {
                 <div>
                   <div className="flex items-center gap-2 mb-2">
                     <span className="text-base">📋</span>
-                    <span className="text-xs font-semibold text-[#94a3b8] uppercase tracking-wide">
+                    <span className="text-xs font-semibold text-[#64748b] uppercase tracking-wide">
                       Otras ({otherTasks.length})
                     </span>
                     <div className="flex-1 h-px bg-[#e2e8f0]" />
@@ -242,7 +243,7 @@ function MaintenanceAlertItem({ issue }: { issue: OpenMaintenance }) {
       <span className="w-2 h-2 rounded-full shrink-0" style={{ background: color }} />
       <div className="flex-1 min-w-0">
         <p className="text-xs font-medium text-[#0f172a] truncate">{issue.title}</p>
-        <p className="text-[11px] text-[#94a3b8] truncate">
+        <p className="text-[11px] text-[#64748b] truncate">
           {issue.property?.name ?? '—'} · {label}{issue.status === 'in_progress' ? ' · en curso' : ''}
         </p>
       </div>
@@ -255,7 +256,7 @@ function PurchaseRequestItem({ request }: { request: PurchaseRequest & { propert
     <div className="flex items-center gap-3 py-1">
       <div className="flex-1 min-w-0">
         <p className="text-xs font-medium text-[#0f172a] truncate">{request.description}</p>
-        <p className="text-xs text-[#94a3b8]">{request.property?.name}</p>
+        <p className="text-xs text-[#64748b]">{request.property?.name}</p>
       </div>
       <ResolvePurchaseButton id={request.id} />
     </div>

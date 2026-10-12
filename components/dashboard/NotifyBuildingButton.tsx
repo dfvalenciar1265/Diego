@@ -92,7 +92,7 @@ export function NotifyBuildingButton({ data, taskId, notifiedAt }: Props) {
           {done && (
             <button
               onClick={undo}
-              className="text-[10px] text-[#94a3b8] underline underline-offset-2 active:opacity-60"
+              className="text-[10px] text-[#64748b] underline underline-offset-2 active:opacity-60"
             >
               Desmarcar
             </button>

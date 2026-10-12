@@ -81,7 +81,7 @@ export function WeeklyScheduleView({ initialTasks, initialWeekStart, staff, toda
           <p className="text-sm font-bold text-[#0f172a]">
             {isPending ? '…' : `${fmtShort(weekStart)} – ${fmtShort(weekEnd)}`}
           </p>
-          <p className="text-[10px] text-[#94a3b8] uppercase tracking-wide">
+          <p className="text-[10px] text-[#64748b] uppercase tracking-wide">
             {total} limpieza{total !== 1 ? 's' : ''}
           </p>
         </div>
@@ -128,7 +128,7 @@ export function WeeklyScheduleView({ initialTasks, initialWeekStart, staff, toda
                 </span>
                 {isToday && <span className="text-[9px] font-bold text-[#6366f1] bg-white px-1.5 py-0.5 rounded-full">HOY</span>}
                 {d.tasks.length > 0 && (
-                  <span className="ml-auto text-[10px] text-[#94a3b8]">{d.tasks.length}</span>
+                  <span className="ml-auto text-[10px] text-[#64748b]">{d.tasks.length}</span>
                 )}
               </div>
               {d.tasks.length === 0 ? (
@@ -141,11 +141,11 @@ export function WeeklyScheduleView({ initialTasks, initialWeekStart, staff, toda
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-semibold text-[#0f172a] truncate">{t.property_name}</p>
                         {t.assignee_name && !cleaner && (
-                          <p className="text-[11px] text-[#94a3b8] truncate">{t.assignee_name}</p>
+                          <p className="text-[11px] text-[#64748b] truncate">{t.assignee_name}</p>
                         )}
                       </div>
                       {t.guests != null && (
-                        <span className="text-[11px] text-[#94a3b8] flex-shrink-0">👥 {t.guests}</span>
+                        <span className="text-[11px] text-[#64748b] flex-shrink-0">👥 {t.guests}</span>
                       )}
                       <span className="text-xs font-semibold text-[#6366f1] flex-shrink-0">{t.checkout_time}</span>
                       {t.status === 'done' && <span className="text-xs flex-shrink-0">✅</span>}

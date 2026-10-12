@@ -90,7 +90,7 @@ export function OtherTaskCard({ task, teamMembers, onEdit }: Props) {
                 </span>
               )}
             </div>
-            <p className="text-xs text-[#94a3b8] mt-0.5">
+            <p className="text-xs text-[#64748b] mt-0.5">
               {task.assignee?.name ?? 'Sin asignar'} · {formatDate(task.scheduled_for)}
             </p>
           </div>
@@ -150,7 +150,7 @@ export function OtherTaskCard({ task, teamMembers, onEdit }: Props) {
 
             {/* Person */}
             <div>
-              <label className="text-[10px] text-[#94a3b8] font-semibold uppercase tracking-wide mb-1 block">
+              <label className="text-[10px] text-[#64748b] font-semibold uppercase tracking-wide mb-1 block">
                 Persona
               </label>
               <select
@@ -168,7 +168,7 @@ export function OtherTaskCard({ task, teamMembers, onEdit }: Props) {
 
             {/* Notes */}
             <div>
-              <label className="text-[10px] text-[#94a3b8] font-semibold uppercase tracking-wide mb-1 block">
+              <label className="text-[10px] text-[#64748b] font-semibold uppercase tracking-wide mb-1 block">
                 ¿Qué se hizo?
               </label>
               <input
@@ -183,7 +183,7 @@ export function OtherTaskCard({ task, teamMembers, onEdit }: Props) {
 
             {/* Cost */}
             <div>
-              <label className="text-[10px] text-[#94a3b8] font-semibold uppercase tracking-wide mb-1 block">
+              <label className="text-[10px] text-[#64748b] font-semibold uppercase tracking-wide mb-1 block">
                 Costo ($)
               </label>
               <input

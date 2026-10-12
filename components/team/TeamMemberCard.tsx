@@ -58,7 +58,7 @@ export function TeamMemberCard({ member, isSelf }: Props) {
 
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-[#0f172a] truncate">{member.name}</p>
-          <p className="text-xs text-[#94a3b8] truncate">{member.email}</p>
+          <p className="text-xs text-[#64748b] truncate">{member.email}</p>
           <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full mt-1 inline-block"
                 style={{ background: `${color}22`, color }}>
             {ROLE_LABELS[member.role] ?? member.role}
@@ -109,7 +109,7 @@ export function TeamMemberCard({ member, isSelf }: Props) {
       </div>
 
       <div>
-        <label className="text-xs text-[#64748b] font-medium">Nueva contraseña <span className="text-[#94a3b8]">(dejar vacío para no cambiar)</span></label>
+        <label className="text-xs text-[#64748b] font-medium">Nueva contraseña <span className="text-[#64748b]">(dejar vacío para no cambiar)</span></label>
         <input name="password" type="password" placeholder="••••••••"
                className="w-full mt-1 rounded-lg border border-[#e2e8f0] px-3 py-2 text-sm
                           focus:outline-none focus:ring-1 focus:ring-[#6366f1]" />

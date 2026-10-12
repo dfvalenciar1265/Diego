@@ -113,7 +113,7 @@ export function EmployeeCleaningReport({ initialRows, initialYear, initialMonth 
           <p className="text-sm font-bold text-[#0f172a] capitalize">
             {isPending ? '…' : `Q${period} · ${MONTHS[month - 1]} ${year}`}
           </p>
-          <p className="text-[10px] text-[#94a3b8] uppercase tracking-wide">
+          <p className="text-[10px] text-[#64748b] uppercase tracking-wide">
             {periodDays} días ({periodRange})
           </p>
         </div>
@@ -127,7 +127,7 @@ export function EmployeeCleaningReport({ initialRows, initialYear, initialMonth 
       {employees.length === 0 ? (
         <div className="text-center py-12">
           <p className="text-4xl mb-3">🧹</p>
-          <p className="text-[#94a3b8]">Sin aseos en Q{period} {MONTHS[month - 1]}</p>
+          <p className="text-[#64748b]">Sin aseos en Q{period} {MONTHS[month - 1]}</p>
         </div>
       ) : (
         <>
@@ -137,7 +137,7 @@ export function EmployeeCleaningReport({ initialRows, initialYear, initialMonth 
               <div className="flex items-center justify-between px-4 py-3 bg-[#f8fafc] border-b border-[#e2e8f0]">
                 <div className="min-w-0">
                   <p className="text-sm font-bold text-[#0f172a] truncate">{e.name}</p>
-                  <p className="text-[11px] text-[#94a3b8]">
+                  <p className="text-[11px] text-[#64748b]">
                     {e.count} {e.count === 1 ? 'aseo' : 'aseos'}
                   </p>
                 </div>
@@ -148,7 +148,7 @@ export function EmployeeCleaningReport({ initialRows, initialYear, initialMonth 
                 {e.apts.map(a => (
                   <div key={a.name} className="flex items-center justify-between px-4 py-2">
                     <span className="text-xs text-[#334155] truncate mr-2">
-                      {a.name} <span className="text-[#94a3b8]">×{a.count}</span>
+                      {a.name} <span className="text-[#64748b]">×{a.count}</span>
                     </span>
                     <span className="text-xs font-semibold text-[#0f172a] shrink-0">{fmtCOP(a.value)}</span>
                   </div>

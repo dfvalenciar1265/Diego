@@ -93,7 +93,7 @@ export function IncidenceCard({ issue, teamMembers = [] }: Props) {
         <div className="flex items-start justify-between gap-2 mb-2">
           <div className="flex-1 min-w-0">
             <p className="font-semibold text-[#0f172a] text-sm">{issue.title}</p>
-            <p className="text-xs text-[#94a3b8]">
+            <p className="text-xs text-[#64748b]">
               {issue.property?.name} · {formatDate(issue.created_at.split('T')[0])}
             </p>
           </div>
@@ -110,7 +110,7 @@ export function IncidenceCard({ issue, teamMembers = [] }: Props) {
             {STATUS_LABEL[issue.status]}
           </span>
           {issue.assignee && (
-            <span className="text-xs text-[#94a3b8]">🔧 {issue.assignee.name}</span>
+            <span className="text-xs text-[#64748b]">🔧 {issue.assignee.name}</span>
           )}
         </div>
 
@@ -158,7 +158,7 @@ export function IncidenceCard({ issue, teamMembers = [] }: Props) {
             {/* Person */}
             {teamMembers.length > 0 && (
               <div>
-                <label className="text-[10px] text-[#94a3b8] font-semibold uppercase tracking-wide mb-1 block">
+                <label className="text-[10px] text-[#64748b] font-semibold uppercase tracking-wide mb-1 block">
                   Persona que lo resolvió
                 </label>
                 <select
@@ -177,7 +177,7 @@ export function IncidenceCard({ issue, teamMembers = [] }: Props) {
 
             {/* Notes */}
             <div>
-              <label className="text-[10px] text-[#94a3b8] font-semibold uppercase tracking-wide mb-1 block">
+              <label className="text-[10px] text-[#64748b] font-semibold uppercase tracking-wide mb-1 block">
                 ¿Qué se hizo?
               </label>
               <input
@@ -192,7 +192,7 @@ export function IncidenceCard({ issue, teamMembers = [] }: Props) {
 
             {/* Cost */}
             <div>
-              <label className="text-[10px] text-[#94a3b8] font-semibold uppercase tracking-wide mb-1 block">
+              <label className="text-[10px] text-[#64748b] font-semibold uppercase tracking-wide mb-1 block">
                 Costo ($)
               </label>
               <input

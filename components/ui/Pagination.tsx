@@ -11,7 +11,7 @@ interface Props {
 export function Pagination({ page, total, onChange, accent = '#6366f1' }: Props) {
   if (total <= 1) return null
   return (
-    <div className="flex items-center justify-between pt-2">
+    <div className="col-span-full flex items-center justify-between pt-2">
       <button
         onClick={() => onChange(Math.max(1, page - 1))}
         disabled={page === 1}
@@ -20,7 +20,7 @@ export function Pagination({ page, total, onChange, accent = '#6366f1' }: Props)
       >
         ‹ Anterior
       </button>
-      <span className="text-xs text-[#94a3b8]">{page} / {total}</span>
+      <span className="text-xs text-[#64748b]">{page} / {total}</span>
       <button
         onClick={() => onChange(Math.min(total, page + 1))}
         disabled={page === total}

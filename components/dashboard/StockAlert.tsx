@@ -15,7 +15,7 @@ export function StockAlert({ item }: Props) {
         <p className="text-xs font-medium text-[#0f172a] truncate">
           {item.supply?.name} — {item.property?.name}
         </p>
-        <p className="text-xs text-[#94a3b8]">
+        <p className="text-xs text-[#64748b]">
           Quedan {item.current_qty} {item.supply?.unit} (mín. {item.min_qty})
         </p>
       </div>

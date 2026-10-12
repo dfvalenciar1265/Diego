@@ -117,7 +117,7 @@ export function PrepTaskCard({ task }: Props) {
         </div>
         <div className="min-w-0">
           <p className="font-semibold text-[#0f172a] text-sm leading-tight">{task.property?.name ?? '—'}</p>
-          <p className="text-xs text-[#94a3b8] truncate">{guestName}</p>
+          <p className="text-xs text-[#64748b] truncate">{guestName}</p>
         </div>
       </div>
 
@@ -126,7 +126,7 @@ export function PrepTaskCard({ task }: Props) {
 
         {/* Check-in: date · [editable time] */}
         <div className="bg-[#f8fafc] rounded-xl p-2.5">
-          <p className="text-[10px] text-[#94a3b8] font-semibold mb-1.5">CHECK-IN</p>
+          <p className="text-[10px] text-[#64748b] font-semibold mb-1.5">CHECK-IN</p>
           <div className="flex items-baseline gap-1.5 flex-wrap">
             <span className="text-sm font-bold text-[#0f172a]">{shortDate(res?.check_in)}</span>
             {editingTime ? (
@@ -156,10 +156,10 @@ export function PrepTaskCard({ task }: Props) {
 
         {/* Check-out: date · time (display only, muted) */}
         <div className="bg-[#f8fafc] rounded-xl p-2.5">
-          <p className="text-[10px] text-[#94a3b8] font-semibold mb-1.5">CHECK-OUT</p>
+          <p className="text-[10px] text-[#64748b] font-semibold mb-1.5">CHECK-OUT</p>
           <div className="flex items-baseline gap-1.5">
             <span className="text-sm font-bold text-[#0f172a]">{shortDate(res?.check_out)}</span>
-            <span className="text-[11px] text-[#94a3b8]">
+            <span className="text-[11px] text-[#64748b]">
               {defaultCoTime ? to12h(defaultCoTime) : '12pm'}
             </span>
           </div>

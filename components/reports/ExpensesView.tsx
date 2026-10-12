@@ -170,12 +170,12 @@ function ExpenseRow({ expense }: { expense: Expense }) {
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
           <p className="text-sm font-medium text-[#0f172a] truncate">{expense.provider}</p>
-          <span className="text-[10px] text-[#94a3b8]">{expense.property?.name}</span>
+          <span className="text-[10px] text-[#64748b]">{expense.property?.name}</span>
         </div>
         <div className="flex items-center gap-2 mt-0.5">
-          <span className="text-xs text-[#94a3b8]">{shortDate(expense.date)}</span>
+          <span className="text-xs text-[#64748b]">{shortDate(expense.date)}</span>
           {expense.notes && (
-            <span className="text-xs text-[#94a3b8] truncate">· {expense.notes}</span>
+            <span className="text-xs text-[#64748b] truncate">· {expense.notes}</span>
           )}
         </div>
       </div>
@@ -242,7 +242,7 @@ export function ExpensesView({ expenses, properties }: Props) {
       {list.length === 0 ? (
         <div className="text-center py-8">
           <p className="text-3xl mb-2">📋</p>
-          <p className="text-sm text-[#94a3b8]">Sin gastos registrados este mes</p>
+          <p className="text-sm text-[#64748b]">Sin gastos registrados este mes</p>
         </div>
       ) : (
         <div className="bg-white border border-[#e2e8f0] rounded-xl px-4 shadow-sm">

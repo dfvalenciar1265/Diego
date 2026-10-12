@@ -50,7 +50,7 @@ export function PendingChangeCard({ reservation }: { reservation: ChangeReservat
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="text-sm font-semibold text-[#0f172a] truncate">{reservation.guest_name}</p>
-          <p className="text-[11px] text-[#94a3b8] truncate">{reservation.property?.name ?? '—'}</p>
+          <p className="text-[11px] text-[#64748b] truncate">{reservation.property?.name ?? '—'}</p>
         </div>
         <span className="text-[9px] font-bold text-[#1d4ed8] bg-[#eff6ff] px-1.5 py-0.5 rounded shrink-0">
           ACEPTADO EN AIRBNB
@@ -63,8 +63,8 @@ export function PendingChangeCard({ reservation }: { reservation: ChangeReservat
           <p className="text-[11px] text-[#64748b]">{pc.description}</p>
         ) : rows.map(r => (
           <div key={r.label} className="flex items-center gap-2 text-[11px]">
-            <span className="text-[#94a3b8] w-16 shrink-0">{r.label}</span>
-            <span className="text-[#94a3b8] line-through">{r.from}</span>
+            <span className="text-[#64748b] w-16 shrink-0">{r.label}</span>
+            <span className="text-[#64748b] line-through">{r.from}</span>
             <span className="text-[#cbd5e1]">→</span>
             <span className="font-bold text-[#0f172a]">{r.to}</span>
           </div>

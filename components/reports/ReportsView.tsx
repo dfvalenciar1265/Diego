@@ -45,15 +45,15 @@ export function ReportsView({
   ]
 
   return (
-    <div className="p-4 space-y-4">
+    <div className="p-4 space-y-4 md:max-w-4xl">
 
       {/* ── Tabs ──────────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-3 rounded-xl overflow-hidden border border-[#e2e8f0]">
+      <div className="grid grid-cols-3 md:grid-cols-6 rounded-xl overflow-hidden border border-[#e2e8f0]">
         {tabs.map(t => (
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
-            className="py-2.5 text-[10px] font-medium transition-colors leading-tight"
+            className="py-2.5 text-[11px] md:text-xs font-medium transition-colors leading-tight"
             style={{
               background: tab === t.key ? '#6366f1' : 'white',
               color:      tab === t.key ? 'white'   : '#64748b',

@@ -147,7 +147,7 @@ export function MaintenanceView({ issues, properties, teamMembers }: Props) {
           {scheduled.length === 0 && open.length === 0 ? (
             <div className="text-center py-12">
               <p className="text-4xl mb-3">🔧</p>
-              <p className="text-[#94a3b8]">Sin incidencias activas</p>
+              <p className="text-[#64748b]">Sin incidencias activas</p>
             </div>
           ) : (
             <>
@@ -161,7 +161,7 @@ export function MaintenanceView({ issues, properties, teamMembers }: Props) {
                     </span>
                     <div className="flex-1 h-px bg-[#e0e7ff]" />
                   </div>
-                  <div className="space-y-3">
+                  <div className="card-grid">
                     {pagedSched.map(i => <ScheduledCard key={i.id} issue={i} />)}
                   </div>
                   <Pagination
@@ -183,7 +183,7 @@ export function MaintenanceView({ issues, properties, teamMembers }: Props) {
                     </span>
                     <div className="flex-1 h-px bg-[#fee2e2]" />
                   </div>
-                  <div className="space-y-3">
+                  <div className="card-grid">
                     {pagedOpen.map(i => (
                       <IncidenceCard key={i.id} issue={i} teamMembers={teamMembers} />
                     ))}
@@ -207,13 +207,15 @@ export function MaintenanceView({ issues, properties, teamMembers }: Props) {
           {resolved.length === 0 ? (
             <div className="text-center py-12">
               <p className="text-4xl mb-3">✅</p>
-              <p className="text-[#94a3b8]">No hay incidencias resueltas</p>
+              <p className="text-[#64748b]">No hay incidencias resueltas</p>
             </div>
           ) : (
             <>
-              {pagedResolved.map(i => (
-                <IncidenceCard key={i.id} issue={i} teamMembers={teamMembers} />
-              ))}
+              <div className="card-grid">
+                {pagedResolved.map(i => (
+                  <IncidenceCard key={i.id} issue={i} teamMembers={teamMembers} />
+                ))}
+              </div>
               <Pagination
                 page={resPage}
                 total={pageCount(resolved.length, PS)}

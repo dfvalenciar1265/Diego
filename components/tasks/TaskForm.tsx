@@ -74,7 +74,7 @@ export function TaskForm({ open, onClose, properties, teamMembers, defaultProper
             <Input name="notes" defaultValue={task?.notes ?? ''} placeholder="¿Qué hay que hacer?" className="mt-1" />
           </div>
           <div>
-            <Label>Costo ($) <span className="text-[#94a3b8] font-normal">— opcional</span></Label>
+            <Label>Costo ($) <span className="text-[#64748b] font-normal">— opcional</span></Label>
             <Input name="cost" type="number" min="0" step="0.01"
                    defaultValue={task?.cost ?? ''} placeholder="Opcional (déjalo vacío si no aplica)"
                    className="mt-1" />

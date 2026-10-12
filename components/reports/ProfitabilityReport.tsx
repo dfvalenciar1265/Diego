@@ -60,7 +60,7 @@ export function ProfitabilityReport({ initialRows, initialYear, initialMonth }: 
           <p className="text-sm font-bold text-[#0f172a] capitalize">
             {isPending ? '…' : `${MONTHS[month - 1]} ${year}`}
           </p>
-          <p className="text-[10px] text-[#94a3b8] uppercase tracking-wide">Rentabilidad por apartamento</p>
+          <p className="text-[10px] text-[#64748b] uppercase tracking-wide">Rentabilidad por apartamento</p>
         </div>
         <button
           onClick={() => navigate(1)}
@@ -72,7 +72,7 @@ export function ProfitabilityReport({ initialRows, initialYear, initialMonth }: 
       {rows.length === 0 ? (
         <div className="text-center py-12">
           <p className="text-4xl mb-3">💰</p>
-          <p className="text-[#94a3b8]">Sin datos en {MONTHS[month - 1]} {year}</p>
+          <p className="text-[#64748b]">Sin datos en {MONTHS[month - 1]} {year}</p>
         </div>
       ) : (
         <>
@@ -108,7 +108,7 @@ export function ProfitabilityReport({ initialRows, initialYear, initialMonth }: 
                   <div className="flex items-center justify-between px-4 py-3 border-b border-[#f1f5f9]">
                     <div className="min-w-0">
                       <p className="text-sm font-semibold text-[#0f172a] truncate">{r.property_name}</p>
-                      <p className="text-[11px] text-[#94a3b8]">
+                      <p className="text-[11px] text-[#64748b]">
                         {r.reservations} reserva{r.reservations !== 1 ? 's' : ''}
                       </p>
                     </div>

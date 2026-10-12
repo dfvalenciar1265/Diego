@@ -114,7 +114,7 @@ function StaffGroup({
       </div>
 
       {members.length === 0 ? (
-        <p className="text-sm text-[#94a3b8] text-center py-2">
+        <p className="text-sm text-[#64748b] text-center py-2">
           No hay nadie registrado
         </p>
       ) : (
@@ -169,7 +169,7 @@ function StaffCard({
         </div>
         <div className="flex-1 min-w-0">
           <p className="font-medium text-[#0f172a] text-sm">{member.name}</p>
-          <p className="text-xs text-[#94a3b8]">{member.email}</p>
+          <p className="text-xs text-[#64748b]">{member.email}</p>
         </div>
         {isAdmin && (
           <button onClick={() => setEditOpen(true)}
@@ -206,7 +206,7 @@ function StaffCard({
               </select>
             </div>
             <div>
-              <Label>Nueva contraseña <span className="text-[#94a3b8] font-normal">(dejar vacío para no cambiar)</span></Label>
+              <Label>Nueva contraseña <span className="text-[#64748b] font-normal">(dejar vacío para no cambiar)</span></Label>
               <Input name="password" type="password" placeholder="••••••••" className="mt-1" />
             </div>
 
