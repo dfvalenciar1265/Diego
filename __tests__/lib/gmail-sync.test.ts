@@ -115,6 +115,11 @@ describe('parseConfirmationEmail', () => {
     expect(r!.notes).not.toContain('Código:')
   })
 
+  it('defaults check-out to 11am when the email has no time', () => {
+    const r = parseConfirmationEmail(confirmationFixture())
+    expect(r!.notes).toContain('Check-out: 11am')
+  })
+
   it('returns null when no confirmation code is present', () => {
     const noCode = confirmationFixture().replace(/Código de confirmación: \w+/, 'Código de confirmación:')
     expect(parseConfirmationEmail(noCode)).toBeNull()

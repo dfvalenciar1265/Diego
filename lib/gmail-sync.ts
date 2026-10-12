@@ -514,7 +514,7 @@ export function parseConfirmationEmail(
   // Guests/code are now dedicated columns; times are needed for CleaningView/PrepTaskCard.
   const notes = [
     ciTimeMatch ? `Check-in: ${ciTimeMatch[1]}` : 'Check-in: 3pm',
-    coTimeMatch ? `Check-out: ${coTimeMatch[1]}` : 'Check-out: 12pm',
+    coTimeMatch ? `Check-out: ${coTimeMatch[1]}` : 'Check-out: 11am',
     `Cancelación: ${cancelPolicy}`,
   ].join(' | ')
 
