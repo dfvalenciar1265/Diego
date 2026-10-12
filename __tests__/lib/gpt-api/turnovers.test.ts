@@ -61,7 +61,7 @@ describe('checkoutSlot', () => {
     const task = { id: 't1', type: 'cleaning', scheduled_for: '2026-10-13', notes: 'Limpieza post-estadía — Laura', status: 'pending' }
     expect(checkoutSlot(reservation({ tasks: [task] }), '2026-10-13', 'P')).toMatchObject({ time: '11:00', time_source: 'reservation' })
     expect(checkoutSlot(reservation({ notes: '', tasks: [] }), '2026-10-13', 'P')).toMatchObject({
-      time: '12:00', time_source: 'default', cleaning_task_id: null,
+      time: '11:00', time_source: 'default', cleaning_task_id: null,
     })
   })
 })

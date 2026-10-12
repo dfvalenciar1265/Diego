@@ -56,14 +56,14 @@ export interface WeekCleaningTask {
 
 /** Converts "HH:MM" or "12:00 p.m." / "12pm" to a compact "12pm" / "3:30pm". */
 function displayTime(raw: string | null | undefined): string {
-  if (!raw) return '12pm'
+  if (!raw) return '11am'
   const h24 = raw.match(/^(\d{1,2}):(\d{2})$/)
   let h: number, m: number
   if (h24) {
     h = parseInt(h24[1]); m = parseInt(h24[2])
   } else {
     const d = raw.match(/(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m?\.?/i)
-    if (!d) return '12pm'
+    if (!d) return '11am'
     h = parseInt(d[1]); m = d[2] ? parseInt(d[2]) : 0
     const p = d[3].toLowerCase()
     if (p === 'p' && h !== 12) h += 12

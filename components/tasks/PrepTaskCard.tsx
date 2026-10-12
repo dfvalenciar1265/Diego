@@ -84,9 +84,9 @@ export function PrepTaskCard({ task }: Props) {
   const guestName = res?.guest_name ?? '—'
   const guestsCount = res?.guests ?? null
 
-  // Times from reservation notes — fallback to Airbnb standard (3pm / 12pm)
+  // Times from reservation notes — fallback to our standard (3pm / 11am)
   const defaultCiTime = reservationTimeTo24h(resNotes, 'Check-in') || '15:00'
-  const defaultCoTime = reservationTimeTo24h(resNotes, 'Check-out') || '12:00'
+  const defaultCoTime = reservationTimeTo24h(resNotes, 'Check-out') || '11:00'
 
   const { time24: savedTime, note: savedNote } = parseAnnotation(task.notes)
 
@@ -162,7 +162,7 @@ export function PrepTaskCard({ task }: Props) {
           <div className="flex items-baseline gap-1.5">
             <span className="text-sm font-bold text-[#0f172a]">{shortDate(res?.check_out)}</span>
             <span className="text-[11px] text-[#64748b]">
-              {defaultCoTime ? to12h(defaultCoTime) : '12pm'}
+              {defaultCoTime ? to12h(defaultCoTime) : '11am'}
             </span>
           </div>
         </div>

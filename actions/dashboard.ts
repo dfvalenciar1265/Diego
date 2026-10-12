@@ -38,7 +38,7 @@ function parseTimeParts(raw: string | null | undefined): { h: number; m: number 
 
 /** "7am", "12pm", "3:30pm" */
 function toDisplayTime(parts: { h: number; m: number } | null): string {
-  if (!parts) return '12pm'
+  if (!parts) return '11am'
   const suffix = parts.h >= 12 ? 'pm' : 'am'
   const h12 = parts.h % 12 || 12
   return parts.m === 0 ? `${h12}${suffix}` : `${h12}:${String(parts.m).padStart(2, '0')}${suffix}`
@@ -46,7 +46,7 @@ function toDisplayTime(parts: { h: number; m: number } | null): string {
 
 /** "HH:MM" for an <input type="time"> */
 function to24hInput(parts: { h: number; m: number } | null): string {
-  if (!parts) return '12:00'
+  if (!parts) return '11:00'
   return `${String(parts.h).padStart(2, '0')}:${String(parts.m).padStart(2, '0')}`
 }
 

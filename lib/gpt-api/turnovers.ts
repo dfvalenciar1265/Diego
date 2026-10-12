@@ -2,7 +2,7 @@
  * Horas de salida (check-out) y de llegada para la preparación (check-in), como las muestran
  * "Salidas de hoy" y "Preparación hoy" en la portada. La hora editada vive en la tarea del día:
  * limpieza → "HH:MM|", preparación → "HH:MM|nota". Sin hora editada vale la que quedó en la
- * reserva desde el correo de Airbnb ("Check-out: 11:00 AM") o la de siempre (12:00 / 15:00).
+ * reserva desde el correo de Airbnb ("Check-out: 11:00 AM") o la de siempre (11:00 / 15:00).
  */
 import type { Db } from './db'
 
@@ -50,7 +50,7 @@ export interface CheckinSlot {
   preparation_status: string | null
 }
 
-const DEFAULT_CHECKOUT = '12:00'
+const DEFAULT_CHECKOUT = '11:00'
 const DEFAULT_CHECKIN = '15:00'
 const TIME_PREFIX = /^(\d{2}:\d{2})\|/
 

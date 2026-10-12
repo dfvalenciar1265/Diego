@@ -120,7 +120,7 @@ export function registerTools(server: McpServer) {
 
   server.registerTool('list_turnovers', {
     title: 'Salidas y llegadas del día',
-    description: 'Salidas (check-out) y llegadas (check-in) de un día con su hora actual, como "Salidas de hoy" y "Preparación hoy" de la app. time_source: app = la fijó alguien en la app; reservation = la del correo de Airbnb; default = 12:00 salida / 15:00 llegada. Por defecto hoy.',
+    description: 'Salidas (check-out) y llegadas (check-in) de un día con su hora actual, como "Salidas de hoy" y "Preparación hoy" de la app. time_source: app = la fijó alguien en la app; reservation = la del correo de Airbnb; default = 11:00 salida / 15:00 llegada. Por defecto hoy.',
     inputSchema: z.object({
       date: date.optional().describe('Fecha AAAA-MM-DD; por defecto hoy, hasta 30 días adelante'),
     }),
