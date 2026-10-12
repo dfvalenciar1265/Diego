@@ -85,7 +85,7 @@ export default async function DashboardPage() {
             <h1 className="text-lg font-bold text-[#0f172a]">
               {greeting}, {member.name?.split(' ')[0] ?? 'Diego'} 👋
             </h1>
-            <p className="text-xs text-[#64748b] capitalize">{today}</p>
+            <p className="text-xs text-[#64748b] first-letter:uppercase">{today}</p>
           </div>
           <div className="flex items-center gap-2">
             <RefreshButton />

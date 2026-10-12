@@ -42,7 +42,7 @@ export function TaskForm({ open, onClose, properties, teamMembers, defaultProper
         <SheetHeader className="mb-4">
           <SheetTitle>{isEdit ? 'Editar tarea' : 'Nueva tarea'}</SheetTitle>
         </SheetHeader>
-        <form onSubmit={handleSubmit} className="space-y-4 pb-6">
+        <form onSubmit={handleSubmit} className="space-y-4 px-4 pb-6">
           <div>
             <Label>Apartamento *</Label>
             <select name="property_id" defaultValue={task?.property_id ?? defaultPropertyId ?? ''}

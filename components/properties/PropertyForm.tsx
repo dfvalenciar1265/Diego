@@ -41,7 +41,7 @@ export function PropertyForm({ open, onClose, property }: Props) {
         <SheetHeader className="mb-4">
           <SheetTitle>{property ? 'Editar apartamento' : 'Nuevo apartamento'}</SheetTitle>
         </SheetHeader>
-        <form onSubmit={handleSubmit} className="space-y-4 pb-6">
+        <form onSubmit={handleSubmit} className="space-y-4 px-4 pb-6">
           <div>
             <Label htmlFor="name">Nombre *</Label>
             <Input id="name" name="name" defaultValue={property?.name}

@@ -258,7 +258,7 @@ function AddStaffSheet({ role, onClose }: { role: UserRole; onClose: () => void 
         <SheetHeader className="mb-4">
           <SheetTitle>Agregar {ROLE_LABEL[role]}</SheetTitle>
         </SheetHeader>
-        <form onSubmit={handleSubmit} className="space-y-4 pb-6">
+        <form onSubmit={handleSubmit} className="space-y-4 px-4 pb-6">
           <input type="hidden" name="role" value={role} />
 
           <div>

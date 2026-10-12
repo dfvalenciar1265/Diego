@@ -36,7 +36,7 @@ export function PurchaseRequestForm({ open, onClose, properties, supplies, defau
         <SheetHeader className="mb-4">
           <SheetTitle>Solicitar compra</SheetTitle>
         </SheetHeader>
-        <form onSubmit={handleSubmit} className="space-y-4 pb-6">
+        <form onSubmit={handleSubmit} className="space-y-4 px-4 pb-6">
           <div>
             <Label>Apartamento *</Label>
             <select name="property_id" defaultValue={defaultPropertyId ?? ''}
