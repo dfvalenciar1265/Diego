@@ -8,6 +8,7 @@ import { createTeamMember, deactivateTeamMember, updateTeamMember } from '@/acti
 import { useUserRole } from '@/lib/user-context'
 import type { TeamMember, UserRole } from '@/lib/types'
 import { UserPlus } from 'lucide-react'
+import { toast, useConfirm } from '@/components/ui/feedback'
 
 interface Props {
   staff: TeamMember[]
@@ -95,7 +96,7 @@ function StaffGroup({
           <span className="text-sm">{emoji}</span>
           <h2 className="font-semibold text-[#0f172a] text-sm">{label}</h2>
           <span
-            className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+            className="text-[11px] font-bold px-1.5 py-0.5 rounded-full"
             style={{ background: bg, color: accent }}
           >
             {members.length}
@@ -104,7 +105,7 @@ function StaffGroup({
         {isAdmin && onAdd && (
           <button
             onClick={onAdd}
-            className="flex items-center gap-1.5 text-xs font-medium hover:opacity-80 transition-opacity"
+            className="flex items-center gap-1.5 min-h-11 -my-2 px-2 -mr-2 text-sm font-medium hover:opacity-80 transition-opacity"
             style={{ color: accent }}
           >
             <UserPlus size={14} />
@@ -143,10 +144,22 @@ function StaffCard({
   const [editOpen, setEditOpen]       = useState(false)
   const [isPending, startTransition]  = useTransition()
   const [error, setError]             = useState('')
+  const confirm = useConfirm()
 
-  function handleDeactivate() {
-    if (!confirm(`¿Desactivar a ${member.name}? No podrá iniciar sesión.`)) return
-    startTransition(async () => { await deactivateTeamMember(member.id) })
+  async function handleDeactivate() {
+    // Close the edit sheet first: two modal dialogs at once fight over focus
+    setEditOpen(false)
+    if (!(await confirm({
+      title:        `¿Desactivar a ${member.name}?`,
+      description:  'No podrá volver a iniciar sesión en la app. Sus tareas e historial se conservan.',
+      confirmLabel: 'Desactivar',
+      danger:       true,
+    }))) { setEditOpen(true); return }
+    startTransition(async () => {
+      const res = await deactivateTeamMember(member.id)
+      if (!res.success) { toast.error(res.error ?? 'No se pudo desactivar'); return }
+      toast.success(`${member.name} quedó desactivado`)
+    })
   }
 
   function handleEdit(e: React.FormEvent<HTMLFormElement>) {
@@ -155,8 +168,13 @@ function StaffCard({
     const fd = new FormData(e.currentTarget)
     startTransition(async () => {
       const res = await updateTeamMember(member.id, fd)
-      if (!res.success) { setError(res.error ?? 'Error'); return }
+      if (!res.success) {
+        setError(res.error ?? 'Error')
+        toast.error('No se guardaron los cambios')
+        return
+      }
       setEditOpen(false)
+      toast.success(`${member.name}: cambios guardados`)
     })
   }
 
@@ -173,7 +191,7 @@ function StaffCard({
         </div>
         {isAdmin && (
           <button onClick={() => setEditOpen(true)}
-                  className="text-xs font-medium px-2.5 py-1 rounded-lg flex-shrink-0"
+                  className="min-h-11 text-sm font-medium px-3 rounded-lg flex-shrink-0"
                   style={{ background: `${accent}18`, color: accent }}>
             Editar
           </button>
@@ -217,7 +235,7 @@ function StaffCard({
             </Button>
 
             <button type="button" onClick={handleDeactivate} disabled={isPending}
-                    className="w-full text-xs text-[#ef4444] py-1 opacity-70 hover:opacity-100">
+                    className="w-full min-h-11 text-sm font-medium text-[#ef4444] rounded-lg hover:bg-[#fef2f2]">
               Desactivar cuenta
             </button>
           </form>
@@ -247,7 +265,12 @@ function AddStaffSheet({ role, onClose }: { role: UserRole; onClose: () => void 
     const formData = new FormData(e.currentTarget)
     startTransition(async () => {
       const result = await createTeamMember(formData)
-      if (!result.success) { setError(result.error ?? 'Error'); return }
+      if (!result.success) {
+        setError(result.error ?? 'Error')
+        toast.error('No se pudo crear la cuenta')
+        return
+      }
+      toast.success(`Cuenta creada para ${formData.get('name')}`)
       onClose()
     })
   }
@@ -283,7 +306,7 @@ function AddStaffSheet({ role, onClose }: { role: UserRole; onClose: () => void 
             <button
               type="button"
               onClick={() => setTempPassword(`${role.charAt(0).toUpperCase() + role.slice(1)}${Math.floor(Math.random() * 9000) + 1000}`)}
-              className="text-xs text-[#6366f1] mt-1 hover:underline"
+              className="text-sm text-[#6366f1] mt-1 min-h-11 hover:underline"
             >
               Generar contraseña automática
             </button>

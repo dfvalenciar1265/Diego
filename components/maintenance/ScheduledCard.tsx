@@ -1,6 +1,7 @@
 'use client'
 import { useState, useTransition } from 'react'
-import { rescheduleMaintenance, completeScheduledMaintenance } from '@/actions/maintenance'
+import { rescheduleMaintenance, completeScheduledMaintenance, restoreScheduledDates } from '@/actions/maintenance'
+import { toast } from '@/components/ui/feedback'
 import { useUserRole } from '@/lib/user-context'
 import { canDo } from '@/lib/permissions'
 import type { MaintenanceIssue } from '@/lib/types'
@@ -36,7 +37,7 @@ function urgency(next: string | null): 'overdue' | 'soon' | 'ok' | 'unknown' {
   return 'ok'
 }
 
-const URGENCY_COLOR = { overdue: '#ef4444', soon: '#f97316', ok: '#22c55e', unknown: '#94a3b8' }
+const URGENCY_COLOR = { overdue: '#ef4444', soon: '#f97316', ok: '#22c55e', unknown: '#64748b' }
 const URGENCY_BG    = { overdue: '#fee2e2', soon: '#fff7ed', ok: '#f0fdf4', unknown: '#f8fafc' }
 const URGENCY_LABEL = { overdue: 'Vencido', soon: 'Próximo', ok: 'Al día', unknown: 'Sin fecha' }
 
@@ -65,17 +66,49 @@ export function ScheduledCard({ issue }: Props) {
     setEditingDate(false)
     if (!date || date === nextDue) return
     setError('')
+    const previous = issue.next_due   // raw column (legacy rows keep theirs in the description)
     startTransition(async () => {
       const res = await rescheduleMaintenance(issue.id, date)
-      if (!res.success) setError(res.error ?? 'No se pudo cambiar la fecha.')
+      if (!res.success) {
+        setError(res.error ?? 'No se pudo cambiar la fecha.')
+        toast.error('No se pudo reprogramar. Revisa tu conexión.')
+        return
+      }
+      toast.success(`Reprogramado para el ${fmtDate(date)}`, {
+        id: `undo-m-${issue.id}`,
+        action: {
+          label: 'Deshacer',
+          onClick: async () => {
+            const undo = await rescheduleMaintenance(issue.id, previous ?? '')
+            if (undo.success) toast.success('Fecha restaurada')
+            else toast.error('No se pudo deshacer')
+          },
+        },
+      })
     })
   }
 
   function markDone() {
     setError('')
+    const before = { last: issue.last_done, next: issue.next_due }   // raw columns, for «Deshacer»
     startTransition(async () => {
       const res = await completeScheduledMaintenance(issue.id)
-      if (!res.success) setError(res.error ?? 'No se pudo marcar. Revisa tu conexión.')
+      if (!res.success) {
+        setError(res.error ?? 'No se pudo marcar. Revisa tu conexión.')
+        toast.error('No se pudo marcar como hecho')
+        return
+      }
+      toast.success(`${issue.title}: marcado como hecho`, {
+        id: `undo-m-${issue.id}`,
+        action: {
+          label: 'Deshacer',
+          onClick: async () => {
+            const undo = await restoreScheduledDates(issue.id, before.last, before.next)
+            if (undo.success) toast.success('Se deshizo')
+            else toast.error('No se pudo deshacer')
+          },
+        },
+      })
     })
   }
 
@@ -97,7 +130,7 @@ export function ScheduledCard({ issue }: Props) {
           <p className="text-xs text-[#64748b] truncate">{issue.property?.name ?? '—'}</p>
         </div>
         <span
-          className="text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0"
+          className="text-[11px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0"
           style={{ background: `${color}22`, color }}
         >
           {URGENCY_LABEL[level]}
@@ -108,30 +141,32 @@ export function ScheduledCard({ issue }: Props) {
       <div className="grid grid-cols-2 gap-2 mb-3">
         {/* PRÓXIMO — editable (reprogramar) */}
         <div className="bg-[#f8fafc] rounded-xl p-2.5">
-          <p className="text-[10px] text-[#64748b] font-semibold mb-1">PRÓXIMO</p>
+          <p className="text-[11px] text-[#64748b] font-semibold mb-1">PRÓXIMO</p>
           {canManage && editingDate ? (
             <input
               type="date"
               autoFocus
               defaultValue={nextDue ?? ''}
               onBlur={e => reschedule(e.target.value)}
-              className="text-sm border border-[#6366f1] rounded-md px-1 py-0.5 w-full
+              className="text-sm border border-[#6366f1] rounded-md px-1 min-h-11 w-full
                          focus:outline-none bg-white"
             />
           ) : (
             <button
+              type="button"
               onClick={() => canManage && setEditingDate(true)}
               disabled={!canManage}
-              className="flex items-center gap-1 active:opacity-60 transition-opacity disabled:opacity-100"
+              aria-label={canManage ? `Reprogramar ${issue.title}` : undefined}
+              className="flex items-center gap-1 min-h-11 -my-2 w-full active:opacity-60 transition-opacity disabled:opacity-100"
             >
               <span className="text-sm font-bold" style={{ color }}>{fmtDate(nextDue)}</span>
-              {canManage && <span className="text-[10px]">✏️</span>}
+              {canManage && <span className="text-[11px]">✏️</span>}
             </button>
           )}
         </div>
         {/* ÚLTIMO */}
         <div className="bg-[#f8fafc] rounded-xl p-2.5">
-          <p className="text-[10px] text-[#64748b] font-semibold mb-1">ÚLTIMO</p>
+          <p className="text-[11px] text-[#64748b] font-semibold mb-1">ÚLTIMO</p>
           <p className="text-sm font-bold text-[#0f172a]">{fmtDate(lastDone)}</p>
         </div>
       </div>
@@ -147,7 +182,7 @@ export function ScheduledCard({ issue }: Props) {
         <button
           onClick={markDone}
           disabled={isPending}
-          className="mt-3 w-full h-9 rounded-lg text-sm font-semibold text-white
+          className="mt-3 w-full h-11 rounded-lg text-sm font-semibold text-white
                      active:opacity-80 transition-opacity disabled:opacity-50"
           style={{ background: '#22c55e' }}
         >

@@ -6,6 +6,7 @@ import { formatDate } from '@/lib/utils'
 import type { MaintenanceIssue, MaintenanceStatus, TeamMember } from '@/lib/types'
 import { useUserRole } from '@/lib/user-context'
 import { canDo } from '@/lib/permissions'
+import { toast } from '@/components/ui/feedback'
 
 interface Props {
   issue: MaintenanceIssue & {
@@ -57,7 +58,15 @@ export function IncidenceCard({ issue, teamMembers = [] }: Props) {
     setError('')
     startTransition(async () => {
       const res = await updateMaintenanceStatus(issue.id, nextStatus)
-      if (!res.success) setError('No se pudo actualizar. Revisa tu conexión.')
+      if (!res.success) {
+        setError('No se pudo actualizar. Revisa tu conexión.')
+        toast.error('No se pudo iniciar la incidencia')
+        return
+      }
+      toast.success(`«${issue.title}» en proceso`, {
+        id: `undo-m-${issue.id}`,   // a newer action on this card replaces the old «Deshacer»
+        action: { label: 'Deshacer', onClick: () => undoTo('open', 'in_progress') },
+      })
     })
   }
 
@@ -76,9 +85,29 @@ export function IncidenceCard({ issue, teamMembers = [] }: Props) {
         cost:       resCost ? parseFloat(resCost) : undefined,
         assignedTo: resPerson || undefined,
       })
-      if (!res.success) { setError('No se pudo resolver. Revisa tu conexión y reintenta.'); return }
+      if (!res.success) {
+        setError('No se pudo resolver. Revisa tu conexión y reintenta.')
+        toast.error('No se pudo resolver la incidencia')
+        return
+      }
       setResolving(false)
+      toast.success(`«${issue.title}» resuelta`, {
+        id: `undo-m-${issue.id}`,
+        action: { label: 'Deshacer', onClick: () => undoTo('in_progress', 'resolved') },
+      })
     })
+  }
+
+  /** «Deshacer» from the toast: back to the previous state with its previous data. */
+  async function undoTo(status: MaintenanceStatus, expectStatus: MaintenanceStatus) {
+    const res = await updateMaintenanceStatus(issue.id, status, {
+      notes:      issue.notes ?? '',
+      assignedTo: issue.assigned_to,
+      cost:       issue.cost,
+      expectStatus,
+    })
+    if (res.success) toast.success('Se deshizo')
+    else toast.error(res.error ?? 'No se pudo deshacer')
   }
 
   return (
@@ -130,7 +159,7 @@ export function IncidenceCard({ issue, teamMembers = [] }: Props) {
             onClick={advance}
             disabled={isPending}
             aria-label={`Iniciar incidencia en ${issue.property?.name ?? 'propiedad'}`}
-            className="mt-3 w-full h-10 rounded-lg text-sm font-semibold text-white
+            className="mt-3 w-full h-11 rounded-lg text-sm font-semibold text-white
                        active:opacity-80 disabled:opacity-50"
             style={{ backgroundColor: STATUS_COLOR[nextStatus] }}>
             {isPending ? '...' : '▶ Iniciar'}
@@ -143,7 +172,7 @@ export function IncidenceCard({ issue, teamMembers = [] }: Props) {
             onClick={advance}
             disabled={isPending}
             aria-label={`Resolver incidencia en ${issue.property?.name ?? 'propiedad'}`}
-            className="mt-3 w-full h-10 rounded-lg text-sm font-semibold text-white
+            className="mt-3 w-full h-11 rounded-lg text-sm font-semibold text-white
                        active:opacity-80 disabled:opacity-50"
             style={{ backgroundColor: '#22c55e' }}>
             ✓ Resolver
@@ -158,14 +187,14 @@ export function IncidenceCard({ issue, teamMembers = [] }: Props) {
             {/* Person */}
             {teamMembers.length > 0 && (
               <div>
-                <label className="text-[10px] text-[#64748b] font-semibold uppercase tracking-wide mb-1 block">
+                <label className="text-[11px] text-[#64748b] font-semibold uppercase tracking-wide mb-1 block">
                   Persona que lo resolvió
                 </label>
                 <select
                   value={resPerson}
                   onChange={e => setResPerson(e.target.value)}
                   className="w-full text-sm text-[#0f172a] bg-[#f8fafc] border border-[#e2e8f0]
-                             rounded-xl px-3 py-2 focus:outline-none"
+                             rounded-xl px-3 py-2 min-h-11 focus:outline-none"
                 >
                   <option value="">Sin especificar</option>
                   {teamMembers.map(m => (
@@ -177,7 +206,7 @@ export function IncidenceCard({ issue, teamMembers = [] }: Props) {
 
             {/* Notes */}
             <div>
-              <label className="text-[10px] text-[#64748b] font-semibold uppercase tracking-wide mb-1 block">
+              <label className="text-[11px] text-[#64748b] font-semibold uppercase tracking-wide mb-1 block">
                 ¿Qué se hizo?
               </label>
               <input
@@ -186,13 +215,13 @@ export function IncidenceCard({ issue, teamMembers = [] }: Props) {
                 onChange={e => setResNotes(e.target.value)}
                 placeholder="Descripción de la solución..."
                 className="w-full text-sm text-[#0f172a] bg-[#f8fafc] border border-[#e2e8f0]
-                           rounded-xl px-3 py-2 focus:outline-none"
+                           rounded-xl px-3 py-2 min-h-11 focus:outline-none"
               />
             </div>
 
             {/* Cost */}
             <div>
-              <label className="text-[10px] text-[#64748b] font-semibold uppercase tracking-wide mb-1 block">
+              <label className="text-[11px] text-[#64748b] font-semibold uppercase tracking-wide mb-1 block">
                 Costo ($)
               </label>
               <input
@@ -203,7 +232,7 @@ export function IncidenceCard({ issue, teamMembers = [] }: Props) {
                 onChange={e => setResCost(e.target.value)}
                 placeholder="0"
                 className="w-full text-sm text-[#0f172a] bg-[#f8fafc] border border-[#e2e8f0]
-                           rounded-xl px-3 py-2 focus:outline-none"
+                           rounded-xl px-3 py-2 min-h-11 focus:outline-none"
               />
             </div>
 
@@ -211,7 +240,7 @@ export function IncidenceCard({ issue, teamMembers = [] }: Props) {
               <button
                 onClick={cancelResolve}
                 disabled={isPending}
-                className="h-9 rounded-lg text-sm font-medium text-[#64748b]
+                className="h-11 rounded-lg text-sm font-medium text-[#64748b]
                            border border-[#e2e8f0] active:opacity-70"
               >
                 Cancelar
@@ -219,7 +248,7 @@ export function IncidenceCard({ issue, teamMembers = [] }: Props) {
               <button
                 onClick={submitResolve}
                 disabled={isPending}
-                className="h-9 rounded-lg text-sm font-semibold text-white
+                className="h-11 rounded-lg text-sm font-semibold text-white
                            active:opacity-80 disabled:opacity-50"
                 style={{ backgroundColor: '#22c55e' }}
               >

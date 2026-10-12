@@ -56,7 +56,7 @@ export function PropertyReservationsSheet({ property, reservations, onClose, onS
         <div className="flex items-center justify-between px-1 mb-2">
           <button
             onClick={() => setMonth(m => startOfMonth(subMonths(m, 1)))}
-            className="w-9 h-9 flex items-center justify-center text-[#6366f1] text-xl active:opacity-60"
+            className="w-11 h-11 flex items-center justify-center rounded-full text-[#6366f1] text-2xl hover:bg-[#eef2ff] active:opacity-60"
             aria-label="Mes anterior"
           >‹</button>
           <p className="text-sm font-bold capitalize text-[#0f172a]">
@@ -64,7 +64,7 @@ export function PropertyReservationsSheet({ property, reservations, onClose, onS
           </p>
           <button
             onClick={() => setMonth(m => startOfMonth(addMonths(m, 1)))}
-            className="w-9 h-9 flex items-center justify-center text-[#6366f1] text-xl active:opacity-60"
+            className="w-11 h-11 flex items-center justify-center rounded-full text-[#6366f1] text-2xl hover:bg-[#eef2ff] active:opacity-60"
             aria-label="Mes siguiente"
           >›</button>
         </div>
@@ -72,7 +72,7 @@ export function PropertyReservationsSheet({ property, reservations, onClose, onS
         {/* Weekday header */}
         <div className="grid grid-cols-7 border-b border-[#e2e8f0]">
           {WEEKDAYS.map(w => (
-            <div key={w} className="text-center text-[10px] font-semibold text-[#64748b] py-1">{w}</div>
+            <div key={w} className="text-center text-[11px] font-semibold text-[#64748b] py-1">{w}</div>
           ))}
         </div>
 
@@ -111,7 +111,7 @@ export function PropertyReservationsSheet({ property, reservations, onClose, onS
                       <div key={toStr(d)} className="border-r border-[#cbd5e1] last:border-r-0 pt-1 flex justify-center">
                         <span
                           className={`text-[11px] w-5 h-5 flex items-center justify-center rounded-full
-                            ${today ? 'bg-[#f59e0b] text-white font-bold' : inMonth ? 'text-[#334155]' : 'text-[#cbd5e1]'}`}
+                            ${today ? 'bg-[#f59e0b] text-white font-bold' : inMonth ? 'text-[#0f172a] font-medium' : 'text-[#64748b]'}`}
                         >
                           {format(d, 'd')}
                         </span>
@@ -147,7 +147,7 @@ export function PropertyReservationsSheet({ property, reservations, onClose, onS
                     >
                       {/* arrival dot marks where the stay begins (like Airbnb) */}
                       {s.roundL && <span className="w-1.5 h-1.5 rounded-full bg-white/90 shrink-0" />}
-                      <span className="text-[10px] font-semibold truncate">
+                      <span className="text-[11px] font-semibold truncate">
                         {blocked ? '🚫 Bloqueado' : s.r.guest_name}
                       </span>
                     </button>
@@ -159,7 +159,7 @@ export function PropertyReservationsSheet({ property, reservations, onClose, onS
         </div>
 
         {canEdit && (
-          <p className="text-[10px] text-[#64748b] text-center mt-3">Tocá una reserva para ver o editarla</p>
+          <p className="text-[11px] text-[#64748b] text-center mt-3">Toca una reserva para verla o editarla</p>
         )}
       </SheetContent>
     </Sheet>

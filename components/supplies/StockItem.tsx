@@ -2,6 +2,7 @@
 import { useState, useTransition } from 'react'
 import { updateStock } from '@/actions/supplies'
 import type { PropertySupply } from '@/lib/types'
+import { toast } from '@/components/ui/feedback'
 
 interface Props {
   item: PropertySupply & { supply?: { name: string; unit: string } }
@@ -13,9 +14,20 @@ export function StockItem({ item }: Props) {
   const isLow = qty <= item.min_qty
 
   function changeQty(delta: number) {
+    const before = qty
     const newQty = Math.max(0, qty + delta)
     setQty(newQty)
-    startTransition(() => updateStock(item.id, delta))
+    const name = item.supply?.name ?? 'Insumo'
+    startTransition(async () => {
+      try {
+        await updateStock(item.id, delta)
+        // Same id → repeated taps update one toast instead of stacking
+        toast.success(`${name}: ${newQty} ${item.supply?.unit ?? ''}`.trim(), { id: `stock-${item.id}` })
+      } catch {
+        setQty(before)
+        toast.error(`No se guardó el stock de ${name}`, { id: `stock-${item.id}` })
+      }
+    })
   }
 
   return (
@@ -33,7 +45,7 @@ export function StockItem({ item }: Props) {
           onClick={() => changeQty(-1)}
           disabled={isPending || qty === 0}
           aria-label={`Reducir ${item.supply?.name}`}
-          className="w-8 h-8 rounded-lg bg-[#f1f5f9] text-[#0f172a] font-bold
+          className="w-11 h-11 rounded-lg bg-[#f1f5f9] text-lg text-[#0f172a] font-bold
                      disabled:opacity-40 active:bg-[#e2e8f0]">
           −
         </button>
@@ -45,7 +57,7 @@ export function StockItem({ item }: Props) {
           onClick={() => changeQty(+1)}
           disabled={isPending}
           aria-label={`Aumentar ${item.supply?.name}`}
-          className="w-8 h-8 rounded-lg bg-[#f1f5f9] text-[#0f172a] font-bold
+          className="w-11 h-11 rounded-lg bg-[#f1f5f9] text-lg text-[#0f172a] font-bold
                      disabled:opacity-40 active:bg-[#e2e8f0]">
           +
         </button>

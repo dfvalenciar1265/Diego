@@ -12,7 +12,7 @@ export function AddPropertyButton() {
   return (
     <>
       <Button size="sm" onClick={() => setOpen(true)}
-              style={{ background: '#ff385c' }} className="text-white">
+              style={{ background: '#ff385c' }} className="text-white h-11 px-4 text-sm md:h-9">
         + Nuevo
       </Button>
       <PropertyForm open={open} onClose={() => setOpen(false)} />

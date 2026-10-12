@@ -80,6 +80,7 @@ export function FeedbackProvider({ children }: { children: React.ReactNode }) {
             <div className="mt-5 flex gap-2">
               <button
                 type="button"
+                autoFocus={!!opts?.danger}   // destructive: Enter must not delete
                 onClick={() => settle(false)}
                 className="flex-1 h-11 rounded-xl border border-[var(--border)] text-sm font-medium
                            text-[var(--text)] hover:bg-[var(--bg)] active:opacity-80"
@@ -88,7 +89,7 @@ export function FeedbackProvider({ children }: { children: React.ReactNode }) {
               </button>
               <button
                 type="button"
-                autoFocus
+                autoFocus={!opts?.danger}
                 onClick={() => settle(true)}
                 className="flex-1 h-11 rounded-xl text-sm font-semibold text-white active:opacity-80"
                 style={{ background: opts?.danger ? '#ef4444' : 'var(--primary)' }}

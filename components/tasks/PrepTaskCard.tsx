@@ -2,6 +2,7 @@
 import { useState, useTransition } from 'react'
 import { updateTaskNotes } from '@/actions/tasks'
 import type { Task } from '@/lib/types'
+import { toast } from '@/components/ui/feedback'
 
 type PrepTask = Task & {
   property?: { name: string }
@@ -100,9 +101,10 @@ export function PrepTaskCard({ task }: Props) {
     startTransition(async () => {
       try {
         const res = await updateTaskNotes(task.id, buildAnnotation(time, note))
-        if (!res.success) setSaveError(true)
+        if (!res.success) { setSaveError(true); toast.error('No se guardó la nota') }
       } catch {
         setSaveError(true)
+        toast.error('No se guardó la nota')
       }
     })
   }
@@ -126,7 +128,7 @@ export function PrepTaskCard({ task }: Props) {
 
         {/* Check-in: date · [editable time] */}
         <div className="bg-[#f8fafc] rounded-xl p-2.5">
-          <p className="text-[10px] text-[#64748b] font-semibold mb-1.5">CHECK-IN</p>
+          <p className="text-[11px] text-[#64748b] font-semibold mb-1.5">CHECK-IN</p>
           <div className="flex items-baseline gap-1.5 flex-wrap">
             <span className="text-sm font-bold text-[#0f172a]">{shortDate(res?.check_in)}</span>
             {editingTime ? (
@@ -156,7 +158,7 @@ export function PrepTaskCard({ task }: Props) {
 
         {/* Check-out: date · time (display only, muted) */}
         <div className="bg-[#f8fafc] rounded-xl p-2.5">
-          <p className="text-[10px] text-[#64748b] font-semibold mb-1.5">CHECK-OUT</p>
+          <p className="text-[11px] text-[#64748b] font-semibold mb-1.5">CHECK-OUT</p>
           <div className="flex items-baseline gap-1.5">
             <span className="text-sm font-bold text-[#0f172a]">{shortDate(res?.check_out)}</span>
             <span className="text-[11px] text-[#64748b]">
@@ -183,7 +185,7 @@ export function PrepTaskCard({ task }: Props) {
         placeholder="Nota adicional…"
         className="w-full text-xs border border-[#e2e8f0] rounded-xl px-3 py-2
                    focus:outline-none focus:ring-1 focus:ring-[#ff385c] bg-[#fafafa]
-                   resize-none placeholder:text-[#c4c9d4]"
+                   resize-none placeholder:text-[#64748b]"
       />
 
       {saveError && (

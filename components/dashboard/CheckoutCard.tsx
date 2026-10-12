@@ -60,7 +60,7 @@ export function CheckoutCard({ co }: { co: TodayCheckOut }) {
                        active:opacity-60 transition-opacity disabled:opacity-100"
           >
             {to12h(time)}
-            {canEdit && <span className="text-[10px]">✏️</span>}
+            {canEdit && <span className="text-[11px]">✏️</span>}
           </button>
         )}
       </div>

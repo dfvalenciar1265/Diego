@@ -85,7 +85,7 @@ export async function getWeekCleaningSchedule(weekStart: string): Promise<WeekCl
   end.setDate(end.getDate() + 6)
   const weekEnd = end.toISOString().slice(0, 10)
 
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('tasks')
     .select('id, scheduled_for, status, notes, property:properties(name), assignee:team_members(name), reservation:reservations(notes, guest_name, guests)')
     .eq('type', 'cleaning')
@@ -93,6 +93,8 @@ export async function getWeekCleaningSchedule(weekStart: string): Promise<WeekCl
     .lte('scheduled_for', weekEnd)
     .order('scheduled_for')
 
+  // Throw instead of returning [] so a DB error isn't shown as "no cleanings this week"
+  if (error) throw new Error(error.message)
   if (!data) return []
 
   return data.map(t => {

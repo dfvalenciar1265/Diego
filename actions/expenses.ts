@@ -28,16 +28,24 @@ export async function getExpenses(filters?: {
   return data ?? []
 }
 
+/** Expenses are admin-only: every write checks the caller's role (RLS doesn't). */
+async function requireAdmin(
+  supabase: Awaited<ReturnType<typeof createClient>>
+): Promise<{ success: false; error: string } | null> {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { success: false, error: 'No autorizado' }
+  const { data: member } = await supabase
+    .from('team_members').select('role').eq('id', user.id).single()
+  if (member?.role !== 'admin') return { success: false, error: 'Solo administradores' }
+  return null
+}
+
 export async function createExpense(
   formData: FormData
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { success: false, error: 'No autorizado' }
-
-  const { data: member } = await supabase
-    .from('team_members').select('role').eq('id', user.id).single()
-  if (member?.role !== 'admin') return { success: false, error: 'Solo administradores' }
+  const denied = await requireAdmin(supabase)
+  if (denied) return denied
 
   const amountRaw = formData.get('amount') as string
   const amount = parseFloat(amountRaw.replace(/\./g, '').replace(',', '.'))
@@ -61,6 +69,8 @@ export async function toggleExpenseStatus(
   current: ExpenseStatus
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient()
+  const denied = await requireAdmin(supabase)
+  if (denied) return denied
   const newStatus: ExpenseStatus = current === 'pending' ? 'paid' : 'pending'
   const { error } = await supabase
     .from('expenses').update({ status: newStatus }).eq('id', id)
@@ -73,6 +83,8 @@ export async function deleteExpense(
   id: string
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient()
+  const denied = await requireAdmin(supabase)
+  if (denied) return denied
   const { error } = await supabase.from('expenses').delete().eq('id', id)
   if (error) return { success: false, error: error.message }
   revalidatePath('/reports')

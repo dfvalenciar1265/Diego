@@ -1,13 +1,8 @@
 'use client'
 import { Fragment, useState, useTransition } from 'react'
 import { getIncomeReport, type IncomeRow } from '@/actions/reports'
+import { MONTHS, fmtCOP, PeriodNav, ExportCsvButton, ReportTable, Money, type Column } from './shared'
 
-const MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
-                'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
-
-function fmtCOP(n: number): string {
-  return `$${n.toLocaleString('es-CO')}`
-}
 
 interface Props {
   initialRows:  IncomeRow[]
@@ -40,11 +35,11 @@ export function IncomeReport({ initialRows, initialYear, initialMonth }: Props) 
   }
 
   // Aggregate by property
-  type PropSummary = { name: string; q1: number; q2: number; count: number }
+  type PropSummary = { id: string; name: string; q1: number; q2: number; count: number }
   const byProp = new Map<string, PropSummary>()
   for (const r of rows) {
     if (!byProp.has(r.property_id)) {
-      byProp.set(r.property_id, { name: r.property_name, q1: 0, q2: 0, count: 0 })
+      byProp.set(r.property_id, { id: r.property_id, name: r.property_name, q1: 0, q2: 0, count: 0 })
     }
     const e = byProp.get(r.property_id)!
     e.q1 += r.p1_amount
@@ -55,6 +50,16 @@ export function IncomeReport({ initialRows, initialYear, initialMonth }: Props) 
   const totalQ1  = props.reduce((s, p) => s + p.q1, 0)
   const totalQ2  = props.reduce((s, p) => s + p.q2, 0)
   const grandTotal = totalQ1 + totalQ2
+  const totalCount = props.reduce((s, p) => s + p.count, 0)
+
+  const green = '#16a34a'
+  const columns: Column<PropSummary>[] = [
+    { header: 'Apartamento', cell: p => p.name },
+    { header: 'Reservas',    numeric: true, cell: p => p.count, total: totalCount },
+    { header: 'Q1 (1–15)',   numeric: true, cell: p => <Money value={p.q1} tone={green} />, total: <Money value={totalQ1} tone={green} /> },
+    { header: 'Q2 (16–fin)', numeric: true, cell: p => <Money value={p.q2} tone={green} />, total: <Money value={totalQ2} tone={green} /> },
+    { header: 'Total',       numeric: true, cell: p => <b><Money value={p.q1 + p.q2} tone={green} /></b>, total: <Money value={grandTotal} tone={green} /> },
+  ]
 
   const now = new Date()
   const isCurrent = year === now.getFullYear() && month === now.getMonth() + 1
@@ -63,23 +68,21 @@ export function IncomeReport({ initialRows, initialYear, initialMonth }: Props) 
     <div className="space-y-4">
 
       {/* ── Month navigator ──────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between bg-white rounded-xl border border-[#e2e8f0] px-4 py-3 shadow-sm">
-        <button
-          onClick={() => navigate(-1)}
-          className="w-8 h-8 flex items-center justify-center rounded-lg text-[#6366f1] font-bold text-xl active:opacity-60"
-        >‹</button>
-        <div className="text-center">
-          <p className="text-sm font-bold text-[#0f172a] capitalize">
-            {isPending ? '…' : `${MONTHS[month - 1]} ${year}`}
-          </p>
-          <p className="text-[10px] text-[#64748b] uppercase tracking-wide">Reporte de ingresos</p>
-        </div>
-        <button
-          onClick={() => navigate(1)}
-          disabled={isCurrent}
-          className="w-8 h-8 flex items-center justify-center rounded-lg text-[#6366f1] font-bold text-xl active:opacity-60 disabled:text-[#cbd5e1]"
-        >›</button>
-      </div>
+      <PeriodNav
+        title={`${MONTHS[month - 1]} ${year}`}
+        subtitle="Reporte de ingresos"
+        pending={isPending}
+        onPrev={() => navigate(-1)}
+        onNext={() => navigate(1)}
+        nextDisabled={isCurrent}
+      />
+
+      <ExportCsvButton
+        kind="ingresos" year={year} month={month} disabled={isPending}
+        headers={columns.map(c => c.header)}
+        rows={props.map(p => [p.name, p.count, p.q1, p.q2, p.q1 + p.q2])}
+        totals={['Total', totalCount, totalQ1, totalQ2, grandTotal]}
+      />
 
       {rows.length === 0 ? (
         <div className="text-center py-12">
@@ -92,17 +95,27 @@ export function IncomeReport({ initialRows, initialYear, initialMonth }: Props) 
                 One single grid for header + every row + totals, so the columns
                 are sized once and shared. A grid per row would size its own
                 `auto` columns from its own content and nothing would line up. */}
-          <div className="grid grid-cols-[1fr_auto_auto] bg-white rounded-xl border border-[#e2e8f0] overflow-hidden shadow-sm">
+          <ReportTable
+            caption={`Ingresos por apartamento, ${MONTHS[month - 1]} ${year}`}
+            columns={columns}
+            rows={props}
+            rowKey={p => p.id}
+            totalLabel={`Total ${MONTHS[month - 1]}`}
+            totalTone={{ text: green, bg: '#f0fdf4', border: '#bbf7d0' }}
+          />
+
+          {/* Mobile only — the desktop table above replaces it from md up */}
+          <div className="md:hidden grid grid-cols-[1fr_auto_auto] bg-white rounded-xl border border-[#e2e8f0] overflow-hidden shadow-sm">
             {/* Header */}
-            <div className="px-3 py-2 text-[10px] font-bold text-[#64748b] uppercase tracking-wide bg-[#f8fafc] border-b border-[#e2e8f0]">Apartamento</div>
-            <div className="px-3 py-2 text-[10px] font-bold text-[#64748b] uppercase tracking-wide text-right bg-[#f8fafc] border-b border-[#e2e8f0]">Q1 (1–15)</div>
-            <div className="px-3 py-2 text-[10px] font-bold text-[#64748b] uppercase tracking-wide text-right bg-[#f8fafc] border-b border-[#e2e8f0]">Q2 (16–fin)</div>
+            <div className="px-3 py-2 text-[11px] font-bold text-[#64748b] uppercase tracking-wide bg-[#f8fafc] border-b border-[#e2e8f0]">Apartamento</div>
+            <div className="px-3 py-2 text-[11px] font-bold text-[#64748b] uppercase tracking-wide text-right bg-[#f8fafc] border-b border-[#e2e8f0]">Q1 (1–15)</div>
+            <div className="px-3 py-2 text-[11px] font-bold text-[#64748b] uppercase tracking-wide text-right bg-[#f8fafc] border-b border-[#e2e8f0]">Q2 (16–fin)</div>
 
             {props.map((p, i) => {
               const cell = `px-3 py-3 ${i % 2 === 0 ? 'bg-white' : 'bg-[#fafafa]'}`
                          + (i < props.length - 1 ? ' border-b border-[#f1f5f9]' : '')
               return (
-                <Fragment key={p.name}>
+                <Fragment key={p.id}>
                   <div className={`${cell} min-w-0`}>
                     <p className="text-xs font-semibold text-[#0f172a] truncate">{p.name}</p>
                     <p className="text-[11px] text-[#64748b]">

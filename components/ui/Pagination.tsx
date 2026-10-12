@@ -11,25 +11,25 @@ interface Props {
 export function Pagination({ page, total, onChange, accent = '#6366f1' }: Props) {
   if (total <= 1) return null
   return (
-    <div className="col-span-full flex items-center justify-between pt-2">
+    <nav aria-label="Paginación" className="col-span-full flex items-center justify-between pt-1">
       <button
         onClick={() => onChange(Math.max(1, page - 1))}
         disabled={page === 1}
-        className="text-sm font-medium disabled:text-[#c4c9d4] active:opacity-70 transition-opacity"
+        className="min-h-11 px-3 -mx-3 text-sm font-medium disabled:text-[#94a3b8] active:opacity-70 hover:opacity-80 transition-opacity"
         style={{ color: page === 1 ? undefined : accent }}
       >
         ‹ Anterior
       </button>
-      <span className="text-xs text-[#64748b]">{page} / {total}</span>
+      <span className="text-xs text-[#64748b]" aria-live="polite">{page} / {total}</span>
       <button
         onClick={() => onChange(Math.min(total, page + 1))}
         disabled={page === total}
-        className="text-sm font-medium disabled:text-[#c4c9d4] active:opacity-70 transition-opacity"
+        className="min-h-11 px-3 -mx-3 text-sm font-medium disabled:text-[#94a3b8] active:opacity-70 hover:opacity-80 transition-opacity"
         style={{ color: page === total ? undefined : accent }}
       >
         Siguiente ›
       </button>
-    </div>
+    </nav>
   )
 }
 

@@ -16,7 +16,7 @@ export function EditPropertyButton({ property }: Props) {
   if (!role || !canDo(role, 'properties:edit')) return null
   return (
     <>
-      <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
+      <Button size="sm" variant="outline" onClick={() => setOpen(true)} className="h-11 px-4 text-sm md:h-9">
         Editar
       </Button>
       <PropertyForm open={open} onClose={() => setOpen(false)} property={property} />

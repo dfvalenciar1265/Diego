@@ -78,27 +78,29 @@ export default async function DashboardPage() {
 
   return (
     <div className="pb-4">
-      {/* Header */}
-      <div className="bg-white border-b border-[#e2e8f0] px-4 pt-4 pb-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-lg font-bold text-[#0f172a]">
+      {/* Header — phone: white bar; md+: page title over the content (the sidebar is the bar) */}
+      <header className="bg-white border-b border-[#e2e8f0] px-4 pt-4 pb-3
+                         md:bg-transparent md:border-0 md:pt-8 md:pb-2">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="text-lg md:text-2xl font-bold text-[#0f172a] truncate">
               {greeting}, {member.name?.split(' ')[0] ?? 'Diego'} 👋
             </h1>
-            <p className="text-xs text-[#64748b] first-letter:uppercase">{today}</p>
+            <p className="text-xs md:text-sm text-[#64748b] first-letter:uppercase md:mt-0.5">{today}</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 md:gap-2 shrink-0">
             <RefreshButton />
-            <div className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-white text-sm"
-                 style={{ background: 'linear-gradient(135deg, #ff385c, #ff6b6b)' }}>
+            <div className="w-9 h-9 md:w-10 md:h-10 rounded-full flex items-center justify-center font-bold text-white text-sm"
+                 style={{ background: 'linear-gradient(135deg, #ff385c, #ff6b6b)' }}
+                 aria-hidden="true">
               {member?.name?.[0] ?? 'D'}
             </div>
           </div>
         </div>
-      </div>
+      </header>
 
       {/* KPIs — hoy, grid 3 columnas iguales */}
-      <div className="grid grid-cols-3 gap-2 px-4 pt-4">
+      <div className="grid grid-cols-3 gap-2 md:gap-4 px-4 pt-4">
         <KPICard label="Check-ins"  value={kpis.checkInsToday}
                  color="#ff385c" subtitle="hoy" icon="🏠" />
         <KPICard label="Check-outs" value={kpis.checkOutsToday}
@@ -147,7 +149,7 @@ export default async function DashboardPage() {
               <p className="text-xs font-semibold text-[#64748b] uppercase tracking-wide">
                 🔧 Mantenimiento pendiente ({openMaintenance.length})
               </p>
-              <Link href="/maintenance" className="text-[11px] font-semibold text-[#6366f1] shrink-0">
+              <Link href="/maintenance" className="text-xs font-semibold text-[#6366f1] shrink-0 min-h-11 -my-3 flex items-center">
                 Ver todo →
               </Link>
             </div>
@@ -258,7 +260,7 @@ function PurchaseRequestItem({ request }: { request: PurchaseRequest & { propert
         <p className="text-xs font-medium text-[#0f172a] truncate">{request.description}</p>
         <p className="text-xs text-[#64748b]">{request.property?.name}</p>
       </div>
-      <ResolvePurchaseButton id={request.id} />
+      <ResolvePurchaseButton id={request.id} description={request.description} />
     </div>
   )
 }

@@ -10,7 +10,7 @@ export type NavItem = {
   icon: ComponentType<{ size?: number; strokeWidth?: number; className?: string; style?: React.CSSProperties }>
   requires?: Action    // shown only if the role has this permission
   adminOnly?: boolean  // shown only to admins
-  desktopOnly?: boolean // too secondary for the 7-slot bottom bar
+  desktopOnly?: boolean // too secondary for the bottom bar's main slots (goes under «Más»)
   group: 'ops' | 'admin'
 }
 
@@ -37,4 +37,27 @@ export function navItemsFor(role: UserRole | null): NavItem[] {
 
 export function isActivePath(pathname: string, href: string): boolean {
   return href === '/' ? pathname === '/' : pathname.startsWith(href)
+}
+
+/** Most a phone bar shows without a «Más» button. */
+export const MOBILE_MAX_SLOTS = 5
+/** Preferred main slots when the role has more destinations than fit. */
+const MOBILE_PRIMARY = ['/', '/calendar', '/cleaning', '/maintenance']
+
+/**
+ * Splits a role's destinations for the phone bar. With ≤5 everything fits and
+ * `more` is empty; otherwise 4 main slots (Inicio, Reservas, Limpieza,
+ * Mantenimiento — or the first available ones) and the rest under «Más».
+ */
+export function splitMobileNav(items: NavItem[]): { primary: NavItem[]; more: NavItem[] } {
+  if (items.length <= MOBILE_MAX_SLOTS) return { primary: items, more: [] }
+  const slots = MOBILE_MAX_SLOTS - 1
+  const preferred = items.filter(it => MOBILE_PRIMARY.includes(it.href))
+  const fill = items.filter(it => !MOBILE_PRIMARY.includes(it.href))
+  const chosen = new Set([...preferred, ...fill].slice(0, slots).map(it => it.href))
+  // Keep the original order in both lists
+  return {
+    primary: items.filter(it => chosen.has(it.href)),
+    more:    items.filter(it => !chosen.has(it.href)),
+  }
 }

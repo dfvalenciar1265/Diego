@@ -1,6 +1,7 @@
 'use client'
 import { useState, useTransition } from 'react'
 import { applyReservationChange, dismissReservationChange } from '@/actions/reservations'
+import { toast } from '@/components/ui/feedback'
 import type { PendingChange, Reservation } from '@/lib/types'
 
 type ChangeReservation = Reservation & { property?: { name: string } | null }
@@ -37,11 +38,13 @@ export function PendingChangeCard({ reservation }: { reservation: ChangeReservat
     rows.push({ label: 'Check-out', from: shortDate(pc.check_out_from ?? reservation.check_out), to: shortDate(pc.check_out_to) })
   }
 
-  function run(fn: (id: string) => Promise<{ success: boolean; error?: string }>) {
+  function run(fn: (id: string) => Promise<{ success: boolean; error?: string; warning?: string }>) {
     setError('')
     startTransition(async () => {
       const res = await fn(reservation.id)
-      if (!res.success) setError(res.error ?? 'No se pudo. Reintenta.')
+      if (!res.success) { setError(res.error ?? 'No se pudo. Reintenta.'); return }
+      // e.g. the accepted dates collide with another stay — keep it on screen a while
+      if (res.warning) toast.warning(res.warning, { duration: 12000 })
     })
   }
 
@@ -52,7 +55,7 @@ export function PendingChangeCard({ reservation }: { reservation: ChangeReservat
           <p className="text-sm font-semibold text-[#0f172a] truncate">{reservation.guest_name}</p>
           <p className="text-[11px] text-[#64748b] truncate">{reservation.property?.name ?? '—'}</p>
         </div>
-        <span className="text-[9px] font-bold text-[#1d4ed8] bg-[#eff6ff] px-1.5 py-0.5 rounded shrink-0">
+        <span className="text-[11px] font-bold text-[#1d4ed8] bg-[#eff6ff] px-1.5 py-0.5 rounded shrink-0">
           ACEPTADO EN AIRBNB
         </span>
       </div>
@@ -65,7 +68,7 @@ export function PendingChangeCard({ reservation }: { reservation: ChangeReservat
           <div key={r.label} className="flex items-center gap-2 text-[11px]">
             <span className="text-[#64748b] w-16 shrink-0">{r.label}</span>
             <span className="text-[#64748b] line-through">{r.from}</span>
-            <span className="text-[#cbd5e1]">→</span>
+            <span className="text-[#64748b]">→</span>
             <span className="font-bold text-[#0f172a]">{r.to}</span>
           </div>
         ))}

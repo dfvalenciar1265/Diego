@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { createPurchaseRequest } from '@/actions/purchases'
 import type { Property, Supply } from '@/lib/types'
+import { toast } from '@/components/ui/feedback'
 
 interface Props {
   open: boolean
@@ -25,7 +26,12 @@ export function PurchaseRequestForm({ open, onClose, properties, supplies, defau
     setError('')
     startTransition(async () => {
       const result = await createPurchaseRequest(formData)
-      if (!result.success) { setError(result.error ?? 'Error'); return }
+      if (!result.success) {
+        setError(result.error ?? 'Error')
+        toast.error('No se pudo enviar la solicitud')
+        return
+      }
+      toast.success('Solicitud de compra enviada')
       onClose()
     })
   }

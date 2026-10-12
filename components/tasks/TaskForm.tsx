@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { createTask, updateTask } from '@/actions/tasks'
 import type { Property, TeamMember, Task } from '@/lib/types'
+import { toast } from '@/components/ui/feedback'
 
 interface Props {
   open: boolean
@@ -29,7 +30,12 @@ export function TaskForm({ open, onClose, properties, teamMembers, defaultProper
     setError('')
     startTransition(async () => {
       const result = task ? await updateTask(task.id, formData) : await createTask(formData)
-      if (!result.success) { setError(result.error ?? 'Error'); return }
+      if (!result.success) {
+        setError(result.error ?? 'Error')
+        toast.error(task ? 'No se guardaron los cambios' : 'No se pudo crear la tarea')
+        return
+      }
+      toast.success(task ? 'Tarea actualizada' : 'Tarea creada')
       onClose()
     })
   }

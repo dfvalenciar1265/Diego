@@ -5,6 +5,7 @@ import { formatDate } from '@/lib/utils'
 import { isTaskOverdue } from '@/lib/utils'
 import { useUserRole } from '@/lib/user-context'
 import { canDo } from '@/lib/permissions'
+import { toast } from '@/components/ui/feedback'
 import type { Task, TeamMember } from '@/lib/types'
 
 interface Props {
@@ -45,8 +46,13 @@ export function OtherTaskCard({ task, teamMembers, onEdit }: Props) {
         cost:       compCost ? parseFloat(compCost) : undefined,
         assignedTo: compPerson || undefined,
       })
-      if (!res.success) { setError(res.error ?? 'No se pudo completar. Reintenta.'); return }
+      if (!res.success) {
+        setError(res.error ?? 'No se pudo completar. Reintenta.')
+        toast.error('No se pudo completar la tarea')
+        return
+      }
       setCompleting(false)
+      toast.success(task.property?.name ? `Tarea completada · ${task.property.name}` : 'Tarea completada', { id: `undo-t-${task.id}` })
     })
   }
 
@@ -54,7 +60,22 @@ export function OtherTaskCard({ task, teamMembers, onEdit }: Props) {
     setError('')
     startTransition(async () => {
       const res = await updateTaskStatus(task.id, 'in_progress')
-      if (!res.success) setError('No se pudo iniciar. Revisa tu conexión.')
+      if (!res.success) {
+        setError('No se pudo iniciar. Revisa tu conexión.')
+        toast.error('No se pudo iniciar la tarea')
+        return
+      }
+      toast.success('Tarea en proceso', {
+        id: `undo-t-${task.id}`,
+        action: {
+          label: 'Deshacer',
+          onClick: async () => {
+            const undo = await updateTaskStatus(task.id, 'pending')
+            if (undo.success) toast.success('Se deshizo')
+            else toast.error('No se pudo deshacer')
+          },
+        },
+      })
     })
   }
 
@@ -85,7 +106,7 @@ export function OtherTaskCard({ task, teamMembers, onEdit }: Props) {
             <div className="flex items-center gap-2 flex-wrap">
               <p className="font-semibold text-[#0f172a] text-sm">{task.property?.name ?? '—'}</p>
               {overdue && task.status !== 'done' && (
-                <span className="text-[10px] bg-[#fee2e2] text-[#ef4444] px-2 py-0.5 rounded-full font-semibold">
+                <span className="text-[11px] bg-[#fee2e2] text-[#ef4444] px-2 py-0.5 rounded-full font-semibold">
                   ATRASADA
                 </span>
               )}
@@ -122,7 +143,7 @@ export function OtherTaskCard({ task, teamMembers, onEdit }: Props) {
           <button
             onClick={advance}
             disabled={isPending}
-            className="mt-2 w-full h-9 rounded-lg text-sm font-semibold text-white
+            className="mt-2 w-full h-11 rounded-lg text-sm font-semibold text-white
                        active:opacity-80 disabled:opacity-50"
             style={{ backgroundColor: '#6366f1' }}
           >
@@ -135,7 +156,7 @@ export function OtherTaskCard({ task, teamMembers, onEdit }: Props) {
           <button
             onClick={startComplete}
             disabled={isPending}
-            className="mt-2 w-full h-9 rounded-lg text-sm font-semibold text-white
+            className="mt-2 w-full h-11 rounded-lg text-sm font-semibold text-white
                        active:opacity-80 disabled:opacity-50"
             style={{ backgroundColor: '#22c55e' }}
           >
@@ -150,14 +171,14 @@ export function OtherTaskCard({ task, teamMembers, onEdit }: Props) {
 
             {/* Person */}
             <div>
-              <label className="text-[10px] text-[#64748b] font-semibold uppercase tracking-wide mb-1 block">
+              <label className="text-[11px] text-[#64748b] font-semibold uppercase tracking-wide mb-1 block">
                 Persona
               </label>
               <select
                 value={compPerson}
                 onChange={e => setCompPerson(e.target.value)}
                 className="w-full text-sm text-[#0f172a] bg-[#f8fafc] border border-[#e2e8f0]
-                           rounded-xl px-3 py-2 focus:outline-none"
+                           rounded-xl px-3 py-2 min-h-11 focus:outline-none"
               >
                 <option value="">Sin especificar</option>
                 {teamMembers.map(m => (
@@ -168,7 +189,7 @@ export function OtherTaskCard({ task, teamMembers, onEdit }: Props) {
 
             {/* Notes */}
             <div>
-              <label className="text-[10px] text-[#64748b] font-semibold uppercase tracking-wide mb-1 block">
+              <label className="text-[11px] text-[#64748b] font-semibold uppercase tracking-wide mb-1 block">
                 ¿Qué se hizo?
               </label>
               <input
@@ -177,13 +198,13 @@ export function OtherTaskCard({ task, teamMembers, onEdit }: Props) {
                 onChange={e => setCompNotes(e.target.value)}
                 placeholder="Descripción breve..."
                 className="w-full text-sm text-[#0f172a] bg-[#f8fafc] border border-[#e2e8f0]
-                           rounded-xl px-3 py-2 focus:outline-none"
+                           rounded-xl px-3 py-2 min-h-11 focus:outline-none"
               />
             </div>
 
             {/* Cost */}
             <div>
-              <label className="text-[10px] text-[#64748b] font-semibold uppercase tracking-wide mb-1 block">
+              <label className="text-[11px] text-[#64748b] font-semibold uppercase tracking-wide mb-1 block">
                 Costo ($)
               </label>
               <input
@@ -194,7 +215,7 @@ export function OtherTaskCard({ task, teamMembers, onEdit }: Props) {
                 onChange={e => setCompCost(e.target.value)}
                 placeholder="0"
                 className="w-full text-sm text-[#0f172a] bg-[#f8fafc] border border-[#e2e8f0]
-                           rounded-xl px-3 py-2 focus:outline-none"
+                           rounded-xl px-3 py-2 min-h-11 focus:outline-none"
               />
             </div>
 
@@ -202,7 +223,7 @@ export function OtherTaskCard({ task, teamMembers, onEdit }: Props) {
               <button
                 onClick={cancelComplete}
                 disabled={isPending}
-                className="h-9 rounded-lg text-sm font-medium text-[#64748b]
+                className="h-11 rounded-lg text-sm font-medium text-[#64748b]
                            border border-[#e2e8f0] active:opacity-70"
               >
                 Cancelar
@@ -210,7 +231,7 @@ export function OtherTaskCard({ task, teamMembers, onEdit }: Props) {
               <button
                 onClick={submitComplete}
                 disabled={isPending}
-                className="h-9 rounded-lg text-sm font-semibold text-white
+                className="h-11 rounded-lg text-sm font-semibold text-white
                            active:opacity-80 disabled:opacity-50"
                 style={{ backgroundColor: '#22c55e' }}
               >
@@ -225,7 +246,7 @@ export function OtherTaskCard({ task, teamMembers, onEdit }: Props) {
           <button
             onClick={onEdit}
             disabled={isPending}
-            className="mt-2 w-full h-8 rounded-lg text-xs font-medium text-[#64748b]
+            className="mt-2 w-full h-11 rounded-lg text-sm font-medium text-[#64748b]
                        border border-[#e2e8f0] active:opacity-70 disabled:opacity-50"
           >
             ✏️ Editar

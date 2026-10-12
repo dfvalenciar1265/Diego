@@ -9,7 +9,7 @@ export function MaintenanceClient({ properties }: { properties: Property[] }) {
   return (
     <>
       <Button size="sm" onClick={() => setOpen(true)} style={{ background: '#ff385c' }}
-              aria-label="Reportar nueva incidencia">
+              className="h-11 px-4 text-sm md:h-9" aria-label="Reportar nueva incidencia">
         + Reportar
       </Button>
       <IncidenceForm open={open} onClose={() => setOpen(false)} properties={properties} />

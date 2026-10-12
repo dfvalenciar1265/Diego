@@ -1,5 +1,5 @@
 'use client'
-import { useState, useMemo, useEffect, useRef, useCallback, memo } from 'react'
+import { useState, useMemo, useEffect, useRef, useCallback, useSyncExternalStore, memo } from 'react'
 import {
   format, startOfMonth, endOfMonth, eachDayOfInterval,
   addMonths, subMonths, subDays, isToday, isSameMonth,
@@ -15,7 +15,8 @@ import { ReservationForm } from './ReservationForm'
 import { PropertyReservationsSheet } from './PropertyReservationsSheet'
 
 // ── Layout constants ──────────────────────────────────────────────────────────
-const PROP_W  = 90    // sticky property-name column width (px)
+const PROP_W_PHONE   = 90    // sticky property-name column width (px) on phones
+const PROP_W_DESKTOP = 184   // md+: room for "Cartagena Beach Crespo 1214" without cutting it
 const DAY_W   = 36    // each day column width (px)
 const ROW_H   = 40    // row height (px)
 const TODAY_C = '#f59e0b'  // amber — reserved for "today" only (never red/indigo/grey)
@@ -23,6 +24,17 @@ const TODAY_C = '#f59e0b'  // amber — reserved for "today" only (never red/ind
 // Weekday initial by getDay() (0=Sun): the Colombian L M X J V S D convention.
 const WEEKDAY = ['D', 'L', 'M', 'X', 'J', 'V', 'S']
 const isWeekend = (d: Date) => d.getDay() === 0 || d.getDay() === 6
+
+// md+ (sidebar layout) → wider name column. Server/first paint assume phone.
+const DESKTOP_MQ = '(min-width: 768px)'
+function subscribeDesktop(onChange: () => void) {
+  const mq = window.matchMedia(DESKTOP_MQ)
+  mq.addEventListener('change', onChange)
+  return () => mq.removeEventListener('change', onChange)
+}
+function useIsDesktop(): boolean {
+  return useSyncExternalStore(subscribeDesktop, () => window.matchMedia(DESKTOP_MQ).matches, () => false)
+}
 
 interface Props {
   properties: Property[]
@@ -40,6 +52,7 @@ export function CalendarView({ properties, reservations }: Props) {
 
   const role    = useUserRole()
   const canEdit = role != null && canDo(role, 'reservations:edit')   // admin only — gates create affordances
+  const propW   = useIsDesktop() ? PROP_W_DESKTOP : PROP_W_PHONE
 
   // ── Date derivations (memoized: only recompute when the month changes) ──────
   const grid = useMemo(() => {
@@ -52,14 +65,14 @@ export function CalendarView({ properties, reservations }: Props) {
       days,
       firstDayStr: format(days[0], 'yyyy-MM-dd'),
       lastDayStr:  format(days[days.length - 1], 'yyyy-MM-dd'),
-      totalW: PROP_W + days.length * DAY_W,
       segments: [month1, month2].map(m => ({
         label: format(m, 'MMMM yyyy', { locale: es }),
         count: eachDayOfInterval({ start: startOfMonth(m), end: endOfMonth(m) }).length,
       })),
     }
   }, [baseMonth])
-  const { month1, month2, days, totalW } = grid
+  const { month1, month2, days } = grid
+  const totalW = propW + days.length * DAY_W
 
   // On first mount, scroll horizontally so yesterday is the first visible column
   useEffect(() => {
@@ -85,9 +98,9 @@ export function CalendarView({ properties, reservations }: Props) {
     if (!el) return
     const idx = days.findIndex(d => isToday(d))
     if (idx < 0) return
-    const target = PROP_W + idx * DAY_W - (el.clientWidth - PROP_W) / 2
+    const target = propW + idx * DAY_W - (el.clientWidth - propW) / 2
     el.scrollTo({ left: Math.max(0, target), behavior: 'smooth' })
-  }, [days])
+  }, [days, propW])
   const goToday = useCallback(() => {
     goTodayPending.current = true
     setBaseMonth(startOfMonth(new Date()))
@@ -161,13 +174,15 @@ export function CalendarView({ properties, reservations }: Props) {
             value={query}
             onChange={e => setQuery(e.target.value)}
             placeholder="Buscar reserva por huésped…"
-            className="w-full text-sm bg-white border border-[#e2e8f0] rounded-xl pl-9 pr-9 py-2.5
-                       focus:outline-none focus:ring-1 focus:ring-[#6366f1] placeholder:text-[#c4c9d4]"
+            aria-label="Buscar reserva por huésped"
+            className="w-full h-11 text-sm bg-white border border-[#e2e8f0] rounded-xl pl-9 pr-11
+                       focus:outline-none focus:ring-1 focus:ring-[#6366f1] placeholder:text-[#64748b]"
           />
           {query && (
             <button
               onClick={() => setQuery('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-[#64748b] text-sm active:opacity-60"
+              className="absolute right-0 top-0 w-11 h-11 flex items-center justify-center rounded-xl
+                         text-[#64748b] text-sm hover:text-[#0f172a] active:opacity-60"
               aria-label="Limpiar búsqueda"
             >✕</button>
           )}
@@ -201,7 +216,8 @@ export function CalendarView({ properties, reservations }: Props) {
         <div className="flex items-center justify-between px-4 py-3 sticky left-0 bg-[#f8fafc] z-20">
           <button
             onClick={() => setBaseMonth(m => startOfMonth(subMonths(m, 1)))}
-            className="w-10 h-10 flex items-center justify-center text-[#64748b] text-xl hover:text-[#0f172a] transition-colors"
+            className="w-11 h-11 flex items-center justify-center rounded-full text-[#64748b] text-2xl
+                       hover:text-[#0f172a] hover:bg-white transition-colors"
             aria-label="Mes anterior"
           >‹</button>
           <div className="flex items-center gap-2 min-w-0">
@@ -210,17 +226,24 @@ export function CalendarView({ properties, reservations }: Props) {
               {' — '}
               {format(month2, 'MMMM yyyy', { locale: es })}
             </span>
+            {/* 44px tap area around a compact pill */}
             <button
               onClick={goToday}
-              className="shrink-0 text-[11px] font-semibold px-2 py-1 rounded-full border transition-colors active:opacity-70"
-              style={{ color: TODAY_C, borderColor: TODAY_C, background: '#fffbeb' }}
+              className="shrink-0 h-11 px-1 flex items-center active:opacity-70"
+              aria-label="Ir a hoy"
             >
-              Hoy
+              <span
+                className="text-xs font-semibold px-2.5 py-1 rounded-full border"
+                style={{ color: '#b45309', borderColor: TODAY_C, background: '#fffbeb' }}
+              >
+                Hoy
+              </span>
             </button>
           </div>
           <button
             onClick={() => setBaseMonth(m => startOfMonth(addMonths(m, 1)))}
-            className="w-10 h-10 flex items-center justify-center text-[#64748b] text-xl hover:text-[#0f172a] transition-colors"
+            className="w-11 h-11 flex items-center justify-center rounded-full text-[#64748b] text-2xl
+                       hover:text-[#0f172a] hover:bg-white transition-colors"
             aria-label="Mes siguiente"
           >›</button>
         </div>
@@ -233,6 +256,7 @@ export function CalendarView({ properties, reservations }: Props) {
           days={days}
           segments={grid.segments}
           totalW={totalW}
+          propW={propW}
           firstDayStr={grid.firstDayStr}
           lastDayStr={grid.lastDayStr}
           canEdit={canEdit}
@@ -303,6 +327,8 @@ interface GridProps {
   days:         Date[]
   segments:     { label: string; count: number }[]
   totalW:       number
+  /** Width of the sticky apartment-name column (wider on desktop). */
+  propW:        number
   firstDayStr:  string
   lastDayStr:   string
   canEdit:      boolean
@@ -312,10 +338,27 @@ interface GridProps {
 }
 
 const CalendarGrid = memo(function CalendarGrid({
-  properties, byProp, month1, days, segments, totalW,
+  properties, byProp, month1, days, segments, totalW, propW,
   firstDayStr, lastDayStr, canEdit, onCellClick, onReservationClick, onPropertyClick,
 }: GridProps) {
   const todayOffset = days.findIndex(d => isToday(d))
+  // Keyboard: one tab stop per row (today's cell, else the first day); ←/→ move along the
+  // row and Enter/Space opens "nueva reserva" — instead of ~600 tab stops.
+  const focusCol = todayOffset >= 0 ? todayOffset : 0
+
+  function onCellKeyDown(e: React.KeyboardEvent<HTMLDivElement>, propertyId: string) {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      onCellClick(propertyId)
+      return
+    }
+    if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return
+    e.preventDefault()
+    const next = e.key === 'ArrowRight'
+      ? e.currentTarget.nextElementSibling
+      : e.currentTarget.previousElementSibling
+    if (next instanceof HTMLElement && next.dataset.cell !== undefined) next.focus()
+  }
 
   /**
    * Reservation → absolute pixel coordinates within a property row, or null.
@@ -336,8 +379,8 @@ const CalendarGrid = memo(function CalendarGrid({
     if (endOffset - startOffset <= 0) return null
 
     const GAP  = 1
-    const left  = PROP_W + startOffset * DAY_W + (isCI ? DAY_W / 2 : 0) + GAP
-    const right = PROP_W + endOffset   * DAY_W + (isCO ? DAY_W / 2 : 0) - GAP
+    const left  = propW + startOffset * DAY_W + (isCI ? DAY_W / 2 : 0) + GAP
+    const right = propW + endOffset   * DAY_W + (isCO ? DAY_W / 2 : 0) - GAP
     const width = right - left
     if (width <= 0) return null
 
@@ -348,7 +391,7 @@ const CalendarGrid = memo(function CalendarGrid({
     <div className="relative" style={{ minWidth: totalW }}>
 
       {/* Month labels row */}
-      <div className="flex" style={{ marginLeft: PROP_W }}>
+      <div className="flex" style={{ marginLeft: propW }}>
         {segments.map((seg, i) => (
           <div
             key={i}
@@ -361,7 +404,7 @@ const CalendarGrid = memo(function CalendarGrid({
       </div>
 
       {/* Weekday + day-number header row */}
-      <div className="flex" style={{ marginLeft: PROP_W }}>
+      <div className="flex" style={{ marginLeft: propW }}>
         {days.map(day => {
           const today = isToday(day)
           const wknd  = isWeekend(day)
@@ -371,12 +414,13 @@ const CalendarGrid = memo(function CalendarGrid({
               className="flex-shrink-0 flex flex-col items-center py-1"
               style={{ width: DAY_W, background: wknd && !today ? '#f8fafc' : undefined }}
             >
-              <span className="text-[8px] font-semibold uppercase text-[#cbd5e1] leading-none mb-0.5">
+              <span className={`text-[10px] font-semibold uppercase leading-none mb-0.5
+                               ${today ? 'text-[#b45309]' : 'text-[#64748b]'}`}>
                 {WEEKDAY[day.getDay()]}
               </span>
               <span
                 className={`w-6 h-6 flex items-center justify-center rounded-full text-[11px] font-medium
-                  ${today ? 'bg-[#f59e0b] text-white' : wknd ? 'text-[#cbd5e1]' : 'text-[#64748b]'}`}
+                  ${today ? 'bg-[#f59e0b] text-white' : wknd ? 'text-[#64748b]' : 'text-[#0f172a]'}`}
               >
                 {format(day, 'd')}
               </span>
@@ -397,33 +441,43 @@ const CalendarGrid = memo(function CalendarGrid({
             {/* Sticky property-name cell — tap to see this apartment's reservations */}
             <button
               onClick={() => onPropertyClick(property)}
-              className="flex-shrink-0 flex items-center gap-0.5 px-2 bg-white border-r border-[#e2e8f0]
-                         sticky left-0 z-10 text-left active:bg-[#f8fafc] transition-colors"
-              style={{ width: PROP_W }}
+              className="flex-shrink-0 flex items-center gap-0.5 px-2 md:px-3 bg-white border-r border-[#e2e8f0]
+                         sticky left-0 z-10 text-left hover:bg-[#f8fafc] active:bg-[#f8fafc] transition-colors"
+              style={{ width: propW }}
+              title={property.name}
+              aria-label={`Ver reservas de ${property.name}`}
             >
-              <p className="text-[11px] font-medium text-[#0f172a] leading-tight line-clamp-2 flex-1 min-w-0">
+              <p className="text-[11px] md:text-xs font-medium text-[#0f172a] leading-tight line-clamp-2 flex-1 min-w-0">
                 {property.name}
               </p>
-              <span className="text-[#cbd5e1] text-[10px] shrink-0">›</span>
+              <span className="text-[#64748b] text-xs shrink-0" aria-hidden>›</span>
             </button>
 
             {/* Day cells — click targets (empty days open new reservation form for admins) */}
-            {days.map(day => {
+            {days.map((day, col) => {
               const today    = isToday(day)
               const wknd     = isWeekend(day)
               const monthSep = day.getDate() === 1 && !isSameMonth(day, month1)
               return (
                 <div
                   key={day.toISOString()}
+                  {...(canEdit && {
+                    role: 'button',
+                    tabIndex: col === focusCol ? 0 : -1,
+                    'data-cell': '',
+                    'aria-label': `Nueva reserva en ${property.name}, ${format(day, "EEEE d 'de' MMMM", { locale: es })}`,
+                    onKeyDown: (e: React.KeyboardEvent<HTMLDivElement>) => onCellKeyDown(e, property.id),
+                  })}
                   className={[
                     'flex-shrink-0 border-l',
-                    canEdit ? 'cursor-pointer' : '',
+                    canEdit ? 'cursor-pointer hover:bg-[#f1f5f9] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[#6366f1]' : '',
                     today    ? 'bg-[#fffbeb] border-l-[#f59e0b] border-l-2'
                              : wknd ? 'bg-[#f8fafc] border-[#f1f5f9]'
                              : 'border-[#f1f5f9]',
                     monthSep ? 'border-l-[#e2e8f0] border-l-2' : '',
                   ].join(' ')}
-                  style={{ width: DAY_W, height: ROW_H }}
+                  // keep a focused cell from hiding under the sticky name column
+                  style={{ width: DAY_W, height: ROW_H, scrollMarginLeft: propW }}
                   onClick={canEdit ? () => onCellClick(property.id) : undefined}
                 />
               )
@@ -458,13 +512,13 @@ const CalendarGrid = memo(function CalendarGrid({
         <>
           <div
             className="absolute pointer-events-none"
-            style={{ top: 0, bottom: 0, left: PROP_W + todayOffset * DAY_W + DAY_W / 2 - 1, width: 2, background: TODAY_C }}
+            style={{ top: 0, bottom: 0, left: propW + todayOffset * DAY_W + DAY_W / 2 - 1, width: 2, background: TODAY_C }}
           />
           <div
             className="absolute pointer-events-none"
-            style={{ top: 1, left: PROP_W + todayOffset * DAY_W + DAY_W / 2, transform: 'translateX(-50%)' }}
+            style={{ top: 1, left: propW + todayOffset * DAY_W + DAY_W / 2, transform: 'translateX(-50%)' }}
           >
-            <span className="text-[8px] font-bold text-white px-1 py-px rounded" style={{ background: TODAY_C }}>
+            <span className="text-[10px] leading-none font-bold text-white px-1 py-0.5 rounded" style={{ background: TODAY_C }}>
               HOY
             </span>
           </div>

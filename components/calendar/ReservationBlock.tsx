@@ -41,12 +41,15 @@ export const ReservationBlock = memo(function ReservationBlock({ reservation, on
   return (
     <button
       onClick={() => onClick(reservation)}
+      aria-label={blocked
+        ? `Bloqueado del ${reservation.check_in} al ${reservation.check_out}`
+        : `${reservation.guest_name} (${reservation.source === 'airbnb' ? 'Airbnb' : 'directa'}), del ${reservation.check_in} al ${reservation.check_out}`}
       className="absolute top-1 bottom-1 rounded text-xs font-medium px-1
                  overflow-hidden text-left active:opacity-80 transition-opacity"
       style={{ backgroundColor: bg, color: 'white', ...style }}
     >
       <span className="flex items-center gap-0.5 truncate">
-        {!blocked && <span className="text-[9px] font-bold opacity-70 shrink-0">{srcMark}</span>}
+        {!blocked && <span className="text-[10px] font-bold opacity-80 shrink-0" aria-hidden>{srcMark}</span>}
         <span className="truncate">{label}</span>
       </span>
     </button>
