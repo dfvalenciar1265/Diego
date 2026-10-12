@@ -16,6 +16,7 @@
  */
 import { todayInBogota } from '@/lib/gpt-api/dates'
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import {
@@ -27,7 +28,7 @@ import {
   type ParsedReservation,
   type ChangeRequestFlag,
 } from '@/lib/gmail-sync'
-import { completeOverdueTasks } from '@/actions/tasks'
+import { settleOverdueTasks } from '@/lib/overdue-tasks'
 import { cleaningTaskFor, preparationTaskFor, missingTurnoverTasks } from '@/lib/turnover-tasks'
 
 // Use a loose type for the service client to avoid complex generic mismatches
@@ -208,10 +209,15 @@ async function syncHandler(req: NextRequest, fromCron: boolean) {
   // counted as a check-in on the home but missing from "Preparación hoy").
   const repairedTasks = await repairMissingTurnoverTasks(db)
 
-  // ── 5. Auto-complete past tasks ──────────────────────────────────────────
-  // Any cleaning/preparation task whose date has already passed gets marked done
-  // automatically so the task list stays clean.
-  const completedTasks = await completeOverdueTasks()
+  // ── 5. Settle past tasks ─────────────────────────────────────────────────
+  // Cleanings nobody started are dropped; started cleanings and 'other' tasks are
+  // closed. Preparations are left alone (see lib/overdue-tasks.ts).
+  const { dropped: droppedTasks, closed: completedTasks } = await settleOverdueTasks(db, todayInBogota())
+  if (droppedTasks + completedTasks > 0) {
+    revalidatePath('/cleaning')
+    revalidatePath('/tasks')
+    revalidatePath('/')
+  }
 
   await db.from('gmail_sync_log').insert({ triggered_by: triggeredBy, new_count: newCount })
 
@@ -223,6 +229,7 @@ async function syncHandler(req: NextRequest, fromCron: boolean) {
     change_requests: changeRequestCount,
     repaired_tasks: repairedTasks,
     completed_tasks: completedTasks,
+    dropped_cleanings: droppedTasks,
     emails_parsed: emailResult.confirmed.length + emailResult.updated.length + emailResult.cancelled.length + emailResult.change_requests.length,
     threads_fetched: emailResult.threads_fetched,
     skipped_no_room: emailResult.skipped_no_room,
