@@ -41,12 +41,13 @@ test.describe('pantalla de login', () => {
     await expect(page.getByLabel('Tu nombre')).toBeFocused()
   })
 
-  test('avisa cuando el nombre no existe', async ({ page }) => {
-    // Solo consulta por nombre (lectura); nunca llega a intentar la contraseña.
+  test('rechaza un nombre que no existe sin revelar si existe', async ({ page }) => {
+    // Sin coincidencia por nombre el servidor responde antes de intentar la contraseña.
+    // El mensaje es el mismo que con contraseña incorrecta (no deja sondear nombres).
     await page.getByLabel('Tu nombre').fill('Usuario Inexistente E2E Zzq')
     await page.getByLabel('Contraseña').fill('no-importa')
     await page.getByRole('button', { name: 'Entrar' }).click()
-    await expect(page.getByText('No encontramos a nadie con ese nombre')).toBeVisible()
+    await expect(page.getByText('Nombre o contraseña incorrectos')).toBeVisible()
     await expect(page).toHaveURL(/\/login$/)
   })
 })

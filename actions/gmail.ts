@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { getCurrentMember } from '@/lib/auth'
 
 export interface SyncResult {
   ok: boolean
@@ -16,6 +17,9 @@ export interface SyncResult {
  * Calls the /api/gmail-sync route, which handles auth + parsing + DB writes.
  */
 export async function syncGmail(): Promise<SyncResult> {
+  // This forwards CRON_SECRET to the sync route, so the caller must be a signed-in,
+  // active member (the button is on the calendar for every role)
+  if (!(await getCurrentMember())) return { ok: false, error: 'No autorizado' }
   if (!process.env.CRON_SECRET) {
     return { ok: false, error: 'CRON_SECRET no configurado en variables de entorno' }
   }

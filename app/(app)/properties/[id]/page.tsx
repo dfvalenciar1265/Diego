@@ -1,4 +1,6 @@
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
+import { getCurrentMember } from '@/lib/auth'
+import { canDo } from '@/lib/permissions'
 import { getProperty, getProperties } from '@/actions/properties'
 import { getPropertySupplies, getAllSupplies } from '@/actions/supplies'
 import { PageHeader } from '@/components/layout/PageHeader'
@@ -11,6 +13,11 @@ interface Props {
 }
 
 export default async function PropertyDetailPage({ params }: Props) {
+  // Access codes and instructions live here: admin-only, like the menu entry
+  const member = await getCurrentMember()
+  if (!member) redirect('/logout')
+  if (!canDo(member.role, 'properties:edit')) redirect('/')
+
   const { id } = await params
   const [property, stockItems, allSupplies, allProperties] = await Promise.all([
     getProperty(id),

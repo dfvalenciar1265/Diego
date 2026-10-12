@@ -3,6 +3,7 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { canDo } from '@/lib/permissions'
+import { randomBytes } from 'node:crypto'
 import type { TeamMember, UserRole } from '@/lib/types'
 
 async function getCallerRole(): Promise<UserRole | null> {
@@ -142,39 +143,39 @@ export async function deactivateTeamMember(
     return { success: false, error: 'No autorizado' }
   }
   const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (user?.id === memberId) {
+    return { success: false, error: 'No puedes desactivarte a ti mismo' }
+  }
   const { error } = await supabase
     .from('team_members')
     .update({ active: false })
     .eq('id', memberId)
   if (error) return { success: false, error: error.message }
-  revalidatePath('/cleaning')
-  return { success: true }
-}
 
-/**
- * Looks up the email address of a team member by their display name.
- * Used on the login page so users can log in with their name instead of email.
- * Returns null if not found (caller shows a friendly error).
- */
-export async function lookupEmailByName(
-  name: string
-): Promise<{ email: string } | null> {
-  // Uses service client so it works without a session (login page context)
+  // active=false only hides the person in the app; also ban the Auth user so their
+  // password and any open session (refresh token) stop working. Undo with
+  // ban_duration: 'none' if a reactivate option is ever added.
   const db = createServiceClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
   )
-  const { data } = await db
-    .from('team_members')
-    .select('email')
-    .ilike('name', name.trim())
-    .eq('active', true)
-    .single()
-  return data ? { email: data.email } : null
+  const { error: banError } = await db.auth.admin.updateUserById(memberId, { ban_duration: '876000h' })
+  if (banError) {
+    console.error('[deactivateTeamMember] ban', banError.message)
+    revalidatePath('/cleaning')
+    return { success: false, error: `Quedó oculto, pero no se pudo bloquear su acceso: ${banError.message}` }
+  }
+
+  revalidatePath('/cleaning')
+  revalidatePath('/team')
+  revalidatePath('/properties')
+  return { success: true }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+/** Random 18-char password (crypto, not Math.random: "Temp12345!" had only 90k options). */
 function generateTempPassword(): string {
-  return `Temp${Math.floor(Math.random() * 90000) + 10000}!`
+  return randomBytes(18).toString('base64url').slice(0, 18)
 }

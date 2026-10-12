@@ -81,10 +81,16 @@ export async function updateMaintenanceTool(db: Db, id: string, body: unknown, t
   return done(result)
 }
 
+/**
+ * `includeAmount` is only for the MCP connector (OAuth, active admins). The
+ * ChatGPT Actions API authenticates with a shared key and is documented as
+ * «sin montos», so it never gets them.
+ */
 export async function listReservationsTool(
   db: Db,
   query: { from?: string | null; to?: string | null; property?: string | null },
   today: string,
+  { includeAmount = false }: { includeAmount?: boolean } = {},
 ) {
   const range = parseRange(query.from ?? null, query.to ?? null, today)
   if (!range.ok) return failed(400, range.error)
@@ -110,7 +116,7 @@ export async function listReservationsTool(
       check_in: r.check_in,
       check_out: r.check_out,
       guests: r.guests,
-      amount: Number(r.amount ?? 0),
+      ...(includeAmount ? { amount: Number(r.amount ?? 0) } : {}),
       status: r.status,
       source: r.source,
       notes: r.notes,

@@ -104,7 +104,7 @@ export function registerTools(server: McpServer) {
       property: z.string().optional().describe('Nombre del apartamento'),
     }),
     annotations: READ,
-  }, (query) => run(() => listReservationsTool(serviceDb(), query, todayInBogota())))
+  }, (query) => run(() => listReservationsTool(serviceDb(), query, todayInBogota(), { includeAmount: true })))
 
   server.registerTool('compare_reservations', {
     title: 'Comparar con Airbnb',

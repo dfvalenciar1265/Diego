@@ -1,3 +1,6 @@
+import { redirect } from 'next/navigation'
+import { getCurrentMember } from '@/lib/auth'
+import { canDo } from '@/lib/permissions'
 import { getProperties } from '@/actions/properties'
 import { getTeamMembers } from '@/actions/team'
 import { PropertyCard } from '@/components/properties/PropertyCard'
@@ -6,6 +9,11 @@ import { PageHeader } from '@/components/layout/PageHeader'
 import { AddPropertyButton } from '@/components/properties/AddPropertyButton'
 
 export default async function PropertiesPage() {
+  // Same rule as the menu: apartments, staff and access codes are admin-only
+  const member = await getCurrentMember()
+  if (!member) redirect('/logout')
+  if (!canDo(member.role, 'properties:edit')) redirect('/')
+
   const [properties, staff] = await Promise.all([
     getProperties(),
     getTeamMembers(),   // all roles: admin + cleaning + anfitrion + maintenance

@@ -19,7 +19,11 @@ export const getCurrentUser = cache(async (): Promise<{ id: string; email?: stri
   return { id: data.claims.sub, email: data.claims.email }
 })
 
-/** Returns the full team_members row for the signed-in user, or null. */
+/**
+ * Returns the team_members row for the signed-in user, or null when there is no
+ * session, no row, or the person was deactivated. Pages send null to /logout
+ * (not /login: with a live session the proxy would bounce /login back to / — a loop).
+ */
 export const getCurrentMember = cache(async (): Promise<TeamMember | null> => {
   const user = await getCurrentUser()
   if (!user) return null
@@ -29,5 +33,5 @@ export const getCurrentMember = cache(async (): Promise<TeamMember | null> => {
     .select('*')
     .eq('id', user.id)
     .single()
-  return data
+  return data?.active ? data : null
 })

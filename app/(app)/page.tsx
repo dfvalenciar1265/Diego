@@ -27,7 +27,7 @@ type OpenMaintenance = MaintenanceIssue & { property?: { name: string } | null }
 export default async function DashboardPage() {
   // Cached per request — no duplicate auth round-trip with the layout
   const member = await getCurrentMember()
-  if (!member) redirect('/login')
+  if (!member) redirect('/logout')
 
   // Equipo va directo a sus tareas
   if (!canDo(member.role, 'dashboard:view')) {

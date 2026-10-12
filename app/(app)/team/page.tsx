@@ -7,7 +7,7 @@ import { NewTeamMemberButton } from '@/components/team/NewTeamMemberButton'
 
 export default async function TeamPage() {
   const me = await getCurrentMember()
-  if (!me) redirect('/login')
+  if (!me) redirect('/logout')
   if (me.role !== 'admin') redirect('/')
 
   // Include inactive members so admin can see everyone
