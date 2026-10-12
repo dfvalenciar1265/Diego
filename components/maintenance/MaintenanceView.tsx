@@ -1,5 +1,6 @@
 'use client'
 import { useState } from 'react'
+import { usePathname, useSearchParams } from 'next/navigation'
 import { IncidenceCard } from './IncidenceCard'
 import { ScheduledCard } from './ScheduledCard'
 import { MaintenanceCalendar } from './MaintenanceCalendar'
@@ -19,6 +20,7 @@ interface Props {
 }
 
 type Tab = 'open' | 'resolved' | 'calendar'
+const TABS: readonly Tab[] = ['open', 'calendar', 'resolved']
 const PS = 5  // page size
 
 /** Prefer the real next_due column; fall back to the legacy encoded description. */
@@ -26,8 +28,24 @@ const nextOf = (i: IssueWithJoins) =>
   i.next_due ?? (i.description?.match(/next:([0-9-]+)/)?.[1] ?? '9999')
 
 export function MaintenanceView({ issues, properties, teamMembers }: Props) {
-  const [tab,        setTab]        = useState<Tab>('open')
-  const [filterProp, setFilterProp] = useState('')
+  // Tab and apartment filter live in the URL (?apto=<id>&tab=open|calendar|resolved)
+  // so they survive a reload and coming back with «atrás».
+  const pathname     = usePathname()
+  const searchParams = useSearchParams()
+  const rawTab       = searchParams.get('tab')
+  const tab: Tab     = TABS.includes(rawTab as Tab) ? (rawTab as Tab) : 'open'
+  const rawApto      = searchParams.get('apto') ?? ''
+  const filterProp   = properties.some(p => p.id === rawApto) ? rawApto : ''
+
+  /** Updates the query without a server round-trip; useSearchParams stays in sync. */
+  function setParam(key: 'tab' | 'apto', value: string) {
+    const params = new URLSearchParams(searchParams.toString())
+    if (value) params.set(key, value)
+    else params.delete(key)
+    const qs = params.toString()
+    window.history.replaceState(null, '', qs ? `${pathname}?${qs}` : pathname)
+  }
+  const setTab = (t: Tab) => setParam('tab', t === 'open' ? '' : t)
 
   // Pagination state per section
   const [schedPage, setSchedPage]   = useState(1)
@@ -35,7 +53,7 @@ export function MaintenanceView({ issues, properties, teamMembers }: Props) {
   const [resPage,   setResPage]     = useState(1)
 
   function changeFilter(prop: string) {
-    setFilterProp(prop)
+    setParam('apto', prop)
     setSchedPage(1)
     setOpenPage(1)
     setResPage(1)
@@ -62,7 +80,7 @@ export function MaintenanceView({ issues, properties, teamMembers }: Props) {
   const pagedResolved = paginate(resolved, resPage,   PS)
 
   const dropdownStyle = {
-    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`,
+    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`,
     backgroundRepeat: 'no-repeat' as const,
     backgroundPosition: 'right 12px center',
   }
@@ -74,7 +92,8 @@ export function MaintenanceView({ issues, properties, teamMembers }: Props) {
       <select
         value={filterProp}
         onChange={e => changeFilter(e.target.value)}
-        className="w-full text-sm text-[#0f172a] bg-white border border-[#e2e8f0]
+        aria-label="Filtrar por apartamento"
+        className="w-full md:max-w-sm min-h-11 text-sm text-[#0f172a] bg-white border border-[#e2e8f0]
                    rounded-xl px-3 py-2.5 focus:outline-none focus:ring-1
                    focus:ring-[#ef4444] appearance-none"
         style={dropdownStyle}
@@ -89,7 +108,8 @@ export function MaintenanceView({ issues, properties, teamMembers }: Props) {
       <div className="flex rounded-xl overflow-hidden border border-[#e2e8f0]">
         <button
           onClick={() => setTab('open')}
-          className="flex-1 py-2.5 text-sm font-medium transition-colors"
+          aria-pressed={tab === 'open'}
+          className="flex-1 min-h-11 py-2.5 text-sm font-medium transition-colors"
           style={{
             background: tab === 'open' ? '#ef4444' : 'white',
             color:      tab === 'open' ? 'white'   : '#64748b',
@@ -98,7 +118,7 @@ export function MaintenanceView({ issues, properties, teamMembers }: Props) {
           Pendientes
           {(scheduled.length + open.length) > 0 && (
             <span
-              className="ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+              className="ml-1.5 text-[11px] font-bold px-1.5 py-0.5 rounded-full"
               style={{
                 background: tab === 'open' ? 'rgba(255,255,255,0.25)' : '#fee2e2',
                 color:      tab === 'open' ? 'white' : '#ef4444',
@@ -110,17 +130,19 @@ export function MaintenanceView({ issues, properties, teamMembers }: Props) {
         </button>
         <button
           onClick={() => setTab('calendar')}
-          className="flex-1 py-2.5 text-sm font-medium transition-colors border-l border-[#e2e8f0]"
+          aria-pressed={tab === 'calendar'}
+          className="flex-1 min-h-11 py-2.5 text-sm font-medium transition-colors border-l border-[#e2e8f0]"
           style={{
             background: tab === 'calendar' ? '#ef4444' : 'white',
             color:      tab === 'calendar' ? 'white'   : '#64748b',
           }}
         >
-          🗓️ Cal.
+          🗓️ <span className="md:hidden">Cal.</span><span className="hidden md:inline">Calendario</span>
         </button>
         <button
           onClick={() => setTab('resolved')}
-          className="flex-1 py-2.5 text-sm font-medium transition-colors border-l border-[#e2e8f0]"
+          aria-pressed={tab === 'resolved'}
+          className="flex-1 min-h-11 py-2.5 text-sm font-medium transition-colors border-l border-[#e2e8f0]"
           style={{
             background: tab === 'resolved' ? '#ef4444' : 'white',
             color:      tab === 'resolved' ? 'white'   : '#64748b',
@@ -129,7 +151,7 @@ export function MaintenanceView({ issues, properties, teamMembers }: Props) {
           Resueltas
           {resolved.length > 0 && (
             <span
-              className="ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+              className="ml-1.5 text-[11px] font-bold px-1.5 py-0.5 rounded-full"
               style={{
                 background: tab === 'resolved' ? 'rgba(255,255,255,0.25)' : '#dcfce7',
                 color:      tab === 'resolved' ? 'white' : '#16a34a',
@@ -147,7 +169,7 @@ export function MaintenanceView({ issues, properties, teamMembers }: Props) {
           {scheduled.length === 0 && open.length === 0 ? (
             <div className="text-center py-12">
               <p className="text-4xl mb-3">🔧</p>
-              <p className="text-[#94a3b8]">Sin incidencias activas</p>
+              <p className="text-[#64748b]">Sin incidencias activas</p>
             </div>
           ) : (
             <>
@@ -161,7 +183,7 @@ export function MaintenanceView({ issues, properties, teamMembers }: Props) {
                     </span>
                     <div className="flex-1 h-px bg-[#e0e7ff]" />
                   </div>
-                  <div className="space-y-3">
+                  <div className="card-grid">
                     {pagedSched.map(i => <ScheduledCard key={i.id} issue={i} />)}
                   </div>
                   <Pagination
@@ -183,7 +205,7 @@ export function MaintenanceView({ issues, properties, teamMembers }: Props) {
                     </span>
                     <div className="flex-1 h-px bg-[#fee2e2]" />
                   </div>
-                  <div className="space-y-3">
+                  <div className="card-grid">
                     {pagedOpen.map(i => (
                       <IncidenceCard key={i.id} issue={i} teamMembers={teamMembers} />
                     ))}
@@ -207,20 +229,22 @@ export function MaintenanceView({ issues, properties, teamMembers }: Props) {
           {resolved.length === 0 ? (
             <div className="text-center py-12">
               <p className="text-4xl mb-3">✅</p>
-              <p className="text-[#94a3b8]">No hay incidencias resueltas</p>
+              <p className="text-[#64748b]">No hay incidencias resueltas</p>
             </div>
           ) : (
             <>
-              {pagedResolved.map(i => (
-                <IncidenceCard key={i.id} issue={i} teamMembers={teamMembers} />
-              ))}
+              <div className="card-grid">
+                {pagedResolved.map(i => (
+                  <IncidenceCard key={i.id} issue={i} teamMembers={teamMembers} />
+                ))}
+              </div>
               <Pagination
                 page={resPage}
                 total={pageCount(resolved.length, PS)}
                 onChange={setResPage}
                 accent="#22c55e"
               />
-              <p className="text-center text-xs text-[#c4c9d4]">
+              <p className="text-center text-xs text-[#64748b]">
                 {resolved.length} incidencia{resolved.length !== 1 ? 's' : ''} resuelta{resolved.length !== 1 ? 's' : ''}
               </p>
             </>

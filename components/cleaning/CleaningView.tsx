@@ -1,9 +1,11 @@
 'use client'
+import { addDays as addDaysISO } from '@/lib/gpt-api/dates'
 import { useState, useTransition } from 'react'
 import { assignAndStartTask, updateTaskNotes, updateTaskStatus, setTaskPhoto, type WeekCleaningTask } from '@/actions/tasks'
 import { Pagination, paginate, pageCount } from '@/components/ui/Pagination'
 import { WeeklyScheduleView } from './WeeklyScheduleView'
 import { uploadCleaningPhoto } from '@/lib/upload'
+import { toast } from '@/components/ui/feedback'
 import { useRef } from 'react'
 import type { Task } from '@/lib/types'
 import type { TeamMember } from '@/lib/types'
@@ -38,15 +40,6 @@ const PHOTO_PROOF_ENABLED = false
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
 
-function todayStr() {
-  return new Date().toISOString().slice(0, 10)
-}
-
-function tomorrowStr() {
-  const d = new Date()
-  d.setDate(d.getDate() + 1)
-  return d.toISOString().slice(0, 10)
-}
 
 // ── Time helpers ──────────────────────────────────────────────────────────────
 
@@ -101,8 +94,10 @@ function buildCoAnnotation(time24: string): string {
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function CleaningView({ tasks, staff, weekTasks, weekStart, todayISO, currentMember }: Props) {
-  const today    = todayStr()
-  const tomorrow = tomorrowStr()
+  // todayISO comes from the server in Colombia's time zone (toISOString() is UTC
+  // and flipped "today" to tomorrow after 7 p.m.)
+  const today    = todayISO
+  const tomorrow = addDaysISO(todayISO, 1)
 
   const [tab,          setTab]          = useState<Tab>('pending')
   const [todayPage,    setTodayPage]    = useState(1)
@@ -134,7 +129,7 @@ export function CleaningView({ tasks, staff, weekTasks, weekStart, todayISO, cur
       <div className="flex rounded-xl overflow-hidden border border-[#e2e8f0]">
         <button
           onClick={() => setTab('pending')}
-          className="flex-1 py-2.5 text-sm font-medium transition-colors"
+          className="flex-1 h-11 text-sm font-medium transition-colors"
           style={{
             background: tab === 'pending' ? '#6366f1' : 'white',
             color:      tab === 'pending' ? 'white'   : '#64748b',
@@ -143,7 +138,7 @@ export function CleaningView({ tasks, staff, weekTasks, weekStart, todayISO, cur
           Pendientes
           {activeTasks.length > 0 && (
             <span
-              className="ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+              className="ml-1.5 text-[11px] font-bold px-1.5 py-0.5 rounded-full"
               style={{
                 background: tab === 'pending' ? 'rgba(255,255,255,0.25)' : '#e0e7ff',
                 color:      tab === 'pending' ? 'white' : '#6366f1',
@@ -155,7 +150,7 @@ export function CleaningView({ tasks, staff, weekTasks, weekStart, todayISO, cur
         </button>
         <button
           onClick={() => setTab('done')}
-          className="flex-1 py-2.5 text-sm font-medium transition-colors"
+          className="flex-1 h-11 text-sm font-medium transition-colors"
           style={{
             background: tab === 'done' ? '#6366f1' : 'white',
             color:      tab === 'done' ? 'white'   : '#64748b',
@@ -164,7 +159,7 @@ export function CleaningView({ tasks, staff, weekTasks, weekStart, todayISO, cur
           Terminadas
           {doneTasks.length > 0 && (
             <span
-              className="ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+              className="ml-1.5 text-[11px] font-bold px-1.5 py-0.5 rounded-full"
               style={{
                 background: tab === 'done' ? 'rgba(255,255,255,0.25)' : '#dcfce7',
                 color:      tab === 'done' ? 'white' : '#16a34a',
@@ -176,7 +171,7 @@ export function CleaningView({ tasks, staff, weekTasks, weekStart, todayISO, cur
         </button>
         <button
           onClick={() => setTab('week')}
-          className="flex-1 py-2.5 text-sm font-medium transition-colors"
+          className="flex-1 h-11 text-sm font-medium transition-colors"
           style={{
             background: tab === 'week' ? '#6366f1' : 'white',
             color:      tab === 'week' ? 'white'   : '#64748b',
@@ -201,8 +196,8 @@ export function CleaningView({ tasks, staff, weekTasks, weekStart, todayISO, cur
         <div className="space-y-5">
           {todayTasks.length === 0 && tomorrowTasks.length === 0 && laterTasks.length === 0 ? (
             <div className="text-center py-12">
-              <Sparkles className="mx-auto mb-3 text-[#94a3b8]" size={40} />
-              <p className="text-[#94a3b8]">No hay limpiezas pendientes</p>
+              <Sparkles className="mx-auto mb-3 text-[#64748b]" size={40} />
+              <p className="text-[#64748b]">No hay limpiezas pendientes</p>
             </div>
           ) : (
             <>
@@ -218,7 +213,7 @@ export function CleaningView({ tasks, staff, weekTasks, weekStart, todayISO, cur
                 </Section>
               )}
               {tomorrowTasks.length > 0 && (
-                <Section label="Limpieza mañana" emoji="📅" count={tomorrowTasks.length} accent="#94a3b8" line="#e2e8f0">
+                <Section label="Limpieza mañana" emoji="📅" count={tomorrowTasks.length} accent="#64748b" line="#e2e8f0">
                   {pagedTomorrow.map(t => <CleaningTaskCard key={t.id} task={t} staff={staff} currentMember={currentMember} locked />)}
                   <Pagination
                     page={tomorrowPage}
@@ -228,7 +223,7 @@ export function CleaningView({ tasks, staff, weekTasks, weekStart, todayISO, cur
                 </Section>
               )}
               {laterTasks.length > 0 && (
-                <Section label="Próximas" emoji="📆" count={laterTasks.length} accent="#94a3b8" line="#e2e8f0">
+                <Section label="Próximas" emoji="📆" count={laterTasks.length} accent="#64748b" line="#e2e8f0">
                   {pagedLater.map(t => <CleaningTaskCard key={t.id} task={t} staff={staff} currentMember={currentMember} locked />)}
                   <Pagination
                     page={laterPage}
@@ -248,13 +243,15 @@ export function CleaningView({ tasks, staff, weekTasks, weekStart, todayISO, cur
           {doneTasks.length === 0 ? (
             <div className="text-center py-12">
               <p className="text-4xl mb-3">✅</p>
-              <p className="text-[#94a3b8]">No hay limpiezas terminadas recientes</p>
+              <p className="text-[#64748b]">No hay limpiezas terminadas recientes</p>
             </div>
           ) : (
             <>
-              {pagedDone.map(t => <DoneCleaningCard key={t.id} task={t} />)}
+              <div className="card-grid">
+                {pagedDone.map(t => <DoneCleaningCard key={t.id} task={t} />)}
+              </div>
               <Pagination page={donePage} total={donePages} onChange={setDonePage} />
-              <p className="text-center text-xs text-[#c4c9d4]">
+              <p className="text-center text-xs text-[#64748b]">
                 {doneTasks.length} limpieza{doneTasks.length !== 1 ? 's' : ''} terminada{doneTasks.length !== 1 ? 's' : ''} (últimos 30 días)
               </p>
             </>
@@ -282,7 +279,7 @@ function Section({
         </span>
         <div className="flex-1 h-px" style={{ background: line }} />
       </div>
-      <div className="space-y-3">{children}</div>
+      <div className="card-grid">{children}</div>
     </div>
   )
 }
@@ -298,13 +295,13 @@ function DoneCleaningCard({ task }: { task: CleaningTask }) {
         </div>
         <div className="flex-1 min-w-0">
           <p className="font-semibold text-[#0f172a] text-sm leading-tight">{task.property?.name ?? '—'}</p>
-          <p className="text-xs text-[#94a3b8]">
+          <p className="text-xs text-[#64748b]">
             {task.assignee?.name ?? 'Sin asignar'} · {fmtDatetime(task.completed_at)}
           </p>
         </div>
         {PHOTO_PROOF_ENABLED && task.photo_url && (
-          // eslint-disable-next-line @next/next/no-img-element
           <a href={task.photo_url} target="_blank" rel="noopener noreferrer" className="flex-shrink-0">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={task.photo_url} alt="Evidencia"
                  className="w-12 h-12 object-cover rounded-lg border border-[#e2e8f0]" />
           </a>
@@ -351,12 +348,12 @@ function CleaningTaskCard({
     setUploading(true)
     try {
       const url = await uploadCleaningPhoto(file)
-      if (!url) { setError('No se pudo subir la foto. Reintenta.'); return }
+      if (!url) { fail('No se pudo subir la foto. Reintenta.'); return }
       const res = await setTaskPhoto(task.id, url)
-      if (!res.success) { setError('No se pudo guardar la foto. Reintenta.'); return }
+      if (!res.success) { fail('No se pudo guardar la foto. Reintenta.'); return }
       setPhotoUrl(url)
     } catch {
-      setError('No se pudo subir la foto. Revisa tu conexión.')
+      fail('No se pudo subir la foto. Revisa tu conexión.')
     } finally {
       setUploading(false)
       if (fileRef.current) fileRef.current.value = ''
@@ -365,30 +362,48 @@ function CleaningTaskCard({
 
   // Field staff often act on spotty building WiFi. A failed mutation must NOT
   // crash the whole page — show a retryable inline error and keep their place.
+  const place = task.property?.name ?? 'el apartamento'
+
+  /** Inline error (keeps their place on the card) + toast. */
+  function fail(message: string) {
+    setError(message)
+    toast.error(message)
+  }
+
   function saveCoTime(time: string) {
     setError('')
     startTransition(async () => {
       try {
         const res = await updateTaskNotes(task.id, buildCoAnnotation(time))
-        if (!res.success) setError('No se pudo guardar la hora. Revisa tu conexión.')
+        if (!res.success) { fail('No se pudo guardar la hora. Revisa tu conexión.'); return }
+        toast.success(`Hora de salida: ${to12h(time)}`)
       } catch {
-        setError('No se pudo guardar la hora. Revisa tu conexión.')
+        fail('No se pudo guardar la hora. Revisa tu conexión.')
       }
     })
   }
 
   function startWithPerson(memberId: string) {
     setError('')
+    const who = staff.find(m => m.id === memberId)?.name
+    const self = memberId === currentMember?.id
     startTransition(async () => {
-      const res = await assignAndStartTask(task.id, memberId)
-      if (!res.success) { setError(res.error ?? 'No se pudo iniciar. Reintenta.'); return }
-      setPicking(false)
+      try {
+        const res = await assignAndStartTask(task.id, memberId)
+        if (!res.success) { fail(res.error ?? 'No se pudo iniciar. Reintenta.'); return }
+        setPicking(false)
+        toast.success(self || !who
+          ? `Limpieza iniciada en ${place}`
+          : `Limpieza de ${place} asignada a ${who} y en curso`)
+      } catch {
+        fail('No se pudo iniciar. Revisa tu conexión y reintenta.')
+      }
     })
   }
 
   // Self-assign: the person tapping "Iniciar" becomes the assignee.
   function startSelf() {
-    if (!currentMember) { setError('No se pudo identificar tu usuario. Recarga la página.'); return }
+    if (!currentMember) { fail('No se pudo identificar tu usuario. Recarga la página.'); return }
     startWithPerson(currentMember.id)
   }
 
@@ -397,8 +412,13 @@ function CleaningTaskCard({
   function complete() {
     setError('')
     startTransition(async () => {
-      const res = await updateTaskStatus(task.id, 'done')
-      if (!res.success) setError('No se pudo marcar como terminada. Revisa tu conexión y reintenta.')
+      try {
+        const res = await updateTaskStatus(task.id, 'done')
+        if (!res.success) { fail('No se pudo marcar como terminada. Revisa tu conexión y reintenta.'); return }
+        toast.success(`Limpieza terminada en ${place}`)
+      } catch {
+        fail('No se pudo marcar como terminada. Revisa tu conexión y reintenta.')
+      }
     })
   }
 
@@ -421,10 +441,10 @@ function CleaningTaskCard({
         </div>
         <div className="flex-1 min-w-0">
           <p className="font-semibold text-[#0f172a] text-sm leading-tight">{task.property?.name ?? '—'}</p>
-          <p className="text-xs text-[#94a3b8] truncate">{guestName}</p>
+          <p className="text-xs text-[#64748b] truncate">{guestName}</p>
         </div>
         <span
-          className="text-[10px] font-medium px-2 py-0.5 rounded-full flex-shrink-0"
+          className="text-[11px] font-medium px-2 py-0.5 rounded-full flex-shrink-0"
           style={{
             background: `${statusColors[task.status]}22`,
             color:       statusColors[task.status],
@@ -437,7 +457,7 @@ function CleaningTaskCard({
       {/* Dates */}
       <div className="grid grid-cols-2 gap-2 mb-3">
         <div className="bg-[#f8fafc] rounded-xl p-2.5">
-          <p className="text-[10px] text-[#94a3b8] font-semibold mb-1.5">CHECK-IN</p>
+          <p className="text-[11px] text-[#64748b] font-semibold mb-1.5">CHECK-IN</p>
           <div className="flex items-baseline gap-1.5 flex-wrap">
             <span className="text-sm font-bold text-[#0f172a]">{shortDate(res?.check_in)}</span>
             {ciTime && (
@@ -447,7 +467,7 @@ function CleaningTaskCard({
         </div>
 
         <div className="bg-[#f8fafc] rounded-xl p-2.5">
-          <p className="text-[10px] text-[#94a3b8] font-semibold mb-1.5">CHECK-OUT</p>
+          <p className="text-[11px] text-[#64748b] font-semibold mb-1.5">CHECK-OUT</p>
           <div className="flex items-baseline gap-1.5 flex-wrap">
             <span className="text-sm font-bold text-[#0f172a]">{shortDate(res?.check_out)}</span>
             {editingCoTime ? (
@@ -466,7 +486,8 @@ function CleaningTaskCard({
             ) : (
               <button
                 onClick={() => setEditing(true)}
-                className="text-xs font-semibold text-[#6366f1] flex items-center gap-0.5
+                aria-label="Cambiar la hora de salida"
+                className="text-xs font-semibold text-[#6366f1] flex items-center gap-0.5 py-3 -my-3
                            active:opacity-60 transition-opacity"
               >
                 {coTime ? to12h(coTime) : '+ hora'} ✏️
@@ -494,7 +515,7 @@ function CleaningTaskCard({
 
       {/* Future cleaning: read-only preview (can't start/finish before check-out day) */}
       {locked && (
-        <p className="mt-1 text-[11px] text-[#94a3b8] text-center bg-[#f8fafc] rounded-lg py-1.5">
+        <p className="mt-1 text-[11px] text-[#64748b] text-center bg-[#f8fafc] rounded-lg py-1.5">
           📅 Programada — disponible el día del check-out
         </p>
       )}
@@ -504,7 +525,7 @@ function CleaningTaskCard({
         <button
           onClick={() => isAdmin ? setPicking(true) : startSelf()}
           disabled={isPending}
-          className="mt-1 w-full h-9 rounded-lg text-sm font-semibold text-white
+          className="mt-1 w-full h-11 rounded-lg text-sm font-semibold text-white
                      active:opacity-80 transition-opacity disabled:opacity-50"
           style={{ background: '#6366f1' }}
         >
@@ -518,14 +539,14 @@ function CleaningTaskCard({
             👤 ¿Quién va a limpiar?
           </p>
           {staff.length === 0 ? (
-            <p className="text-xs text-[#94a3b8]">No hay personal registrado</p>
+            <p className="text-xs text-[#64748b]">No hay personal registrado</p>
           ) : (
             staff.map(m => (
               <button
                 key={m.id}
                 onClick={() => startWithPerson(m.id)}
                 disabled={isPending}
-                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl
+                className="w-full min-h-11 flex items-center gap-3 px-3 py-2 rounded-xl
                            border border-[#e0e7ff] bg-[#f5f3ff] active:bg-[#e0e7ff]
                            transition-colors disabled:opacity-50"
               >
@@ -539,7 +560,7 @@ function CleaningTaskCard({
           )}
           <button
             onClick={() => setPicking(false)}
-            className="w-full text-xs text-[#94a3b8] py-1 hover:text-[#64748b] transition-colors"
+            className="w-full h-11 text-sm text-[#64748b] hover:text-[#0f172a] transition-colors"
           >
             Cancelar
           </button>
@@ -572,7 +593,7 @@ function CleaningTaskCard({
             <button
               onClick={() => fileRef.current?.click()}
               disabled={uploading || isPending}
-              className="w-full h-9 rounded-lg text-sm font-semibold border border-[#6366f1] text-[#6366f1]
+              className="w-full h-11 rounded-lg text-sm font-semibold border border-[#6366f1] text-[#6366f1]
                          bg-white active:opacity-80 transition-opacity disabled:opacity-50"
             >
               {uploading ? 'Subiendo…' : photoUrl ? '📸 Cambiar foto' : '📸 Tomar foto'}
@@ -581,7 +602,7 @@ function CleaningTaskCard({
             <button
               onClick={complete}
               disabled={isPending || uploading}
-              className="w-full h-9 rounded-lg text-sm font-semibold text-white
+              className="w-full h-11 rounded-lg text-sm font-semibold text-white
                          active:opacity-80 transition-opacity disabled:opacity-50"
               style={{ background: '#22c55e' }}
             >
@@ -592,7 +613,7 @@ function CleaningTaskCard({
           <button
             onClick={complete}
             disabled={isPending}
-            className="mt-1 w-full h-9 rounded-lg text-sm font-semibold text-white
+            className="mt-1 w-full h-11 rounded-lg text-sm font-semibold text-white
                        active:opacity-80 transition-opacity disabled:opacity-50"
             style={{ background: '#22c55e' }}
           >

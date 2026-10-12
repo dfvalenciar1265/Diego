@@ -2,6 +2,7 @@
 import { useState, useTransition } from 'react'
 import { updateTeamMember, deactivateTeamMember } from '@/actions/team'
 import type { TeamMember, UserRole } from '@/lib/types'
+import { toast, useConfirm } from '@/components/ui/feedback'
 
 const ROLE_LABELS: Record<UserRole, string> = {
   admin:       'Administrador',
@@ -26,6 +27,7 @@ export function TeamMemberCard({ member, isSelf }: Props) {
   const [editing, setEditing]     = useState(false)
   const [isPending, startTrans]   = useTransition()
   const [error, setError]         = useState('')
+  const confirm = useConfirm()
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -33,19 +35,32 @@ export function TeamMemberCard({ member, isSelf }: Props) {
     const fd = new FormData(e.currentTarget)
     startTrans(async () => {
       const res = await updateTeamMember(member.id, fd)
-      if (!res.success) { setError(res.error ?? 'Error'); return }
+      if (!res.success) {
+        setError(res.error ?? 'Error')
+        toast.error('No se guardaron los cambios')
+        return
+      }
       setEditing(false)
+      toast.success(`${member.name}: cambios guardados`)
     })
   }
 
-  function handleDeactivate() {
-    if (!confirm(`¿Desactivar a ${member.name}? No podrá iniciar sesión.`)) return
+  async function handleDeactivate() {
+    if (!(await confirm({
+      title:        `¿Desactivar a ${member.name}?`,
+      description:  'No podrá volver a iniciar sesión en la app. Sus tareas e historial se conservan.',
+      confirmLabel: 'Desactivar',
+      danger:       true,
+    }))) return
     startTrans(async () => {
-      await deactivateTeamMember(member.id)
+      const res = await deactivateTeamMember(member.id)
+      if (!res.success) { toast.error(res.error ?? 'No se pudo desactivar'); return }
+      setEditing(false)
+      toast.success(`${member.name} quedó desactivado`)
     })
   }
 
-  const color = ROLE_COLORS[member.role] ?? '#94a3b8'
+  const color = ROLE_COLORS[member.role] ?? '#64748b'
 
   if (!editing) {
     return (
@@ -58,8 +73,8 @@ export function TeamMemberCard({ member, isSelf }: Props) {
 
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-[#0f172a] truncate">{member.name}</p>
-          <p className="text-xs text-[#94a3b8] truncate">{member.email}</p>
-          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full mt-1 inline-block"
+          <p className="text-xs text-[#64748b] truncate">{member.email}</p>
+          <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full mt-1 inline-block"
                 style={{ background: `${color}22`, color }}>
             {ROLE_LABELS[member.role] ?? member.role}
           </span>
@@ -67,7 +82,7 @@ export function TeamMemberCard({ member, isSelf }: Props) {
 
         <button
           onClick={() => setEditing(true)}
-          className="text-xs text-[#6366f1] font-medium px-3 py-1.5 rounded-lg
+          className="min-h-11 text-sm text-[#6366f1] font-medium px-4 rounded-lg
                      bg-[#f0f0ff] active:opacity-70 flex-shrink-0"
         >
           Editar
@@ -109,7 +124,7 @@ export function TeamMemberCard({ member, isSelf }: Props) {
       </div>
 
       <div>
-        <label className="text-xs text-[#64748b] font-medium">Nueva contraseña <span className="text-[#94a3b8]">(dejar vacío para no cambiar)</span></label>
+        <label className="text-xs text-[#64748b] font-medium">Nueva contraseña <span className="text-[#64748b]">(dejar vacío para no cambiar)</span></label>
         <input name="password" type="password" placeholder="••••••••"
                className="w-full mt-1 rounded-lg border border-[#e2e8f0] px-3 py-2 text-sm
                           focus:outline-none focus:ring-1 focus:ring-[#6366f1]" />
@@ -119,11 +134,11 @@ export function TeamMemberCard({ member, isSelf }: Props) {
 
       <div className="flex gap-2">
         <button type="button" onClick={() => { setEditing(false); setError('') }}
-                className="flex-1 h-9 rounded-lg text-sm border border-[#e2e8f0] text-[#64748b]">
+                className="flex-1 h-11 rounded-lg text-sm border border-[#e2e8f0] text-[#64748b]">
           Cancelar
         </button>
         <button type="submit" disabled={isPending}
-                className="flex-1 h-9 rounded-lg text-sm font-semibold text-white disabled:opacity-50"
+                className="flex-1 h-11 rounded-lg text-sm font-semibold text-white disabled:opacity-50"
                 style={{ background: '#6366f1' }}>
           {isPending ? 'Guardando…' : 'Guardar'}
         </button>
@@ -131,7 +146,7 @@ export function TeamMemberCard({ member, isSelf }: Props) {
 
       {!isSelf && (
         <button type="button" onClick={handleDeactivate} disabled={isPending}
-                className="w-full text-xs text-[#ef4444] py-1 opacity-70 hover:opacity-100">
+                className="w-full min-h-11 text-sm font-medium text-[#ef4444] rounded-lg hover:bg-[#fef2f2]">
           Desactivar cuenta
         </button>
       )}

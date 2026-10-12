@@ -1,22 +1,19 @@
+import { todayInBogota, addDays as addDaysISO } from '@/lib/gpt-api/dates'
 import { getCleaningTasks, getWeekCleaningSchedule } from '@/actions/tasks'
 import { getTeamMembers } from '@/actions/team'
 import { getCurrentMember } from '@/lib/auth'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { CleaningView } from '@/components/cleaning/CleaningView'
 
-/** Monday (ISO) of the week containing `d`. */
-function mondayOf(d: Date): string {
-  const day = d.getDay()              // 0 = Sun … 6 = Sat
-  const diff = day === 0 ? -6 : 1 - day
-  const monday = new Date(d)
-  monday.setDate(d.getDate() + diff)
-  return monday.toISOString().slice(0, 10)
+/** Monday (YYYY-MM-DD) of the week containing the date `iso`. */
+function mondayOf(iso: string): string {
+  const day = new Date(iso + 'T00:00:00Z').getUTCDay()   // 0 = Sun … 6 = Sat
+  return addDaysISO(iso, day === 0 ? -6 : 1 - day)
 }
 
 export default async function CleaningPage() {
-  const now       = new Date()
-  const todayISO  = now.toISOString().slice(0, 10)
-  const weekStart = mondayOf(now)
+  const todayISO  = todayInBogota()   // Colombia's day, not UTC's
+  const weekStart = mondayOf(todayISO)
 
   const [tasks, staff, weekTasks, currentMember] = await Promise.all([
     getCleaningTasks(),

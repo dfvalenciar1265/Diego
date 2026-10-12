@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache'
 export interface SyncResult {
   ok: boolean
   new_count?: number
+  updated_count?: number
   total_found?: number
   connected?: boolean
   error?: string

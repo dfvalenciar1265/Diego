@@ -2,13 +2,7 @@
 import { useState, useTransition } from 'react'
 import { getCleaningByEmployee, type EmployeeCleaningRow } from '@/actions/reports'
 import { CLEANING_PRICES } from '@/lib/cleaning-prices'
-
-const MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
-                'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
-
-function fmtCOP(n: number): string {
-  return `$${n.toLocaleString('es-CO')}`
-}
+import { MONTHS, fmtCOP, PeriodNav, ExportCsvButton, ReportTable, Money, type Column } from './shared'
 
 function lastDayOfMonth(year: number, month: number): number {
   return new Date(year, month, 0).getDate()
@@ -22,6 +16,11 @@ interface Props {
 
 type AptEntry   = { name: string; count: number; value: number }
 type EmpSummary = { key: string; name: string; count: number; days: number; total: number; apts: AptEntry[] }
+
+/** «Palmetto 1001 ×2 ($90.000) · Tocahagua 708 ×1 ($35.000)» */
+function aptDetail(e: EmpSummary): string {
+  return e.apts.map(a => `${a.name} ×${a.count} (${fmtCOP(a.value)})`).join(' · ')
+}
 
 export function EmployeeCleaningReport({ initialRows, initialYear, initialMonth }: Props) {
   const today = new Date()
@@ -99,45 +98,63 @@ export function EmployeeCleaningReport({ initialRows, initialYear, initialMonth 
     .sort((a, b) => b.total - a.total)
 
   const grandTotal = employees.reduce((s, e) => s + e.total, 0)
+  const totalCount = employees.reduce((s, e) => s + e.count, 0)
+
+  const columns: Column<EmpSummary>[] = [
+    { header: 'Empleada',      cell: e => e.name },
+    { header: 'Aseos',         numeric: true, cell: e => e.count, total: totalCount },
+    { header: 'Días laborados', numeric: true, cell: e => e.days },
+    { header: 'Detalle por apartamento', cell: e => <span className="text-xs text-[#334155]">{aptDetail(e)}</span> },
+    { header: 'Total a pagar', numeric: true, cell: e => <b><Money value={e.total} tone="#16a34a" /></b>,
+      total: <Money value={grandTotal} tone="#16a34a" /> },
+  ]
 
   return (
     <div className="space-y-4">
 
       {/* ── Quincena navigator ────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between bg-white rounded-xl border border-[#e2e8f0] px-4 py-3 shadow-sm">
-        <button
-          onClick={() => go(-1)}
-          className="w-8 h-8 flex items-center justify-center rounded-lg text-[#6366f1] font-bold text-xl active:opacity-60"
-        >‹</button>
-        <div className="text-center">
-          <p className="text-sm font-bold text-[#0f172a] capitalize">
-            {isPending ? '…' : `Q${period} · ${MONTHS[month - 1]} ${year}`}
-          </p>
-          <p className="text-[10px] text-[#94a3b8] uppercase tracking-wide">
-            {periodDays} días ({periodRange})
-          </p>
-        </div>
-        <button
-          onClick={() => go(1)}
-          disabled={!canGoNext}
-          className="w-8 h-8 flex items-center justify-center rounded-lg text-[#6366f1] font-bold text-xl active:opacity-60 disabled:text-[#cbd5e1]"
-        >›</button>
-      </div>
+      <PeriodNav
+        title={`Q${period} · ${MONTHS[month - 1]} ${year}`}
+        subtitle={`${periodDays} días (${periodRange})`}
+        pending={isPending}
+        onPrev={() => go(-1)}
+        onNext={() => go(1)}
+        nextDisabled={!canGoNext}
+        prevLabel="Quincena anterior"
+        nextLabel="Quincena siguiente"
+      />
+
+      <ExportCsvButton
+        kind={`empleadas-q${period}`} year={year} month={month} disabled={isPending}
+        headers={columns.map(c => c.header)}
+        rows={employees.map(e => [e.name, e.count, e.days, aptDetail(e), e.total])}
+        totals={['Total', totalCount, '', '', grandTotal]}
+      />
 
       {employees.length === 0 ? (
         <div className="text-center py-12">
           <p className="text-4xl mb-3">🧹</p>
-          <p className="text-[#94a3b8]">Sin aseos en Q{period} {MONTHS[month - 1]}</p>
+          <p className="text-[#64748b]">Sin aseos en Q{period} {MONTHS[month - 1]}</p>
         </div>
       ) : (
         <>
+          <ReportTable
+            caption={`Aseos por empleada, quincena ${period} de ${MONTHS[month - 1]} ${year}`}
+            columns={columns}
+            rows={employees}
+            rowKey={e => e.key}
+            totalLabel="Total quincena"
+            totalTone={{ text: '#16a34a', bg: '#f0fdf4', border: '#bbf7d0' }}
+          />
+
+          {/* Mobile only — one card per employee */}
           {employees.map(e => (
-            <div key={e.key} className="bg-white rounded-xl border border-[#e2e8f0] overflow-hidden shadow-sm">
+            <div key={e.key} className="md:hidden bg-white rounded-xl border border-[#e2e8f0] overflow-hidden shadow-sm">
               {/* Employee header: name · count · total to pay */}
               <div className="flex items-center justify-between px-4 py-3 bg-[#f8fafc] border-b border-[#e2e8f0]">
                 <div className="min-w-0">
                   <p className="text-sm font-bold text-[#0f172a] truncate">{e.name}</p>
-                  <p className="text-[11px] text-[#94a3b8]">
+                  <p className="text-[11px] text-[#64748b]">
                     {e.count} {e.count === 1 ? 'aseo' : 'aseos'}
                   </p>
                 </div>
@@ -148,7 +165,7 @@ export function EmployeeCleaningReport({ initialRows, initialYear, initialMonth 
                 {e.apts.map(a => (
                   <div key={a.name} className="flex items-center justify-between px-4 py-2">
                     <span className="text-xs text-[#334155] truncate mr-2">
-                      {a.name} <span className="text-[#94a3b8]">×{a.count}</span>
+                      {a.name} <span className="text-[#64748b]">×{a.count}</span>
                     </span>
                     <span className="text-xs font-semibold text-[#0f172a] shrink-0">{fmtCOP(a.value)}</span>
                   </div>
@@ -174,12 +191,12 @@ export function EmployeeCleaningReport({ initialRows, initialYear, initialMonth 
 
       {/* ── Value per apartment reference ─────────────────────────────────── */}
       <div className="bg-[#f0f9ff] rounded-xl border border-[#bae6fd] px-3 py-2.5">
-        <p className="text-[10px] font-bold text-[#0369a1] uppercase tracking-wide mb-2">Valor por limpieza</p>
-        <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+        <p className="text-[11px] font-bold text-[#0369a1] uppercase tracking-wide mb-2">Valor por limpieza</p>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-x-3 gap-y-1">
           {Object.entries(CLEANING_PRICES).map(([name, price]) => (
             <div key={name} className="flex justify-between items-center">
-              <span className="text-[10px] text-[#334155] truncate mr-1">{name}</span>
-              <span className="text-[10px] font-semibold text-[#0369a1] shrink-0">{fmtCOP(price)}</span>
+              <span className="text-[11px] text-[#334155] truncate mr-1">{name}</span>
+              <span className="text-[11px] font-semibold text-[#0369a1] shrink-0">{fmtCOP(price)}</span>
             </div>
           ))}
         </div>

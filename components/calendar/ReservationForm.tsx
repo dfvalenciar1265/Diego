@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { createReservation, updateReservation, deleteReservation } from '@/actions/reservations'
+import { toast, useConfirm } from '@/components/ui/feedback'
 import { useUserRole } from '@/lib/user-context'
 import type { Property, Reservation, ReservationSource } from '@/lib/types'
 
@@ -26,28 +27,65 @@ export function ReservationForm({
   // Focus the title on open instead of the first field — otherwise the apartment
   // <select> grabs focus and pops the native picker as soon as the sheet opens.
   const titleRef = useRef<HTMLDivElement>(null)
+  const errorRef = useRef<HTMLDivElement>(null)
   const role = useUserRole()
+  const confirm = useConfirm()
   const canSeeFinances = role === 'admin' || role === 'maintenance'
+
+  /** Shows the error inside the sheet (scrolled into view) and as a toast. */
+  function fail(message: string) {
+    setError(message)
+    toast.error(message)
+    requestAnimationFrame(() => errorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }))
+  }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     const formData = new FormData(e.currentTarget)
     setError('')
+    const checkIn  = String(formData.get('check_in') ?? '')
+    const checkOut = String(formData.get('check_out') ?? '')
+    if (checkIn && checkOut && checkOut <= checkIn) {
+      fail('La fecha de check-out debe ser posterior a la de check-in (mínimo una noche).')
+      return
+    }
+    const guest = String(formData.get('guest_name') ?? '').trim()
     startTransition(async () => {
-      const result = reservation
-        ? await updateReservation(reservation.id, formData)
-        : await createReservation(formData)
-      if (!result.success) { setError(result.error ?? 'Error'); return }
-      onClose()
+      try {
+        const result = reservation
+          ? await updateReservation(reservation.id, formData)
+          : await createReservation(formData)
+        if (!result.success) { fail(result.error ?? 'No se pudo guardar la reserva.'); return }
+        const who = guest ? ` de ${guest}` : ''
+        toast.success(reservation ? `Reserva${who} actualizada` : `Reserva${who} creada`)
+        if (result.warning) toast.warning(result.warning, { duration: 8000 })
+        onClose()
+      } catch {
+        fail('No se pudo guardar la reserva. Revisa tu conexión y reintenta.')
+      }
     })
   }
 
   async function handleDelete() {
-    if (!reservation || !confirm('¿Eliminar esta reserva?')) return
+    if (!reservation) return
+    const guest = reservation.guest_name?.trim()
+    const ok = await confirm({
+      title: guest ? `¿Eliminar la reserva de ${guest}?` : '¿Eliminar esta reserva?',
+      description: 'La reserva queda cancelada y se borran su limpieza y su preparación.',
+      confirmLabel: 'Eliminar',
+      danger: true,
+    })
+    if (!ok) return
     startTransition(async () => {
-      const result = await deleteReservation(reservation.id)
-      if (!result.success) { setError(result.error ?? 'Error al eliminar'); return }
-      onClose()
+      try {
+        const result = await deleteReservation(reservation.id)
+        if (!result.success) { fail(result.error ?? 'No se pudo eliminar la reserva.'); return }
+        toast.success(guest ? `Reserva de ${guest} eliminada` : 'Reserva eliminada')
+        if (result.warning) toast.warning(result.warning, { duration: 8000 })
+        onClose()
+      } catch {
+        fail('No se pudo eliminar la reserva. Revisa tu conexión y reintenta.')
+      }
     })
   }
 
@@ -58,7 +96,7 @@ export function ReservationForm({
     : 'Editar reserva'
 
   return (
-    <Sheet open={open} onOpenChange={v => !v && onClose()} key={reservation?.id ?? 'new'}>
+    <Sheet open={open} onOpenChange={v => { if (!v) { setError(''); onClose() } }} key={reservation?.id ?? 'new'}>
       <SheetContent side="bottom" className="rounded-t-2xl" initialFocus={titleRef} style={{ maxHeight: '90dvh', overflowY: 'auto', padding: '1rem 1rem env(safe-area-inset-bottom,1rem)' }}>
         <SheetHeader className="mb-4">
           <div ref={titleRef} tabIndex={-1} className="outline-none">
@@ -147,7 +185,7 @@ export function ReservationForm({
                 placeholder="HM12345678"
                 className="mt-1"
               />
-              <p className="text-[11px] text-[#94a3b8] mt-1">
+              <p className="text-[11px] text-[#64748b] mt-1">
                 Ponlo para que la reserva se cancele sola si cancelan en Airbnb.
               </p>
             </div>
@@ -178,7 +216,15 @@ export function ReservationForm({
             />
           </div>
 
-          {error && <p className="text-sm text-[#ef4444]">{error}</p>}
+          {error && (
+            <div
+              ref={errorRef}
+              role="alert"
+              className="rounded-xl border border-[#fecaca] bg-[#fef2f2] px-3 py-2.5 text-sm font-medium text-[#b91c1c]"
+            >
+              ⚠️ {error}
+            </div>
+          )}
 
           <Button
             type="submit"
@@ -195,7 +241,7 @@ export function ReservationForm({
               variant="outline"
               onClick={handleDelete}
               disabled={isPending}
-              className="w-full h-10 text-[#ef4444] border-[#ef4444]"
+              className="w-full h-11 text-[#ef4444] border-[#ef4444]"
             >
               Eliminar reserva
             </Button>

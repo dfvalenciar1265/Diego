@@ -14,14 +14,16 @@ export function RefreshButton() {
 
   return (
     <button
+      type="button"
       onClick={handleRefresh}
       title="Actualizar"
-      className="w-7 h-7 flex items-center justify-center rounded-full
-                 text-[#94a3b8] hover:text-[#64748b] hover:bg-[#f1f5f9]
+      aria-label="Actualizar datos"
+      className="w-11 h-11 flex items-center justify-center rounded-full
+                 text-[#64748b] hover:text-[#0f172a] hover:bg-[#f1f5f9]
                  active:scale-95 transition-all"
     >
       <svg
-        width="14" height="14" viewBox="0 0 24 24"
+        width="18" height="18" viewBox="0 0 24 24"
         fill="none" stroke="currentColor" strokeWidth="2.2"
         strokeLinecap="round" strokeLinejoin="round"
         className={spinning ? 'animate-spin' : ''}

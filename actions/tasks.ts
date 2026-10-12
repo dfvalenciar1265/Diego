@@ -1,7 +1,7 @@
 'use server'
+import { todayInBogota, addDays as addDaysISO } from '@/lib/gpt-api/dates'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
-import { createClient as createServiceClient } from '@supabase/supabase-js'
 import type { Task, TaskStatus } from '@/lib/types'
 
 /**
@@ -14,8 +14,8 @@ export async function getCleaningTasks(): Promise<(Task & {
   reservation?: { check_in: string; check_out: string; notes: string | null; guest_name: string | null; guests: number | null } | null
 })[]> {
   const supabase = await createClient()
-  const today   = new Date().toISOString().slice(0, 10)
-  const ago30   = new Date(Date.now() - 30 * 86400_000).toISOString().slice(0, 10)
+  const today   = todayInBogota()
+  const ago30   = addDaysISO(today, -30)
 
   // Active tasks: today and forward
   const activeQ = supabase
@@ -85,7 +85,7 @@ export async function getWeekCleaningSchedule(weekStart: string): Promise<WeekCl
   end.setDate(end.getDate() + 6)
   const weekEnd = end.toISOString().slice(0, 10)
 
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('tasks')
     .select('id, scheduled_for, status, notes, property:properties(name), assignee:team_members(name), reservation:reservations(notes, guest_name, guests)')
     .eq('type', 'cleaning')
@@ -93,6 +93,8 @@ export async function getWeekCleaningSchedule(weekStart: string): Promise<WeekCl
     .lte('scheduled_for', weekEnd)
     .order('scheduled_for')
 
+  // Throw instead of returning [] so a DB error isn't shown as "no cleanings this week"
+  if (error) throw new Error(error.message)
   if (!data) return []
 
   return data.map(t => {
@@ -135,6 +137,7 @@ export async function getTasks(filters?: {
   date?: string
   assignedTo?: string
   propertyId?: string
+  type?: Task['type']
 }): Promise<Task[]> {
   const supabase = await createClient()
   let query = supabase
@@ -142,6 +145,7 @@ export async function getTasks(filters?: {
     .select('*, property:properties(name), assignee:team_members(name), reservation:reservations(check_in, check_out, notes, guest_name, guests)')
     .order('scheduled_for', { ascending: true })
 
+  if (filters?.type) query = query.eq('type', filters.type)
   if (filters?.date) query = query.eq('scheduled_for', filters.date)
   if (filters?.assignedTo) query = query.eq('assigned_to', filters.assignedTo)
   if (filters?.propertyId) query = query.eq('property_id', filters.propertyId)
@@ -293,45 +297,4 @@ export async function completeTask(
   revalidatePath('/tasks')
   revalidatePath('/')
   return { success: true }
-}
-
-/**
- * Marks overdue cleaning/other tasks as "done" automatically.
- * Preparation tasks are intentionally excluded — they are shown on the
- * dashboard on the guest's check-in day regardless of scheduled_for,
- * so auto-completing them would hide them from that view.
- *
- * Uses the service-role client so it can run from a cron route (no session).
- * Returns the number of tasks that were updated.
- */
-export async function completeOverdueTasks(): Promise<number> {
-  const db = createServiceClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  )
-
-  const today = new Date().toISOString().slice(0, 10) // YYYY-MM-DD
-
-  const { data, error } = await db
-    .from('tasks')
-    .update({
-      status:       'done',
-      completed_at: new Date().toISOString(),
-    })
-    .lt('scheduled_for', today)
-    .in('status', ['pending', 'in_progress'])
-    .neq('type', 'preparation')        // prep tasks are managed manually
-    .select('id')
-
-  if (error) {
-    console.error('[completeOverdueTasks]', error.message)
-    return 0
-  }
-
-  if ((data?.length ?? 0) > 0) {
-    revalidatePath('/tasks')
-    revalidatePath('/')
-  }
-
-  return data?.length ?? 0
 }

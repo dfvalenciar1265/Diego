@@ -1,11 +1,19 @@
 import { describe, it, expect } from 'vitest'
-import { todayInBogota, shortDate, isIsoDate, addDays, daysBetween } from '@/lib/gpt-api/dates'
+import { todayInBogota, hourInBogota, shortDate, isIsoDate, addDays, daysBetween } from '@/lib/gpt-api/dates'
 
 describe('todayInBogota', () => {
   it('uses the Colombian day, not the UTC one', () => {
     // 02:00 UTC on the 9th is still 9 p.m. on the 8th in Cartagena
     expect(todayInBogota(new Date('2026-10-09T02:00:00Z'))).toBe('2026-10-08')
     expect(todayInBogota(new Date('2026-10-08T15:00:00Z'))).toBe('2026-10-08')
+  })
+})
+
+describe('hourInBogota', () => {
+  it('is five hours behind UTC, wrapping past midnight', () => {
+    expect(hourInBogota(new Date('2026-10-08T13:00:00Z'))).toBe(8)
+    expect(hourInBogota(new Date('2026-10-09T02:30:00Z'))).toBe(21)
+    expect(hourInBogota(new Date('2026-10-09T05:00:00Z'))).toBe(0)
   })
 })
 

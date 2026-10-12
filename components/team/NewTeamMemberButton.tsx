@@ -1,6 +1,7 @@
 'use client'
 import { useState, useTransition } from 'react'
 import { createTeamMember } from '@/actions/team'
+import { toast } from '@/components/ui/feedback'
 
 export function NewTeamMemberButton() {
   const [open, setOpen]         = useState(false)
@@ -13,7 +14,12 @@ export function NewTeamMemberButton() {
     const fd = new FormData(e.currentTarget)
     startTrans(async () => {
       const res = await createTeamMember(fd)
-      if (!res.success) { setError(res.error ?? 'Error'); return }
+      if (!res.success) {
+        setError(res.error ?? 'Error')
+        toast.error('No se pudo crear la persona')
+        return
+      }
+      toast.success(`Cuenta creada para ${fd.get('name')}`)
       setOpen(false)
       ;(e.target as HTMLFormElement).reset()
     })
@@ -22,7 +28,7 @@ export function NewTeamMemberButton() {
   if (!open) {
     return (
       <button onClick={() => setOpen(true)}
-              className="px-3 py-1.5 rounded-xl text-xs font-semibold text-white"
+              className="h-11 md:h-9 px-4 rounded-xl text-sm font-semibold text-white"
               style={{ background: '#6366f1' }}>
         + Persona
       </button>
@@ -71,11 +77,11 @@ export function NewTeamMemberButton() {
 
         <div className="flex gap-2">
           <button type="button" onClick={() => { setOpen(false); setError('') }}
-                  className="flex-1 h-10 rounded-lg text-sm border border-[#e2e8f0] text-[#64748b]">
+                  className="flex-1 h-11 rounded-lg text-sm border border-[#e2e8f0] text-[#64748b]">
             Cancelar
           </button>
           <button type="submit" disabled={isPending}
-                  className="flex-1 h-10 rounded-lg text-sm font-semibold text-white disabled:opacity-50"
+                  className="flex-1 h-11 rounded-lg text-sm font-semibold text-white disabled:opacity-50"
                   style={{ background: '#6366f1' }}>
             {isPending ? 'Creando…' : 'Crear'}
           </button>

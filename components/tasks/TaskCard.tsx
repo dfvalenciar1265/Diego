@@ -3,6 +3,7 @@ import { useState, useTransition } from 'react'
 import { updateTaskStatus } from '@/actions/tasks'
 import { getTaskStatusLabel, getTaskStatusColor, isTaskOverdue, formatDate } from '@/lib/utils'
 import type { Task, TaskStatus } from '@/lib/types'
+import { toast } from '@/components/ui/feedback'
 
 interface Props {
   task: Task & { property?: { name: string }; assignee?: { name: string } }
@@ -30,9 +31,25 @@ export function TaskCard({ task }: Props) {
   function advance() {
     if (!nextStatus) return
     setError('')
+    const previous = task.status
     startTransition(async () => {
       const res = await updateTaskStatus(task.id, nextStatus)
-      if (!res.success) setError('No se pudo actualizar. Revisa tu conexión.')
+      if (!res.success) {
+        setError('No se pudo actualizar. Revisa tu conexión.')
+        toast.error('No se pudo actualizar la tarea')
+        return
+      }
+      toast.success(nextStatus === 'done' ? 'Tarea completada' : 'Tarea en proceso', {
+        id: `undo-t-${task.id}`,
+        action: {
+          label: 'Deshacer',
+          onClick: async () => {
+            const undo = await updateTaskStatus(task.id, previous)
+            if (undo.success) toast.success('Se deshizo')
+            else toast.error('No se pudo deshacer')
+          },
+        },
+      })
     })
   }
 
@@ -48,12 +65,12 @@ export function TaskCard({ task }: Props) {
           <div className="flex items-center gap-2 flex-wrap">
             <p className="font-semibold text-[#0f172a] text-sm">{task.property?.name ?? '—'}</p>
             {overdue && (
-              <span className="text-[10px] bg-[#fee2e2] text-[#ef4444] px-2 py-0.5 rounded-full font-semibold">
+              <span className="text-[11px] bg-[#fee2e2] text-[#ef4444] px-2 py-0.5 rounded-full font-semibold">
                 ATRASADA
               </span>
             )}
           </div>
-          <p className="text-xs text-[#94a3b8] mt-0.5">
+          <p className="text-xs text-[#64748b] mt-0.5">
             {task.assignee?.name ?? 'Sin asignar'} · {formatDate(task.scheduled_for)}
           </p>
           {task.notes && (
@@ -69,7 +86,7 @@ export function TaskCard({ task }: Props) {
       {nextStatus && (
         <button onClick={advance} disabled={isPending}
                 aria-label={`${nextStatus === 'in_progress' ? 'Iniciar' : 'Completar'} tarea en ${task.property?.name ?? 'propiedad'}`}
-                className="mt-3 w-full h-10 rounded-lg text-sm font-semibold
+                className="mt-3 w-full h-11 rounded-lg text-sm font-semibold
                            active:opacity-80 transition-opacity disabled:opacity-50"
                 style={{ backgroundColor: getTaskStatusColor(nextStatus), color: 'white' }}>
           {isPending ? '...' : nextStatus === 'in_progress' ? '▶ Iniciar' : '✓ Completar'}

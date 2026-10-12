@@ -3,13 +3,16 @@ import { safeNextPath } from '@/lib/safe-next'
 import { type NextRequest, NextResponse } from 'next/server'
 
 export async function proxy(request: NextRequest) {
-  const { supabaseResponse, user } = await updateSession(request)
   const { pathname, search } = request.nextUrl
 
-  const isAuthPage = pathname.startsWith('/login')
-  // /.well-known holds the public OAuth metadata that ChatGPT and Claude read before signing in
+  // /.well-known holds the public OAuth metadata that ChatGPT and Claude read before signing in.
+  // API routes authenticate on their own (bearer tokens / cron secret), so skip the session work.
   const isPublic = pathname.startsWith('/_next') || pathname.startsWith('/api') || pathname.startsWith('/.well-known')
-  const isProtected = !isAuthPage && !isPublic
+  if (isPublic) return NextResponse.next()
+
+  const { supabaseResponse, user } = await updateSession(request)
+  const isAuthPage = pathname.startsWith('/login')
+  const isProtected = !isAuthPage
 
   if (isProtected && !user) {
     const url = new URL('/login', request.url)
@@ -27,5 +30,6 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon\\.ico|icons/|.*\\.(?:png|jpg|jpeg|svg|webp|ico|woff2?)$).*)'],
+  // Static assets, the service worker and the manifest never need a session check
+  matcher: ['/((?!_next/static|_next/image|favicon\\.ico|icons/|sw\\.js|workbox-.*|swe-worker-.*|manifest\\.(?:json|webmanifest)|.*\\.(?:png|jpg|jpeg|svg|webp|ico|woff2?|js|map)$).*)'],
 }

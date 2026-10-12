@@ -12,7 +12,7 @@ export function PropertyStockClient({ propertyId, properties, supplies }: Props)
     <>
       <Button size="sm" variant="outline" onClick={() => setRequestOpen(true)}
               aria-label="Solicitar compra de insumo"
-              className="text-xs border-[#ff385c] text-[#ff385c]">
+              className="h-11 px-3 text-sm md:h-9 border-[#ff385c] text-[#ff385c]">
         + Solicitar
       </Button>
       <PurchaseRequestForm

@@ -37,7 +37,7 @@ export function CheckoutCard({ co }: { co: TodayCheckOut }) {
     <div className="flex items-center justify-between gap-3">
       <div className="min-w-0">
         <p className="text-sm font-medium text-[#0f172a] truncate">{co.property_name}</p>
-        <p className="text-xs text-[#94a3b8] truncate">{co.guest_name}</p>
+        <p className="text-xs text-[#64748b] truncate">{co.guest_name}</p>
         {error && <p className="text-[11px] text-[#ef4444] mt-0.5">⚠️ No se guardó, reintenta</p>}
       </div>
 
@@ -60,7 +60,7 @@ export function CheckoutCard({ co }: { co: TodayCheckOut }) {
                        active:opacity-60 transition-opacity disabled:opacity-100"
           >
             {to12h(time)}
-            {canEdit && <span className="text-[10px]">✏️</span>}
+            {canEdit && <span className="text-[11px]">✏️</span>}
           </button>
         )}
       </div>

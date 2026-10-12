@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { createProperty, updateProperty } from '@/actions/properties'
 import type { Property } from '@/lib/types'
+import { toast } from '@/components/ui/feedback'
 
 interface Props {
   open: boolean
@@ -29,8 +30,10 @@ export function PropertyForm({ open, onClose, property }: Props) {
 
       if (!result.success) {
         setError(result.error ?? 'Error al guardar')
+        toast.error(property ? 'No se guardaron los cambios' : 'No se pudo crear el apartamento')
         return
       }
+      toast.success(property ? 'Apartamento actualizado' : 'Apartamento creado')
       onClose()
     })
   }
@@ -41,7 +44,7 @@ export function PropertyForm({ open, onClose, property }: Props) {
         <SheetHeader className="mb-4">
           <SheetTitle>{property ? 'Editar apartamento' : 'Nuevo apartamento'}</SheetTitle>
         </SheetHeader>
-        <form onSubmit={handleSubmit} className="space-y-4 pb-6">
+        <form onSubmit={handleSubmit} className="space-y-4 px-4 pb-6">
           <div>
             <Label htmlFor="name">Nombre *</Label>
             <Input id="name" name="name" defaultValue={property?.name}

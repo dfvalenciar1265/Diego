@@ -1,16 +1,10 @@
 'use client'
 import { Fragment, useState, useTransition } from 'react'
 import { getIncomeReport, type IncomeRow } from '@/actions/reports'
-
-const MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
-                'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
+import { MONTHS, fmtCOP, PeriodNav, ExportCsvButton, ReportTable, Money, type Column } from './shared'
 
 /** Costo fijo de administración por quincena (COP). Cambiar aquí si sube. */
 const ADMIN_PER_QUINCENA = 1_250_000
-
-function fmtCOP(n: number): string {
-  return `$${n.toLocaleString('es-CO')}`
-}
 
 function fmtPct(f: number): string {
   return f.toLocaleString('es-CO', { style: 'percent', minimumFractionDigits: 1, maximumFractionDigits: 1 })
@@ -87,6 +81,24 @@ export function AdminReport({ initialRows, initialYear, initialMonth }: Props) {
   const totalQ1 = hasQ1 ? ADMIN_PER_QUINCENA : 0
   const totalQ2 = hasQ2 ? ADMIN_PER_QUINCENA : 0
   const grandTotal = totalQ1 + totalQ2
+  const incomeQ1   = base.reduce((s, p) => s + p.q1Income, 0)
+  const incomeQ2   = base.reduce((s, p) => s + p.q2Income, 0)
+
+  /** Percentage for the CSV, one decimal (12.5 → «12,5» in Excel). */
+  const pct1 = (f: number) => Math.round(f * 1000) / 10
+  const amber = '#b45309'
+  const pctCell = (f: number, admin: number) => admin > 0 ? fmtPct(f) : <span className="text-[#64748b]">—</span>
+  const columns: Column<PropRow>[] = [
+    { header: 'Apartamento',  cell: p => p.name },
+    { header: 'Ingreso Q1',   numeric: true, cell: p => <Money value={p.q1Income} />, total: <Money value={incomeQ1} /> },
+    { header: '% Q1',         numeric: true, cell: p => pctCell(p.q1Pct, p.q1Admin) },
+    { header: 'Admin Q1',     numeric: true, cell: p => <Money value={p.q1Admin} tone={amber} />, total: <Money value={totalQ1} tone={amber} /> },
+    { header: 'Ingreso Q2',   numeric: true, cell: p => <Money value={p.q2Income} />, total: <Money value={incomeQ2} /> },
+    { header: '% Q2',         numeric: true, cell: p => pctCell(p.q2Pct, p.q2Admin) },
+    { header: 'Admin Q2',     numeric: true, cell: p => <Money value={p.q2Admin} tone={amber} />, total: <Money value={totalQ2} tone={amber} /> },
+    { header: 'Total admin',  numeric: true, cell: p => <b><Money value={p.q1Admin + p.q2Admin} tone={amber} /></b>,
+      total: <Money value={grandTotal} tone={amber} /> },
+  ]
 
   const now = new Date()
   const isCurrent = year === now.getFullYear() && month === now.getMonth() + 1
@@ -95,27 +107,27 @@ export function AdminReport({ initialRows, initialYear, initialMonth }: Props) {
     <div className="space-y-4">
 
       {/* ── Month navigator ──────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between bg-white rounded-xl border border-[#e2e8f0] px-4 py-3 shadow-sm">
-        <button
-          onClick={() => navigate(-1)}
-          className="w-8 h-8 flex items-center justify-center rounded-lg text-[#6366f1] font-bold text-xl active:opacity-60"
-        >‹</button>
-        <div className="text-center">
-          <p className="text-sm font-bold text-[#0f172a] capitalize">
-            {isPending ? '…' : `${MONTHS[month - 1]} ${year}`}
-          </p>
-          <p className="text-[10px] text-[#94a3b8] uppercase tracking-wide">Costo de administración</p>
-        </div>
-        <button
-          onClick={() => navigate(1)}
-          disabled={isCurrent}
-          className="w-8 h-8 flex items-center justify-center rounded-lg text-[#6366f1] font-bold text-xl active:opacity-60 disabled:text-[#cbd5e1]"
-        >›</button>
-      </div>
+      <PeriodNav
+        title={`${MONTHS[month - 1]} ${year}`}
+        subtitle="Costo de administración"
+        pending={isPending}
+        onPrev={() => navigate(-1)}
+        onNext={() => navigate(1)}
+        nextDisabled={isCurrent}
+      />
+
+      <ExportCsvButton
+        kind="administracion" year={year} month={month} disabled={isPending}
+        headers={columns.map(c => c.header)}
+        rows={props.map(p => [
+          p.name, p.q1Income, pct1(p.q1Pct), p.q1Admin, p.q2Income, pct1(p.q2Pct), p.q2Admin, p.q1Admin + p.q2Admin,
+        ])}
+        totals={['Total', incomeQ1, '', totalQ1, incomeQ2, '', totalQ2, grandTotal]}
+      />
 
       {/* ── Admin cost reference ─────────────────────────────────────────── */}
       <div className="bg-[#fffbeb] rounded-xl border border-[#fde68a] px-4 py-2.5 flex items-center justify-between">
-        <span className="text-[10px] font-bold text-[#b45309] uppercase tracking-wide">Costo administración</span>
+        <span className="text-[11px] font-bold text-[#b45309] uppercase tracking-wide">Costo administración</span>
         <span className="text-[11px] text-[#92400e]">
           <b>{fmtCOP(ADMIN_PER_QUINCENA)}</b> / quincena · <b>{fmtCOP(ADMIN_PER_QUINCENA * 2)}</b> / mes
         </span>
@@ -124,16 +136,26 @@ export function AdminReport({ initialRows, initialYear, initialMonth }: Props) {
       {props.length === 0 ? (
         <div className="text-center py-12">
           <p className="text-4xl mb-3">🏢</p>
-          <p className="text-[#94a3b8]">Sin ingresos en {MONTHS[month - 1]} {year} para prorratear</p>
+          <p className="text-[#64748b]">Sin ingresos en {MONTHS[month - 1]} {year} para prorratear</p>
         </div>
       ) : (
         <>
           {/* ── Table (single grid so Q1/Q2 columns line up) ─────────────── */}
-          <div className="grid grid-cols-[1fr_auto_auto] bg-white rounded-xl border border-[#e2e8f0] overflow-hidden shadow-sm">
+          <ReportTable
+            caption={`Costo de administración por apartamento, ${MONTHS[month - 1]} ${year}`}
+            columns={columns}
+            rows={props}
+            rowKey={p => p.id}
+            totalLabel={`Total ${MONTHS[month - 1]}`}
+            totalTone={{ text: amber, bg: '#fffbeb', border: '#fde68a' }}
+          />
+
+          {/* Mobile only — the desktop table above replaces it from md up */}
+          <div className="md:hidden grid grid-cols-[1fr_auto_auto] bg-white rounded-xl border border-[#e2e8f0] overflow-hidden shadow-sm">
             {/* Header */}
-            <div className="px-3 py-2 text-[10px] font-bold text-[#94a3b8] uppercase tracking-wide bg-[#f8fafc] border-b border-[#e2e8f0]">Apartamento</div>
-            <div className="px-3 py-2 text-[10px] font-bold text-[#94a3b8] uppercase tracking-wide text-right bg-[#f8fafc] border-b border-[#e2e8f0]">Q1 (1–15)</div>
-            <div className="px-3 py-2 text-[10px] font-bold text-[#94a3b8] uppercase tracking-wide text-right bg-[#f8fafc] border-b border-[#e2e8f0]">Q2 (16–fin)</div>
+            <div className="px-3 py-2 text-[11px] font-bold text-[#64748b] uppercase tracking-wide bg-[#f8fafc] border-b border-[#e2e8f0]">Apartamento</div>
+            <div className="px-3 py-2 text-[11px] font-bold text-[#64748b] uppercase tracking-wide text-right bg-[#f8fafc] border-b border-[#e2e8f0]">Q1 (1–15)</div>
+            <div className="px-3 py-2 text-[11px] font-bold text-[#64748b] uppercase tracking-wide text-right bg-[#f8fafc] border-b border-[#e2e8f0]">Q2 (16–fin)</div>
 
             {props.map((p, i) => {
               const cell = `px-3 py-3 ${i % 2 === 0 ? 'bg-white' : 'bg-[#fafafa]'}`
@@ -146,7 +168,7 @@ export function AdminReport({ initialRows, initialYear, initialMonth }: Props) {
                   <div className={`${cell} text-right`}>
                     {p.q1Admin > 0 ? (
                       <>
-                        <p className="text-[10px] text-[#94a3b8]">{fmtPct(p.q1Pct)}</p>
+                        <p className="text-[11px] text-[#64748b]">{fmtPct(p.q1Pct)}</p>
                         <p className="text-xs font-semibold text-[#d97706]">{fmtCOP(p.q1Admin)}</p>
                       </>
                     ) : (
@@ -156,7 +178,7 @@ export function AdminReport({ initialRows, initialYear, initialMonth }: Props) {
                   <div className={`${cell} text-right`}>
                     {p.q2Admin > 0 ? (
                       <>
-                        <p className="text-[10px] text-[#94a3b8]">{fmtPct(p.q2Pct)}</p>
+                        <p className="text-[11px] text-[#64748b]">{fmtPct(p.q2Pct)}</p>
                         <p className="text-xs font-semibold text-[#d97706]">{fmtCOP(p.q2Admin)}</p>
                       </>
                     ) : (

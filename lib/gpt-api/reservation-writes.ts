@@ -62,11 +62,16 @@ export function creationNotes(createdBy: string, today: string, note: string): s
   return appendReservationNote(`Creada desde ChatGPT por ${clean(createdBy)} (${shortDate(today)})`, note)
 }
 
-export function conflictMessage(property: string, conflicts: (Stay & { guest_name: string })[]): string {
+/** `closing` is the last sentence: ChatGPT speaks in first person; the web form passes its own. */
+export function conflictMessage(
+  property: string,
+  conflicts: (Stay & { guest_name: string })[],
+  closing = 'No creo ni muevo reservas que se crucen.',
+): string {
   const list = conflicts
     .map(c => `${c.guest_name} (${shortDate(c.check_in)} a ${shortDate(c.check_out)})`)
     .join(', ')
-  return `${property} ya está ocupado en esas fechas: ${list}. No creo ni muevo reservas que se crucen.`
+  return `${property} ya está ocupado en esas fechas: ${list}. ${closing}`
 }
 
 export function toReservationOut(r: ReservationRow, property: string): ReservationOut {

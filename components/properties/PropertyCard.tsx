@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { togglePropertyActive } from '@/actions/properties'
 import { useUserRole } from '@/lib/user-context'
 import type { Property } from '@/lib/types'
+import { toast } from '@/components/ui/feedback'
 
 interface Props {
   property: Property
@@ -17,8 +18,21 @@ export function PropertyCard({ property }: Props) {
   function handleToggle(e: React.MouseEvent) {
     e.preventDefault()
     e.stopPropagation()
+    const next = !property.active
     startTransition(async () => {
-      await togglePropertyActive(property.id, !property.active)
+      const res = await togglePropertyActive(property.id, next)
+      if (!res.success) { toast.error('No se pudo cambiar la visibilidad'); return }
+      toast.success(next ? `${property.name} visible de nuevo` : `${property.name} oculto`, {
+        id: `undo-p-${property.id}`,
+        action: {
+          label: 'Deshacer',
+          onClick: async () => {
+            const undo = await togglePropertyActive(property.id, !next)
+            if (undo.success) toast.success('Se deshizo')
+            else toast.error('No se pudo deshacer')
+          },
+        },
+      })
     })
   }
 
@@ -38,12 +52,12 @@ export function PropertyCard({ property }: Props) {
             <div className="flex items-center gap-2">
               <p className="font-semibold text-[#0f172a] truncate">{property.name}</p>
               {!property.active && (
-                <span className="text-[10px] bg-[#f1f5f9] text-[#94a3b8] px-1.5 py-0.5 rounded-full font-medium flex-shrink-0">
+                <span className="text-[11px] bg-[#f1f5f9] text-[#64748b] px-1.5 py-0.5 rounded-full font-medium flex-shrink-0">
                   Oculto
                 </span>
               )}
             </div>
-            <p className="text-sm text-[#94a3b8] truncate">{property.address}</p>
+            <p className="text-sm text-[#64748b] truncate">{property.address}</p>
           </div>
 
           {/* Active toggle — admin only */}
@@ -52,22 +66,24 @@ export function PropertyCard({ property }: Props) {
               onClick={handleToggle}
               disabled={isPending}
               aria-label={property.active ? 'Ocultar propiedad' : 'Mostrar propiedad'}
-              className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0
-                          disabled:opacity-50 ${property.active ? 'bg-[#22c55e]' : 'bg-[#cbd5e1]'}`}
+              className="flex-shrink-0 p-2.5 -m-2.5 disabled:opacity-50"
             >
-              <span
-                className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform
-                            ${property.active ? 'translate-x-[22px]' : 'translate-x-[2px]'}`}
-              />
+              <span className={`relative block w-11 h-6 rounded-full transition-colors
+                                ${property.active ? 'bg-[#22c55e]' : 'bg-[#cbd5e1]'}`}>
+                <span
+                  className={`absolute top-0.5 left-0 w-5 h-5 bg-white rounded-full shadow transition-transform
+                              ${property.active ? 'translate-x-[22px]' : 'translate-x-[2px]'}`}
+                />
+              </span>
             </button>
           ) : (
-            <span className="text-[#94a3b8] text-lg">›</span>
+            <span className="text-[#64748b] text-lg">›</span>
           )}
         </div>
 
         {property.access_code && (
           <div className="mt-3 flex items-center gap-2">
-            <span className="text-xs text-[#94a3b8]">Acceso:</span>
+            <span className="text-xs text-[#64748b]">Acceso:</span>
             <span className="text-xs font-mono bg-[#f8fafc] border border-[#e2e8f0]
                              rounded px-2 py-0.5 text-[#0f172a]">
               {property.access_code}

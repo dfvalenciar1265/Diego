@@ -1,7 +1,8 @@
 'use client'
 import { useState, useTransition } from 'react'
 import { getWeekCleaningSchedule, type WeekCleaningTask } from '@/actions/tasks'
-import type { TeamMember } from '@/lib/types'
+import type { TaskStatus, TeamMember } from '@/lib/types'
+import { toast } from '@/components/ui/feedback'
 
 const DAY_NAMES = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
 const MONTHS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
@@ -14,6 +15,12 @@ function addDays(iso: string, n: number): string {
 function dayNum(iso: string): number {
   return parseInt(iso.split('-')[2], 10)
 }
+const STATUS: Record<TaskStatus, { label: string; color: string; bg: string }> = {
+  pending:     { label: 'Pendiente', color: '#c2410c', bg: '#fff7ed' },
+  in_progress: { label: 'En curso',  color: '#4f46e5', bg: '#eef2ff' },
+  done:        { label: 'Terminada', color: '#15803d', bg: '#f0fdf4' },
+}
+
 function fmtShort(iso: string): string {
   const [, mm, dd] = iso.split('-')
   return `${parseInt(dd, 10)} ${MONTHS[parseInt(mm, 10) - 1]}`
@@ -33,9 +40,17 @@ export function WeeklyScheduleView({ initialTasks, initialWeekStart, staff, toda
   const [isPending, startTransition] = useTransition()
 
   function navigate(deltaWeeks: number) {
+    const prev = weekStart
     const ws = addDays(weekStart, deltaWeeks * 7)
     setWeekStart(ws)
-    startTransition(async () => setTasks(await getWeekCleaningSchedule(ws)))
+    startTransition(async () => {
+      try {
+        setTasks(await getWeekCleaningSchedule(ws))
+      } catch {
+        setWeekStart(prev)   // stay on the week whose tasks are still on screen
+        toast.error('No se pudo cargar esa semana. Revisa tu conexión y reintenta.')
+      }
+    })
   }
 
   const filtered = cleaner ? tasks.filter(t => t.assignee_name === cleaner) : tasks
@@ -65,7 +80,7 @@ export function WeeklyScheduleView({ initialTasks, initialWeekStart, staff, toda
   }
 
   const dropdownStyle = {
-    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`,
+    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`,
     backgroundRepeat: 'no-repeat' as const,
     backgroundPosition: 'right 12px center',
   }
@@ -74,19 +89,21 @@ export function WeeklyScheduleView({ initialTasks, initialWeekStart, staff, toda
     <div className="space-y-3">
 
       {/* Week navigator */}
-      <div className="flex items-center justify-between bg-white rounded-xl border border-[#e2e8f0] px-4 py-3 shadow-sm">
-        <button onClick={() => navigate(-1)}
-                className="w-8 h-8 flex items-center justify-center rounded-lg text-[#6366f1] font-bold text-xl active:opacity-60">‹</button>
+      <div className="flex items-center justify-between bg-white rounded-xl border border-[#e2e8f0] px-2 py-1.5 shadow-sm">
+        <button onClick={() => navigate(-1)} disabled={isPending} aria-label="Semana anterior"
+                className="w-11 h-11 flex items-center justify-center rounded-lg text-[#6366f1] font-bold text-2xl
+                           hover:bg-[#eef2ff] active:opacity-60 disabled:opacity-50">‹</button>
         <div className="text-center">
           <p className="text-sm font-bold text-[#0f172a]">
             {isPending ? '…' : `${fmtShort(weekStart)} – ${fmtShort(weekEnd)}`}
           </p>
-          <p className="text-[10px] text-[#94a3b8] uppercase tracking-wide">
+          <p className="text-[11px] text-[#64748b] uppercase tracking-wide">
             {total} limpieza{total !== 1 ? 's' : ''}
           </p>
         </div>
-        <button onClick={() => navigate(1)}
-                className="w-8 h-8 flex items-center justify-center rounded-lg text-[#6366f1] font-bold text-xl active:opacity-60">›</button>
+        <button onClick={() => navigate(1)} disabled={isPending} aria-label="Semana siguiente"
+                className="w-11 h-11 flex items-center justify-center rounded-lg text-[#6366f1] font-bold text-2xl
+                           hover:bg-[#eef2ff] active:opacity-60 disabled:opacity-50">›</button>
       </div>
 
       {/* Cleaner filter + WhatsApp share */}
@@ -94,8 +111,9 @@ export function WeeklyScheduleView({ initialTasks, initialWeekStart, staff, toda
         <select
           value={cleaner}
           onChange={e => setCleaner(e.target.value)}
-          className="flex-1 text-sm text-[#0f172a] bg-white border border-[#e2e8f0]
-                     rounded-xl px-3 py-2.5 focus:outline-none appearance-none"
+          aria-label="Filtrar por persona"
+          className="flex-1 md:flex-none md:w-64 h-11 text-sm text-[#0f172a] bg-white border border-[#e2e8f0]
+                     rounded-xl px-3 focus:outline-none focus:ring-1 focus:ring-[#6366f1] appearance-none"
           style={dropdownStyle}
         >
           <option value="">Todo el personal</option>
@@ -103,7 +121,7 @@ export function WeeklyScheduleView({ initialTasks, initialWeekStart, staff, toda
         </select>
         <button
           onClick={shareWhatsApp}
-          className="flex items-center gap-1.5 px-4 rounded-xl text-sm font-semibold text-white flex-shrink-0"
+          className="h-11 flex items-center gap-1.5 px-4 rounded-xl text-sm font-semibold text-white flex-shrink-0"
           style={{ background: '#25D366' }}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
@@ -113,8 +131,66 @@ export function WeeklyScheduleView({ initialTasks, initialWeekStart, staff, toda
         </button>
       </div>
 
-      {/* Days */}
-      <div className="space-y-2">
+      {/* md+: 7-column agenda (Lun–Dom). Scrolls sideways if the column gets too narrow. */}
+      <div className="hidden md:block overflow-x-auto">
+        <div className="grid grid-cols-7 gap-2 min-w-[720px]">
+          {days.map(d => {
+            const isToday = d.iso === todayISO
+            return (
+              <section
+                key={d.iso}
+                aria-label={`${d.label} ${dayNum(d.iso)}${isToday ? ' (hoy)' : ''}`}
+                className={`flex flex-col rounded-xl border bg-white shadow-sm overflow-hidden min-h-[220px]
+                            ${isToday ? 'border-[#6366f1] ring-1 ring-[#6366f1]' : 'border-[#e2e8f0]'}`}
+              >
+                <header className={`flex items-center gap-1.5 px-2.5 py-2 border-b
+                                    ${isToday ? 'bg-[#6366f1] border-[#6366f1] text-white' : 'bg-[#f8fafc] border-[#f1f5f9] text-[#0f172a]'}`}>
+                  <span className="text-sm font-bold">{d.label}</span>
+                  <span className={`text-sm ${isToday ? 'text-white' : 'text-[#64748b]'}`}>{dayNum(d.iso)}</span>
+                  {isToday && (
+                    <span className="text-[11px] font-bold bg-white text-[#4f46e5] px-1.5 py-px rounded-full">HOY</span>
+                  )}
+                  {d.tasks.length > 0 && (
+                    <span className={`ml-auto text-[11px] font-semibold ${isToday ? 'text-white' : 'text-[#64748b]'}`}>
+                      {d.tasks.length}
+                    </span>
+                  )}
+                </header>
+                <div className="flex-1 p-1.5 space-y-1.5">
+                  {d.tasks.length === 0 ? (
+                    <p className="px-1 py-2 text-xs text-[#64748b]">Sin limpiezas</p>
+                  ) : d.tasks.map(t => {
+                    const st = STATUS[t.status] ?? STATUS.pending
+                    return (
+                      <div
+                        key={t.id}
+                        className={`rounded-lg border border-[#e2e8f0] px-2 py-1.5 ${t.status === 'done' ? 'bg-[#f8fafc]' : 'bg-white'}`}
+                      >
+                        <p className="text-xs font-semibold text-[#0f172a] leading-snug line-clamp-2" title={t.property_name}>
+                          {t.property_name}
+                        </p>
+                        <p className="mt-0.5 text-xs font-semibold text-[#6366f1]">Sale {t.checkout_time}</p>
+                        <p className="text-[11px] text-[#64748b] truncate">
+                          {t.assignee_name ?? 'Sin asignar'}
+                        </p>
+                        <span
+                          className="mt-1 inline-block text-[11px] font-semibold px-1.5 py-px rounded-full"
+                          style={{ color: st.color, background: st.bg }}
+                        >
+                          {st.label}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </section>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Phone: one card per day */}
+      <div className="space-y-2 md:hidden">
         {days.map(d => {
           const isToday = d.iso === todayISO
           return (
@@ -126,13 +202,13 @@ export function WeeklyScheduleView({ initialTasks, initialWeekStart, staff, toda
                 <span className={`text-xs font-bold ${isToday ? 'text-[#6366f1]' : 'text-[#64748b]'}`}>
                   {d.label} {dayNum(d.iso)}
                 </span>
-                {isToday && <span className="text-[9px] font-bold text-[#6366f1] bg-white px-1.5 py-0.5 rounded-full">HOY</span>}
+                {isToday && <span className="text-[11px] font-bold text-[#6366f1] bg-white px-1.5 py-0.5 rounded-full">HOY</span>}
                 {d.tasks.length > 0 && (
-                  <span className="ml-auto text-[10px] text-[#94a3b8]">{d.tasks.length}</span>
+                  <span className="ml-auto text-[11px] text-[#64748b]">{d.tasks.length}</span>
                 )}
               </div>
               {d.tasks.length === 0 ? (
-                <p className="px-3 py-2 text-xs text-[#cbd5e1]">—</p>
+                <p className="px-3 py-2 text-xs text-[#64748b]">Sin limpiezas</p>
               ) : (
                 <div className="divide-y divide-[#f1f5f9]">
                   {d.tasks.map(t => (
@@ -141,11 +217,11 @@ export function WeeklyScheduleView({ initialTasks, initialWeekStart, staff, toda
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-semibold text-[#0f172a] truncate">{t.property_name}</p>
                         {t.assignee_name && !cleaner && (
-                          <p className="text-[11px] text-[#94a3b8] truncate">{t.assignee_name}</p>
+                          <p className="text-[11px] text-[#64748b] truncate">{t.assignee_name}</p>
                         )}
                       </div>
                       {t.guests != null && (
-                        <span className="text-[11px] text-[#94a3b8] flex-shrink-0">👥 {t.guests}</span>
+                        <span className="text-[11px] text-[#64748b] flex-shrink-0">👥 {t.guests}</span>
                       )}
                       <span className="text-xs font-semibold text-[#6366f1] flex-shrink-0">{t.checkout_time}</span>
                       {t.status === 'done' && <span className="text-xs flex-shrink-0">✅</span>}

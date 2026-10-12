@@ -1,4 +1,5 @@
 'use client'
+import { todayInBogota } from '@/lib/gpt-api/dates'
 import { useState, useTransition } from 'react'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
@@ -6,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { createTask, updateTask } from '@/actions/tasks'
 import type { Property, TeamMember, Task } from '@/lib/types'
+import { toast } from '@/components/ui/feedback'
 
 interface Props {
   open: boolean
@@ -28,7 +30,12 @@ export function TaskForm({ open, onClose, properties, teamMembers, defaultProper
     setError('')
     startTransition(async () => {
       const result = task ? await updateTask(task.id, formData) : await createTask(formData)
-      if (!result.success) { setError(result.error ?? 'Error'); return }
+      if (!result.success) {
+        setError(result.error ?? 'Error')
+        toast.error(task ? 'No se guardaron los cambios' : 'No se pudo crear la tarea')
+        return
+      }
+      toast.success(task ? 'Tarea actualizada' : 'Tarea creada')
       onClose()
     })
   }
@@ -41,7 +48,7 @@ export function TaskForm({ open, onClose, properties, teamMembers, defaultProper
         <SheetHeader className="mb-4">
           <SheetTitle>{isEdit ? 'Editar tarea' : 'Nueva tarea'}</SheetTitle>
         </SheetHeader>
-        <form onSubmit={handleSubmit} className="space-y-4 pb-6">
+        <form onSubmit={handleSubmit} className="space-y-4 px-4 pb-6">
           <div>
             <Label>Apartamento *</Label>
             <select name="property_id" defaultValue={task?.property_id ?? defaultPropertyId ?? ''}
@@ -65,7 +72,7 @@ export function TaskForm({ open, onClose, properties, teamMembers, defaultProper
           <div>
             <Label>Fecha programada *</Label>
             <Input name="scheduled_for" type="date" required
-                   defaultValue={task?.scheduled_for ?? defaultDate ?? new Date().toISOString().split('T')[0]}
+                   defaultValue={task?.scheduled_for ?? defaultDate ?? todayInBogota()}
                    className="mt-1" />
           </div>
           <div>
@@ -73,7 +80,7 @@ export function TaskForm({ open, onClose, properties, teamMembers, defaultProper
             <Input name="notes" defaultValue={task?.notes ?? ''} placeholder="¿Qué hay que hacer?" className="mt-1" />
           </div>
           <div>
-            <Label>Costo ($) <span className="text-[#94a3b8] font-normal">— opcional</span></Label>
+            <Label>Costo ($) <span className="text-[#64748b] font-normal">— opcional</span></Label>
             <Input name="cost" type="number" min="0" step="0.01"
                    defaultValue={task?.cost ?? ''} placeholder="Opcional (déjalo vacío si no aplica)"
                    className="mt-1" />

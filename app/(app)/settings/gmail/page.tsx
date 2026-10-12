@@ -8,7 +8,7 @@ export default async function GmailSettingsPage() {
   return (
     <>
       <PageHeader title="Configuración Gmail" />
-      <div className="px-4 pb-24 space-y-4">
+      <div className="px-4 pb-24 space-y-4 md:max-w-2xl">
         <GmailSettingsClient {...status} />
       </div>
     </>

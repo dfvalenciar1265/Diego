@@ -101,9 +101,9 @@ export function DashboardPrepCard({ task }: { task: PrepTask }) {
 
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-[#0f172a] leading-tight truncate">{propName}</p>
-          <p className="text-xs text-[#94a3b8] truncate">{guestName}</p>
+          <p className="text-xs text-[#64748b] truncate">{guestName}</p>
           {(guests != null || checkIn) && (
-            <p className="text-[11px] text-[#94a3b8] leading-tight mt-0.5">
+            <p className="text-[11px] text-[#64748b] leading-tight mt-0.5">
               {guests != null && <span>👥 {guests}</span>}
               {guests != null && checkIn && <span> · </span>}
               {checkIn && <span className="text-[#ff385c] font-medium">check-in {checkIn}</span>}
@@ -132,7 +132,7 @@ export function DashboardPrepCard({ task }: { task: PrepTask }) {
               <span className="text-xs font-semibold text-[#ff385c]">
                 {ciTime ? to12h(ciTime) : '+ hora'}
               </span>
-              <span className="text-[10px]">✏️</span>
+              <span className="text-[11px]">✏️</span>
             </button>
           )}
         </div>
@@ -147,7 +147,7 @@ export function DashboardPrepCard({ task }: { task: PrepTask }) {
         placeholder="Nota…"
         className="mt-2 w-full text-xs border border-[#e2e8f0] rounded-lg px-2.5 py-1.5
                    focus:outline-none focus:ring-1 focus:ring-[#ff385c] bg-[#fafafa]
-                   resize-none placeholder:text-[#c4c9d4]"
+                   resize-none placeholder:text-[#64748b]"
       />
 
       {saveError && (

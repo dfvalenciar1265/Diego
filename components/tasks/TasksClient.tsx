@@ -10,7 +10,8 @@ export function TasksClient({ properties, teamMembers }: Props) {
   const [open, setOpen] = useState(false)
   return (
     <>
-      <Button size="sm" onClick={() => setOpen(true)} style={{ background: '#ff385c' }}>
+      <Button size="sm" onClick={() => setOpen(true)} style={{ background: '#ff385c' }}
+              className="h-11 px-4 text-sm md:h-9">
         + Tarea
       </Button>
       <TaskForm open={open} onClose={() => setOpen(false)}

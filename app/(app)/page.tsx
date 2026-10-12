@@ -1,3 +1,4 @@
+import { todayInBogota, hourInBogota } from '@/lib/gpt-api/dates'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentMember } from '@/lib/auth'
@@ -34,9 +35,10 @@ export default async function DashboardPage() {
   }
 
   const now      = new Date()
-  const today    = format(now, "EEEE d 'de' MMMM", { locale: es })
-  const todayISO = format(now, 'yyyy-MM-dd')
-  const hour     = now.getHours()
+  // The server runs in UTC: "today" and the greeting must follow Colombia's clock
+  const todayISO = todayInBogota(now)
+  const today    = format(new Date(todayISO + 'T12:00:00'), "EEEE d 'de' MMMM", { locale: es })
+  const hour     = hourInBogota(now)
   const greeting = hour < 12 ? 'Buenos días' : hour < 19 ? 'Buenas tardes' : 'Buenas noches'
 
   // All dashboard data fetched concurrently (no waterfall)
@@ -45,13 +47,14 @@ export default async function DashboardPage() {
     // Prep tasks for today's check-ins — ALL statuses (done tasks show with ✓)
     supabase
       .from('tasks')
-      .select('*, property:properties(name), assignee:team_members(name), reservation:reservations(check_in, check_out, notes, guest_name, guests)')
+      // !inner makes the check_in filter drop non-matching rows server-side;
+      // without it PostgREST returned every prep task ever with a null embed.
+      .select('*, property:properties(name), assignee:team_members(name), reservation:reservations!inner(check_in, check_out, notes, guest_name, guests)')
       .eq('type', 'preparation')
-      .eq('reservations.check_in', todayISO)
-      .not('reservation_id', 'is', null)
+      .eq('reservation.check_in', todayISO)
       .then(r => r.data ?? []),
     getDashboardKPIs(),
-    getTasks({ date: todayISO }),
+    getTasks({ date: todayISO, type: 'other' }),
     getLowStockAlerts(),
     getPurchaseRequests('pending'),
     getTodayCheckOuts(),
@@ -67,7 +70,7 @@ export default async function DashboardPage() {
     .filter(m => m.status !== 'resolved' && m.priority !== 'scheduled')
     .sort((a, b) => (priorityRank[a.priority] ?? 9) - (priorityRank[b.priority] ?? 9))
 
-  // PostgREST returns rows with null reservation for non-matching joins — keep only today's
+  // Belt and braces: keep only today's check-ins
   const prepTasks = prepTasksRaw.filter(t => t.reservation?.check_in === todayISO)
 
   // Other tasks scheduled for today (cleaning shown in its own section)
@@ -75,27 +78,29 @@ export default async function DashboardPage() {
 
   return (
     <div className="pb-4">
-      {/* Header */}
-      <div className="bg-white border-b border-[#e2e8f0] px-4 pt-4 pb-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-lg font-bold text-[#0f172a]">
+      {/* Header — phone: white bar; md+: page title over the content (the sidebar is the bar) */}
+      <header className="bg-white border-b border-[#e2e8f0] px-4 pt-4 pb-3
+                         md:bg-transparent md:border-0 md:pt-8 md:pb-2">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="text-lg md:text-2xl font-bold text-[#0f172a] truncate">
               {greeting}, {member.name?.split(' ')[0] ?? 'Diego'} 👋
             </h1>
-            <p className="text-xs text-[#94a3b8] capitalize">{today}</p>
+            <p className="text-xs md:text-sm text-[#64748b] first-letter:uppercase md:mt-0.5">{today}</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 md:gap-2 shrink-0">
             <RefreshButton />
-            <div className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-white text-sm"
-                 style={{ background: 'linear-gradient(135deg, #ff385c, #ff6b6b)' }}>
+            <div className="w-9 h-9 md:w-10 md:h-10 rounded-full flex items-center justify-center font-bold text-white text-sm"
+                 style={{ background: 'linear-gradient(135deg, #ff385c, #ff6b6b)' }}
+                 aria-hidden="true">
               {member?.name?.[0] ?? 'D'}
             </div>
           </div>
         </div>
-      </div>
+      </header>
 
       {/* KPIs — hoy, grid 3 columnas iguales */}
-      <div className="grid grid-cols-3 gap-2 px-4 pt-4">
+      <div className="grid grid-cols-3 gap-2 md:gap-4 px-4 pt-4">
         <KPICard label="Check-ins"  value={kpis.checkInsToday}
                  color="#ff385c" subtitle="hoy" icon="🏠" />
         <KPICard label="Check-outs" value={kpis.checkOutsToday}
@@ -104,13 +109,14 @@ export default async function DashboardPage() {
                  color="#f97316" subtitle="hoy" icon="✅" />
       </div>
 
-      <div className="px-4 pt-4 space-y-4">
+      {/* Phone: stacked. lg+: two balanced columns, same reading order (CSS columns) */}
+      <div className="px-4 pt-4 space-y-4 lg:space-y-0 lg:columns-2 lg:gap-4 [&>*]:break-inside-avoid lg:[&>*]:mb-4">
 
         {/* Check-out times — quick view for admin to plan cleaning staff */}
         {checkOuts.length > 0 && (
           <section className="bg-white border border-[#e2e8f0] rounded-xl p-4
                               shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
-            <p className="text-xs font-semibold text-[#94a3b8] uppercase tracking-wide mb-3">
+            <p className="text-xs font-semibold text-[#64748b] uppercase tracking-wide mb-3">
               🚪 Check-outs de hoy — horarios
             </p>
             <div className="space-y-2.5">
@@ -140,10 +146,10 @@ export default async function DashboardPage() {
           <section className="bg-white border border-[#e2e8f0] rounded-xl p-4
                               shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
             <div className="flex items-center justify-between mb-3">
-              <p className="text-xs font-semibold text-[#94a3b8] uppercase tracking-wide">
+              <p className="text-xs font-semibold text-[#64748b] uppercase tracking-wide">
                 🔧 Mantenimiento pendiente ({openMaintenance.length})
               </p>
-              <Link href="/maintenance" className="text-[11px] font-semibold text-[#6366f1] shrink-0">
+              <Link href="/maintenance" className="text-xs font-semibold text-[#6366f1] shrink-0 min-h-11 -my-3 flex items-center">
                 Ver todo →
               </Link>
             </div>
@@ -151,7 +157,7 @@ export default async function DashboardPage() {
               {openMaintenance.slice(0, 5).map(m => <MaintenanceAlertItem key={m.id} issue={m} />)}
             </div>
             {openMaintenance.length > 5 && (
-              <p className="text-[11px] text-[#94a3b8] mt-2">+{openMaintenance.length - 5} más</p>
+              <p className="text-[11px] text-[#64748b] mt-2">+{openMaintenance.length - 5} más</p>
             )}
           </section>
         )}
@@ -170,7 +176,7 @@ export default async function DashboardPage() {
         {pendingPurchases.length > 0 && (
           <section className="bg-white border border-[#e2e8f0] rounded-xl p-4
                               shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
-            <p className="text-xs font-semibold text-[#94a3b8] uppercase tracking-wide mb-3">
+            <p className="text-xs font-semibold text-[#64748b] uppercase tracking-wide mb-3">
               🛒 Compras pendientes ({pendingPurchases.length})
             </p>
             <div className="space-y-2">
@@ -184,7 +190,7 @@ export default async function DashboardPage() {
         {/* Tareas de hoy — solo preparación y otras (limpieza va en su propia sección) */}
         {(prepTasks.length > 0 || otherTasks.length > 0) && (
         <section>
-          <p className="text-xs font-semibold text-[#94a3b8] uppercase tracking-wide mb-3">
+          <p className="text-xs font-semibold text-[#64748b] uppercase tracking-wide mb-3">
             ✅ Tareas de hoy ({prepTasks.length + otherTasks.length})
           </p>
 
@@ -211,7 +217,7 @@ export default async function DashboardPage() {
                 <div>
                   <div className="flex items-center gap-2 mb-2">
                     <span className="text-base">📋</span>
-                    <span className="text-xs font-semibold text-[#94a3b8] uppercase tracking-wide">
+                    <span className="text-xs font-semibold text-[#64748b] uppercase tracking-wide">
                       Otras ({otherTasks.length})
                     </span>
                     <div className="flex-1 h-px bg-[#e2e8f0]" />
@@ -239,7 +245,7 @@ function MaintenanceAlertItem({ issue }: { issue: OpenMaintenance }) {
       <span className="w-2 h-2 rounded-full shrink-0" style={{ background: color }} />
       <div className="flex-1 min-w-0">
         <p className="text-xs font-medium text-[#0f172a] truncate">{issue.title}</p>
-        <p className="text-[11px] text-[#94a3b8] truncate">
+        <p className="text-[11px] text-[#64748b] truncate">
           {issue.property?.name ?? '—'} · {label}{issue.status === 'in_progress' ? ' · en curso' : ''}
         </p>
       </div>
@@ -252,9 +258,9 @@ function PurchaseRequestItem({ request }: { request: PurchaseRequest & { propert
     <div className="flex items-center gap-3 py-1">
       <div className="flex-1 min-w-0">
         <p className="text-xs font-medium text-[#0f172a] truncate">{request.description}</p>
-        <p className="text-xs text-[#94a3b8]">{request.property?.name}</p>
+        <p className="text-xs text-[#64748b]">{request.property?.name}</p>
       </div>
-      <ResolvePurchaseButton id={request.id} />
+      <ResolvePurchaseButton id={request.id} description={request.description} />
     </div>
   )
 }

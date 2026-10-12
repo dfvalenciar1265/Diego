@@ -49,7 +49,7 @@ export function TasksView({ tasks, properties, teamMembers }: Props) {
   const pagedDone    = paginate(doneTasks,    donePage, PAGE_SIZE)
 
   const dropdownStyle = {
-    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`,
+    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`,
     backgroundRepeat: 'no-repeat' as const,
     backgroundPosition: 'right 12px center',
   }
@@ -67,7 +67,8 @@ export function TasksView({ tasks, properties, teamMembers }: Props) {
       <select
         value={filterProp}
         onChange={e => changeFilter(e.target.value)}
-        className="w-full text-sm text-[#0f172a] bg-white border border-[#e2e8f0]
+        aria-label="Filtrar por apartamento"
+        className="w-full md:max-w-sm min-h-11 text-sm text-[#0f172a] bg-white border border-[#e2e8f0]
                    rounded-xl px-3 py-2.5 focus:outline-none focus:ring-1
                    focus:ring-[#ff385c] appearance-none"
         style={dropdownStyle}
@@ -82,7 +83,7 @@ export function TasksView({ tasks, properties, teamMembers }: Props) {
       <div className="flex rounded-xl overflow-hidden border border-[#e2e8f0]">
         <button
           onClick={() => setTab('pending')}
-          className="flex-1 py-2.5 text-sm font-medium transition-colors"
+          className="flex-1 min-h-11 py-2.5 text-sm font-medium transition-colors"
           style={{
             background: tab === 'pending' ? '#ff385c' : 'white',
             color:      tab === 'pending' ? 'white'   : '#64748b',
@@ -91,7 +92,7 @@ export function TasksView({ tasks, properties, teamMembers }: Props) {
           Pendientes
           {pendingTasks.length > 0 && (
             <span
-              className="ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+              className="ml-1.5 text-[11px] font-bold px-1.5 py-0.5 rounded-full"
               style={{
                 background: tab === 'pending' ? 'rgba(255,255,255,0.25)' : '#fee2e2',
                 color:      tab === 'pending' ? 'white' : '#ef4444',
@@ -103,7 +104,7 @@ export function TasksView({ tasks, properties, teamMembers }: Props) {
         </button>
         <button
           onClick={() => setTab('done')}
-          className="flex-1 py-2.5 text-sm font-medium transition-colors"
+          className="flex-1 min-h-11 py-2.5 text-sm font-medium transition-colors"
           style={{
             background: tab === 'done' ? '#ff385c' : 'white',
             color:      tab === 'done' ? 'white'   : '#64748b',
@@ -112,7 +113,7 @@ export function TasksView({ tasks, properties, teamMembers }: Props) {
           Terminadas
           {doneTasks.length > 0 && (
             <span
-              className="ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+              className="ml-1.5 text-[11px] font-bold px-1.5 py-0.5 rounded-full"
               style={{
                 background: tab === 'done' ? 'rgba(255,255,255,0.25)' : '#dcfce7',
                 color:      tab === 'done' ? 'white' : '#16a34a',
@@ -130,15 +131,17 @@ export function TasksView({ tasks, properties, teamMembers }: Props) {
           {pendingTasks.length === 0 ? (
             <div className="text-center py-12">
               <p className="text-4xl mb-3">✅</p>
-              <p className="text-[#94a3b8]">No hay tareas pendientes</p>
+              <p className="text-[#64748b]">No hay tareas pendientes</p>
             </div>
           ) : (
             <>
-              {pagedPending.map(t => (
-                <OtherTaskCard key={t.id} task={t} teamMembers={teamMembers} onEdit={() => setEditing(t)} />
-              ))}
+              <div className="card-grid">
+                {pagedPending.map(t => (
+                  <OtherTaskCard key={t.id} task={t} teamMembers={teamMembers} onEdit={() => setEditing(t)} />
+                ))}
+              </div>
               <Pagination page={pendPage} total={pendPages} onChange={setPendPage} accent="#ff385c" />
-              <p className="text-center text-xs text-[#c4c9d4]">
+              <p className="text-center text-xs text-[#64748b]">
                 {pendingTasks.length} tarea{pendingTasks.length !== 1 ? 's' : ''} pendiente{pendingTasks.length !== 1 ? 's' : ''}
               </p>
             </>
@@ -163,15 +166,17 @@ export function TasksView({ tasks, properties, teamMembers }: Props) {
           {doneTasks.length === 0 ? (
             <div className="text-center py-12">
               <p className="text-4xl mb-3">📋</p>
-              <p className="text-[#94a3b8]">No hay tareas terminadas</p>
+              <p className="text-[#64748b]">No hay tareas terminadas</p>
             </div>
           ) : (
             <>
-              {pagedDone.map(t => (
-                <OtherTaskCard key={t.id} task={t} teamMembers={teamMembers} onEdit={() => setEditing(t)} />
-              ))}
+              <div className="card-grid">
+                {pagedDone.map(t => (
+                  <OtherTaskCard key={t.id} task={t} teamMembers={teamMembers} onEdit={() => setEditing(t)} />
+                ))}
+              </div>
               <Pagination page={donePage} total={donePages} onChange={setDonePage} accent="#ff385c" />
-              <p className="text-center text-xs text-[#c4c9d4]">
+              <p className="text-center text-xs text-[#64748b]">
                 {doneTasks.length} tarea{doneTasks.length !== 1 ? 's' : ''} completada{doneTasks.length !== 1 ? 's' : ''}
               </p>
             </>

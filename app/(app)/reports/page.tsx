@@ -5,6 +5,7 @@ import { getIncomeReport, getCleaningCostReport, getProfitabilityReport, getClea
 import { getExpenses } from '@/actions/expenses'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { ReportsView } from '@/components/reports/ReportsView'
+import { todayInBogota } from '@/lib/gpt-api/dates'
 
 export default async function ReportsPage() {
   // Admin-only — cached per request
@@ -12,9 +13,10 @@ export default async function ReportsPage() {
   if (!member) redirect('/login')
   if (member.role !== 'admin') redirect('/')
 
-  const now          = new Date()
-  const currentYear  = now.getFullYear()
-  const currentMonth = now.getMonth() + 1
+  // Month in Colombia time: the server runs in UTC, so from 7 pm on the last day of
+  // the month `new Date()` would already open next month's (empty) reports.
+  // The active tab (?tab=…) is read on the client by ReportsView via useSearchParams.
+  const [currentYear, currentMonth] = todayInBogota().split('-').map(Number)
 
   const [
     properties,

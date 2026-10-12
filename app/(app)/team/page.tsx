@@ -23,7 +23,7 @@ export default async function TeamPage() {
         title="Personas"
         action={<NewTeamMemberButton />}
       />
-      <div className="p-4 space-y-3">
+      <div className="p-4 card-grid">
         {(members ?? []).map(m => (
           <TeamMemberCard key={m.id} member={m} isSelf={m.id === me.id} />
         ))}

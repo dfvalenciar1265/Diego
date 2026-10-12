@@ -69,7 +69,7 @@ export function NotifyBuildingButton({ data, taskId, notifiedAt }: Props) {
                     ${done ? 'text-[#16a34a]' : 'text-[#6366f1]'}`}
       >
         {done ? `✅ Edificio avisado · ${to12h(sentAt!)}` : '📨 Avisar edificio'}
-        <span className="text-[9px]">{open ? '▲' : '▼'}</span>
+        <span className="text-[11px]">{open ? '▲' : '▼'}</span>
       </button>
 
       {open && (
@@ -92,7 +92,7 @@ export function NotifyBuildingButton({ data, taskId, notifiedAt }: Props) {
           {done && (
             <button
               onClick={undo}
-              className="text-[10px] text-[#94a3b8] underline underline-offset-2 active:opacity-60"
+              className="text-[11px] text-[#64748b] underline underline-offset-2 active:opacity-60"
             >
               Desmarcar
             </button>

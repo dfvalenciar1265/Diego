@@ -15,8 +15,8 @@ export const viewport: Viewport = {
   themeColor: '#ff385c',
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
+  // Pinch-zoom stays enabled (accessibility); iOS input auto-zoom is avoided with 16px inputs
+  viewportFit: 'cover',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

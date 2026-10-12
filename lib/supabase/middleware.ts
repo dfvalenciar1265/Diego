@@ -21,6 +21,10 @@ export async function updateSession(request: NextRequest) {
     }
   )
 
-  const { data: { user } } = await supabase.auth.getUser()
+  // getClaims() refreshes the session if needed and verifies the JWT locally
+  // against the project's cached ES256 key — no Auth round-trip per request
+  // (getUser() was one network call on every navigation and prefetch).
+  const { data } = await supabase.auth.getClaims()
+  const user = data?.claims ? { id: data.claims.sub } : null
   return { supabaseResponse, user }
 }

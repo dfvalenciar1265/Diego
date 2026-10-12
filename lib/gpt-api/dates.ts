@@ -9,6 +9,13 @@ export function todayInBogota(now: Date = new Date()): string {
   }).format(now)
 }
 
+/** Hora actual en Colombia (0–23), para saludos y similares en el servidor (que corre en UTC). */
+export function hourInBogota(now: Date = new Date()): number {
+  return Number(new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Bogota', hour: 'numeric', hourCycle: 'h23',
+  }).format(now))
+}
+
 /** "2026-10-13" → "13-oct" */
 export function shortDate(iso: string): string {
   const [, m, d] = iso.split('-').map(Number)

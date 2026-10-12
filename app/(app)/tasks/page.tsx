@@ -15,7 +15,11 @@ export default async function TasksPage() {
   // Anyone who can create tasks sees the full shared 'other' task list;
   // others see only the tasks assigned to them.
   const canManageTasks = canDo(member.role, 'tasks:create')
-  const filters = canManageTasks ? {} : { assignedTo: member.id }
+  // Only 'other' tasks live on this screen — cleaning/prep have their own views,
+  // so don't ship the whole task history to the browser.
+  const filters = canManageTasks
+    ? { type: 'other' as const }
+    : { type: 'other' as const, assignedTo: member.id }
   const [tasks, properties, teamMembers] = await Promise.all([
     getTasks(filters),
     getProperties(true),

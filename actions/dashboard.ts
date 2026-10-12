@@ -1,3 +1,4 @@
+import { todayInBogota } from '@/lib/gpt-api/dates'
 import { createClient } from '@/lib/supabase/server'
 import { format, startOfMonth, endOfMonth } from 'date-fns'
 import type { DashboardKPIs, OccupancyData } from '@/lib/types'
@@ -51,7 +52,7 @@ function to24hInput(parts: { h: number; m: number } | null): string {
 
 export async function getTodayCheckOuts(): Promise<TodayCheckOut[]> {
   const supabase = await createClient()
-  const today = format(new Date(), 'yyyy-MM-dd')
+  const today = todayInBogota()
 
   const { data } = await supabase
     .from('reservations')
@@ -97,9 +98,10 @@ export async function getTodayCheckOuts(): Promise<TodayCheckOut[]> {
 
 export async function getDashboardKPIs(): Promise<DashboardKPIs> {
   const supabase = await createClient()
-  const today = format(new Date(), 'yyyy-MM-dd')
-  const monthStart = format(startOfMonth(new Date()), 'yyyy-MM-dd')
-  const monthEnd = format(endOfMonth(new Date()), 'yyyy-MM-dd')
+  const today = todayInBogota()
+  const todayDate = new Date(today + 'T12:00:00')
+  const monthStart = format(startOfMonth(todayDate), 'yyyy-MM-dd')
+  const monthEnd = format(endOfMonth(todayDate), 'yyyy-MM-dd')
 
   const [checkIns, checkOuts, pendingTasks, monthlyRevenue] = await Promise.all([
     // Check-ins hoy

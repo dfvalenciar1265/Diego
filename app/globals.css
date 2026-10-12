@@ -53,7 +53,7 @@
   --primary-hover: #e0314f;
   --bg: #f8fafc;
   --text: #0f172a;
-  --text-muted: #94a3b8;
+  --text-muted: #64748b;
   --urgent: #ef4444;
   --pending: #f97316;
   --done: #22c55e;
@@ -143,6 +143,21 @@
   }
   html {
     @apply font-sans;
+  }
+}
+
+/* Card lists: one column on phones, 2–3 columns on wider screens */
+@utility card-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  @media (width >= 48rem) {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+  @media (width >= 80rem) {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 

@@ -5,7 +5,7 @@ export default function ReportsLoading() {
   return (
     <>
       <PageHeader title="Reportes" />
-      <div className="p-4 space-y-4">
+      <div className="p-4 space-y-4 md:max-w-6xl">
         <Skeleton className="h-11 rounded-xl" />        {/* tabs */}
         <div className="grid grid-cols-2 gap-3">
           <Skeleton className="h-16 rounded-xl" />
