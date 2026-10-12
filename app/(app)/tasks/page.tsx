@@ -10,7 +10,7 @@ import { TasksView } from '@/components/tasks/TasksView'
 
 export default async function TasksPage() {
   const member = await getCurrentMember()
-  if (!member) redirect('/login')
+  if (!member) redirect('/logout')
 
   // Anyone who can create tasks sees the full shared 'other' task list;
   // others see only the tasks assigned to them.

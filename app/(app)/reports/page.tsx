@@ -10,7 +10,7 @@ import { todayInBogota } from '@/lib/gpt-api/dates'
 export default async function ReportsPage() {
   // Admin-only — cached per request
   const member = await getCurrentMember()
-  if (!member) redirect('/login')
+  if (!member) redirect('/logout')
   if (member.role !== 'admin') redirect('/')
 
   // Month in Colombia time: the server runs in UTC, so from 7 pm on the last day of

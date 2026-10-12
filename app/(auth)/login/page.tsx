@@ -1,9 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useSyncExternalStore } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
-import { lookupEmailByName } from '@/actions/team'
+import { signInWithName } from '@/actions/auth'
 import { safeNextPath } from '@/lib/safe-next'
 
 export default function LoginPage() {
@@ -13,33 +12,34 @@ export default function LoginPage() {
   const [error,    setError]    = useState<string | null>(null)
   const [loading,  setLoading]  = useState(false)
 
+  // /logout sends deactivated people here with ?inactive=1. Read from the URL on the
+  // client only (the page is prerendered, so the server snapshot is always false).
+  const inactive = useSyncExternalStore(
+    () => () => {},
+    () => new URLSearchParams(window.location.search).has('inactive'),
+    () => false,
+  )
+  const notice = error ?? (inactive
+    ? 'Tu usuario está desactivado. Si crees que es un error, habla con el administrador.'
+    : null)
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
     setLoading(true)
 
     try {
-      // 1. Look up the email for this name
-      const result = await lookupEmailByName(name.trim())
-      if (!result) {
-        setError('No encontramos a nadie con ese nombre. Verifica cómo está registrado.')
-        return
-      }
-
-      // 2. Sign in with the email + password
-      const supabase = createClient()
-      const { error: authError } = await supabase.auth.signInWithPassword({
-        email:    result.email,
-        password,
-      })
-
-      if (authError) {
-        setError('Contraseña incorrecta. Intenta de nuevo.')
+      // Name lookup + password check run on the server; the email never reaches the browser
+      const result = await signInWithName(name.trim(), password)
+      if (!result.ok) {
+        setError(result.error)
         return
       }
 
       // Back to where the sign-in was asked for (e.g. the "Autorizar" screen), else home
       router.push(safeNextPath(new URLSearchParams(window.location.search).get('next')) ?? '/')
+    } catch {
+      setError('No se pudo conectar. Revisa tu conexión y reintenta.')
     } finally {
       setLoading(false)
     }
@@ -90,8 +90,8 @@ export default function LoginPage() {
             />
           </div>
 
-          {error && (
-            <p className="text-sm text-red-500 bg-red-50 rounded-lg px-3 py-2">{error}</p>
+          {notice && (
+            <p role="alert" className="text-sm text-red-500 bg-red-50 rounded-lg px-3 py-2">{notice}</p>
           )}
 
           <button

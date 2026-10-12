@@ -7,7 +7,9 @@ export async function proxy(request: NextRequest) {
 
   // /.well-known holds the public OAuth metadata that ChatGPT and Claude read before signing in.
   // API routes authenticate on their own (bearer tokens / cron secret), so skip the session work.
+  // /logout signs out on its own (it must not bounce through /login?next=/logout).
   const isPublic = pathname.startsWith('/_next') || pathname.startsWith('/api') || pathname.startsWith('/.well-known')
+    || pathname === '/logout'
   if (isPublic) return NextResponse.next()
 
   const { supabaseResponse, user } = await updateSession(request)

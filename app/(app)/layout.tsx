@@ -9,7 +9,7 @@ import type { UserRole } from '@/lib/types'
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   // Cached per request — page components reuse this without re-querying
   const member = await getCurrentMember()
-  if (!member) redirect('/login')
+  if (!member) redirect('/logout')
 
   const role = (member.role as UserRole) ?? null
 

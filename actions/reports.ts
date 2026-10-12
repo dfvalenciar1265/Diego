@@ -2,6 +2,14 @@
 import { createClient } from '@/lib/supabase/server'
 import { CLEANING_PRICES } from '@/lib/cleaning-prices'
 import { getExpenses } from '@/actions/expenses'
+import { getCurrentMember } from '@/lib/auth'
+
+/** Money reports are admin-only. These are server actions (callable from any
+ *  browser with a session), so the page guard alone doesn't protect them. */
+async function assertAdmin(): Promise<void> {
+  const member = await getCurrentMember()   // cached per request
+  if (member?.role !== 'admin') throw new Error('Solo administradores')
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -58,6 +66,7 @@ function lastDayOfMonth(year: number, month: number): number {
  * month, with Q1 (days 1-15) and Q2 (days 16-end) proportional amounts.
  */
 export async function getIncomeReport(year: number, month: number): Promise<IncomeRow[]> {
+  await assertAdmin()
   const supabase = await createClient()
 
   const firstDay = `${year}-${pad(month)}-01`
@@ -124,6 +133,7 @@ export async function getIncomeReport(year: number, month: number): Promise<Inco
  * Cost = task.cost if set, otherwise the fixed price for the property.
  */
 export async function getCleaningCostReport(year: number, month: number): Promise<CleaningCostRow[]> {
+  await assertAdmin()
   const supabase = await createClient()
 
   const firstDay = `${year}-${pad(month)}-01`
@@ -179,6 +189,7 @@ export interface EmployeeCleaningRow {
  * that stamp many tasks done on a single day. Aggregation happens in the component.
  */
 export async function getCleaningByEmployee(year: number, month: number): Promise<EmployeeCleaningRow[]> {
+  await assertAdmin()
   const supabase = await createClient()
 
   const firstDay = `${year}-${pad(month)}-01`
@@ -224,6 +235,7 @@ export async function getProfitabilityReport(
   year: number,
   month: number
 ): Promise<ProfitabilityRow[]> {
+  await assertAdmin()
   const firstDay = `${year}-${pad(month)}-01`
   const lastDay  = `${year}-${pad(month)}-${pad(lastDayOfMonth(year, month))}`
 

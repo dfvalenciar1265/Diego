@@ -9,6 +9,7 @@ export async function getExpenses(filters?: {
   month?: number
 }): Promise<Expense[]> {
   const supabase = await createClient()
+  if (await requireAdmin(supabase)) throw new Error('Solo administradores')
   let query = supabase
     .from('expenses')
     .select('*, property:properties(name)')
