@@ -14,6 +14,7 @@
  *   4. Repairs active reservations left without their cleaning/preparation tasks
  *   5. Auto-completes tasks whose scheduled date is in the past
  */
+import { todayInBogota } from '@/lib/gpt-api/dates'
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
@@ -266,7 +267,7 @@ async function handleChangeRequest(
     if (aliasId) property = propList.find(p => p.id === aliasId)
   }
 
-  const today = new Date().toISOString().slice(0, 10)
+  const today = todayInBogota()
   let query = db
     .from('reservations')
     .select('id, guest_name, check_in, check_out, guests, pending_change')
@@ -354,7 +355,7 @@ async function insertReservationIfNew(
   // Auto-create cleaning + preparation tasks (a failure here is repaired by step 4).
   // A stay that already ended (old email caught by a long resync) needs none —
   // they'd only pile up as stale pending preparations.
-  const today = new Date().toISOString().slice(0, 10)
+  const today = todayInBogota()
   if (r.check_out < today) return true
   const reservation = { ...r, id: inserted.id }
   const { error: taskError } = await db.from('tasks')
@@ -367,7 +368,7 @@ async function insertReservationIfNew(
 // ─── Helper: give active reservations their missing turnover tasks ───────────
 
 async function repairMissingTurnoverTasks(db: ServiceDb): Promise<number> {
-  const today = new Date().toISOString().slice(0, 10)
+  const today = todayInBogota()
   const { data, error } = await db
     .from('reservations')
     .select('id, property_id, guest_name, check_in, check_out, tasks(type)')

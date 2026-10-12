@@ -7,15 +7,16 @@ import type { TeamMember } from '@/lib/types'
  *
  * React's `cache()` dedupes calls within a single server render pass. The
  * (app) layout AND the page both need the current user + their team_member
- * record, but without caching that would mean 2× `auth.getUser()` (each a
- * network round-trip to Supabase Auth) plus 2× `team_members` queries on
- * every navigation. Wrapping them in `cache()` collapses that to one each.
+ * record; wrapping them in `cache()` collapses that to one lookup each.
  */
 
-export const getCurrentUser = cache(async () => {
+export const getCurrentUser = cache(async (): Promise<{ id: string; email?: string } | null> => {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  return user
+  // Verified locally against the cached signing key (no Auth round-trip);
+  // the proxy has already refreshed the session cookie on this request.
+  const { data } = await supabase.auth.getClaims()
+  if (!data?.claims) return null
+  return { id: data.claims.sub, email: data.claims.email }
 })
 
 /** Returns the full team_members row for the signed-in user, or null. */

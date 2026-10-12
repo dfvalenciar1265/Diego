@@ -1,4 +1,5 @@
 'use client'
+import { todayInBogota } from '@/lib/gpt-api/dates'
 import { useState, useTransition } from 'react'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
@@ -65,7 +66,7 @@ export function TaskForm({ open, onClose, properties, teamMembers, defaultProper
           <div>
             <Label>Fecha programada *</Label>
             <Input name="scheduled_for" type="date" required
-                   defaultValue={task?.scheduled_for ?? defaultDate ?? new Date().toISOString().split('T')[0]}
+                   defaultValue={task?.scheduled_for ?? defaultDate ?? todayInBogota()}
                    className="mt-1" />
           </div>
           <div>

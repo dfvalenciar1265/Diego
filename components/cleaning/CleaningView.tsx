@@ -1,4 +1,5 @@
 'use client'
+import { addDays as addDaysISO } from '@/lib/gpt-api/dates'
 import { useState, useTransition } from 'react'
 import { assignAndStartTask, updateTaskNotes, updateTaskStatus, setTaskPhoto, type WeekCleaningTask } from '@/actions/tasks'
 import { Pagination, paginate, pageCount } from '@/components/ui/Pagination'
@@ -38,15 +39,6 @@ const PHOTO_PROOF_ENABLED = false
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
 
-function todayStr() {
-  return new Date().toISOString().slice(0, 10)
-}
-
-function tomorrowStr() {
-  const d = new Date()
-  d.setDate(d.getDate() + 1)
-  return d.toISOString().slice(0, 10)
-}
 
 // ── Time helpers ──────────────────────────────────────────────────────────────
 
@@ -101,8 +93,10 @@ function buildCoAnnotation(time24: string): string {
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function CleaningView({ tasks, staff, weekTasks, weekStart, todayISO, currentMember }: Props) {
-  const today    = todayStr()
-  const tomorrow = tomorrowStr()
+  // todayISO comes from the server in Colombia's time zone (toISOString() is UTC
+  // and flipped "today" to tomorrow after 7 p.m.)
+  const today    = todayISO
+  const tomorrow = addDaysISO(todayISO, 1)
 
   const [tab,          setTab]          = useState<Tab>('pending')
   const [todayPage,    setTodayPage]    = useState(1)

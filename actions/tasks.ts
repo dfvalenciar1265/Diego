@@ -1,4 +1,5 @@
 'use server'
+import { todayInBogota, addDays as addDaysISO } from '@/lib/gpt-api/dates'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
@@ -14,8 +15,8 @@ export async function getCleaningTasks(): Promise<(Task & {
   reservation?: { check_in: string; check_out: string; notes: string | null; guest_name: string | null; guests: number | null } | null
 })[]> {
   const supabase = await createClient()
-  const today   = new Date().toISOString().slice(0, 10)
-  const ago30   = new Date(Date.now() - 30 * 86400_000).toISOString().slice(0, 10)
+  const today   = todayInBogota()
+  const ago30   = addDaysISO(today, -30)
 
   // Active tasks: today and forward
   const activeQ = supabase
@@ -135,6 +136,7 @@ export async function getTasks(filters?: {
   date?: string
   assignedTo?: string
   propertyId?: string
+  type?: Task['type']
 }): Promise<Task[]> {
   const supabase = await createClient()
   let query = supabase
@@ -142,6 +144,7 @@ export async function getTasks(filters?: {
     .select('*, property:properties(name), assignee:team_members(name), reservation:reservations(check_in, check_out, notes, guest_name, guests)')
     .order('scheduled_for', { ascending: true })
 
+  if (filters?.type) query = query.eq('type', filters.type)
   if (filters?.date) query = query.eq('scheduled_for', filters.date)
   if (filters?.assignedTo) query = query.eq('assigned_to', filters.assignedTo)
   if (filters?.propertyId) query = query.eq('property_id', filters.propertyId)
@@ -310,7 +313,7 @@ export async function completeOverdueTasks(): Promise<number> {
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
   )
 
-  const today = new Date().toISOString().slice(0, 10) // YYYY-MM-DD
+  const today = todayInBogota() // YYYY-MM-DD in Colombia
 
   const { data, error } = await db
     .from('tasks')

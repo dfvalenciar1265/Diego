@@ -4,7 +4,7 @@ import { updateMaintenanceStatus } from '@/actions/maintenance'
 import { PriorityBadge } from './PriorityBadge'
 import { formatDate } from '@/lib/utils'
 import type { MaintenanceIssue, MaintenanceStatus, TeamMember } from '@/lib/types'
-import { useCurrentUser } from '@/hooks/useCurrentUser'
+import { useUserRole } from '@/lib/user-context'
 import { canDo } from '@/lib/permissions'
 
 interface Props {
@@ -35,8 +35,7 @@ const STATUS_COLOR: Record<MaintenanceStatus, string> = {
 
 export function IncidenceCard({ issue, teamMembers = [] }: Props) {
   const [isPending, startTransition] = useTransition()
-  const { member } = useCurrentUser()
-  const role = member?.role ?? 'cleaning'
+  const role = useUserRole() ?? 'cleaning'
   const canManage = canDo(role, 'maintenance:manage')
   const nextStatus = NEXT_STATUS[issue.status]
   const statusColor = STATUS_COLOR[issue.status]

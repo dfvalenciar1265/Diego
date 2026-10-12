@@ -1,4 +1,5 @@
 'use client'
+import { todayInBogota } from '@/lib/gpt-api/dates'
 import { useState, useTransition } from 'react'
 import { createExpense, toggleExpenseStatus, deleteExpense } from '@/actions/expenses'
 import type { Expense, Property } from '@/lib/types'
@@ -28,7 +29,7 @@ function NewExpenseForm({ properties, onCreated }: {
   const [isPending, startTrans]   = useTransition()
   const [error, setError]         = useState('')
   const [status, setStatus]       = useState<'pending' | 'paid'>('pending')
-  const today = new Date().toISOString().slice(0, 10)
+  const today = todayInBogota()
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()

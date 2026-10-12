@@ -3,7 +3,7 @@ import { useState, useTransition } from 'react'
 import { completeTask, updateTaskStatus } from '@/actions/tasks'
 import { formatDate } from '@/lib/utils'
 import { isTaskOverdue } from '@/lib/utils'
-import { useCurrentUser } from '@/hooks/useCurrentUser'
+import { useUserRole } from '@/lib/user-context'
 import { canDo } from '@/lib/permissions'
 import type { Task, TeamMember } from '@/lib/types'
 
@@ -15,8 +15,7 @@ interface Props {
 
 export function OtherTaskCard({ task, teamMembers, onEdit }: Props) {
   const [isPending, startTransition] = useTransition()
-  const { member } = useCurrentUser()
-  const role = member?.role ?? 'cleaning'
+  const role = useUserRole() ?? 'cleaning'
   const canManage = canDo(role, 'tasks:create')
 
   const [completing, setCompleting] = useState(false)

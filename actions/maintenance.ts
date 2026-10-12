@@ -1,4 +1,5 @@
 'use server'
+import { todayInBogota } from '@/lib/gpt-api/dates'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import type { MaintenanceIssue, MaintenanceStatus } from '@/lib/types'
@@ -103,7 +104,7 @@ export async function completeScheduledMaintenance(
     .eq('id', id)
     .single()
 
-  const todayStr = new Date().toISOString().slice(0, 10)
+  const todayStr = todayInBogota()
   const nextDue = advanceNextDue(todayStr, issue?.interval_months)
 
   const { error } = await supabase

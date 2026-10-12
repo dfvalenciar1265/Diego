@@ -1,3 +1,4 @@
+import { todayInBogota, hourInBogota } from '@/lib/gpt-api/dates'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentMember } from '@/lib/auth'
@@ -34,9 +35,10 @@ export default async function DashboardPage() {
   }
 
   const now      = new Date()
-  const today    = format(now, "EEEE d 'de' MMMM", { locale: es })
-  const todayISO = format(now, 'yyyy-MM-dd')
-  const hour     = now.getHours()
+  // The server runs in UTC: "today" and the greeting must follow Colombia's clock
+  const todayISO = todayInBogota(now)
+  const today    = format(new Date(todayISO + 'T12:00:00'), "EEEE d 'de' MMMM", { locale: es })
+  const hour     = hourInBogota(now)
   const greeting = hour < 12 ? 'Buenos días' : hour < 19 ? 'Buenas tardes' : 'Buenas noches'
 
   // All dashboard data fetched concurrently (no waterfall)
@@ -45,13 +47,14 @@ export default async function DashboardPage() {
     // Prep tasks for today's check-ins — ALL statuses (done tasks show with ✓)
     supabase
       .from('tasks')
-      .select('*, property:properties(name), assignee:team_members(name), reservation:reservations(check_in, check_out, notes, guest_name, guests)')
+      // !inner makes the check_in filter drop non-matching rows server-side;
+      // without it PostgREST returned every prep task ever with a null embed.
+      .select('*, property:properties(name), assignee:team_members(name), reservation:reservations!inner(check_in, check_out, notes, guest_name, guests)')
       .eq('type', 'preparation')
-      .eq('reservations.check_in', todayISO)
-      .not('reservation_id', 'is', null)
+      .eq('reservation.check_in', todayISO)
       .then(r => r.data ?? []),
     getDashboardKPIs(),
-    getTasks({ date: todayISO }),
+    getTasks({ date: todayISO, type: 'other' }),
     getLowStockAlerts(),
     getPurchaseRequests('pending'),
     getTodayCheckOuts(),
@@ -67,7 +70,7 @@ export default async function DashboardPage() {
     .filter(m => m.status !== 'resolved' && m.priority !== 'scheduled')
     .sort((a, b) => (priorityRank[a.priority] ?? 9) - (priorityRank[b.priority] ?? 9))
 
-  // PostgREST returns rows with null reservation for non-matching joins — keep only today's
+  // Belt and braces: keep only today's check-ins
   const prepTasks = prepTasksRaw.filter(t => t.reservation?.check_in === todayISO)
 
   // Other tasks scheduled for today (cleaning shown in its own section)
