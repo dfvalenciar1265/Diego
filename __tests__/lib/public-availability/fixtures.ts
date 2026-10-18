@@ -9,7 +9,7 @@ export const COVERAGE = { from: '2026-10-01', to: '2027-04-30' }
 export const RULES: UnitRules = {
   minNights: 2,
   maxNights: 30,
-  minNightsOverrides: [],
+  dateOverrides: [],
   advanceNoticeHours: 0,
   bookingWindowDays: 365,
   preparationNights: 0,
@@ -37,10 +37,11 @@ export function snapshot(over: Partial<Record<string, Partial<UnitSnapshot>>> = 
 }
 
 export interface FakeDbOptions {
-  /** Resultado por tabla; `reservations:flagged` es la segunda consulta (con .or). */
+  /** Resultado por tabla. */
   results?: Record<string, { data?: unknown; error?: { code?: string; message?: string } | null }>
   delayMs?: number
   throws?: boolean
+  consistent?: boolean
 }
 
 /** Doble de supabase-js: encadena filtros, registra cada llamada y nunca toca la red. */
@@ -48,19 +49,38 @@ export function fakeDb(opts: FakeDbOptions = {}) {
   const calls: Array<{ table: string; method: string; args: unknown[] }> = []
   const db = {
     calls,
+    rpc(fn: string, args: Record<string, unknown>) {
+      calls.push({ table: 'rpc', method: 'rpc', args: [fn, args] })
+      const builder = {
+        abortSignal() { return builder },
+        then(resolve: (v: unknown) => void, reject: (e: unknown) => void) {
+          if (opts.throws) return reject(new Error('connect ECONNREFUSED 10.0.0.1:5432 password=secret'))
+          const results = opts.results ?? {}
+          const error = Object.values(results).find(r => r.error)?.error ?? null
+          const rows = (name: string) => results[name]?.data ?? []
+          const value = { error, data: {
+            run: (rows('calendar_sync_runs') as unknown[])[0] ?? null,
+            consistent: opts.consistent !== false,
+            properties: rows('properties'), rules: rows('availability_rules'),
+            events: rows('calendar_events'), manual: rows('reservations'),
+          } }
+          if (opts.delayMs) setTimeout(() => resolve(value), opts.delayMs)
+          else resolve(value)
+        },
+      }
+      return builder
+    },
     from(table: string) {
-      let flagged = false
       const builder: Record<string, unknown> = {}
       const chain = (method: string) => (...args: unknown[]) => {
         calls.push({ table, method, args })
-        if (method === 'or') flagged = true
         return builder
       }
       for (const m of ['select', 'eq', 'neq', 'in', 'lte', 'gte', 'lt', 'gt', 'not', 'or', 'order', 'limit', 'abortSignal',
         'insert', 'update', 'delete', 'upsert', 'rpc']) builder[m] = chain(m)
       builder.then = (resolve: (v: unknown) => void, reject: (e: unknown) => void) => {
         if (opts.throws) return reject(new Error('connect ECONNREFUSED 10.0.0.1:5432 password=secret'))
-        const key = table === 'reservations' && flagged ? 'reservations:flagged' : table
+        const key = table
         const r = opts.results?.[key] ?? { data: [] }
         const value = { data: r.data ?? null, error: r.error ?? null }
         if (opts.delayMs) setTimeout(() => resolve(value), opts.delayMs)
@@ -73,7 +93,7 @@ export function fakeDb(opts: FakeDbOptions = {}) {
 }
 
 export const SYNC_RUN = {
-  completed_at: SYNCED_AT,
+  data_as_of: SYNCED_AT,
   coverage_from: COVERAGE.from,
   coverage_to: COVERAGE.to,
   property_ids: CASA_BLUE_CATALOG.map(u => u.propertyId),
@@ -85,7 +105,7 @@ export const RULES_ROWS = CASA_BLUE_CATALOG.map(u => ({
   property_id: u.propertyId,
   min_nights: 2,
   max_nights: 30,
-  min_nights_overrides: [],
+  date_overrides: [],
   advance_notice_hours: 0,
   booking_window_days: 365,
   preparation_nights: 0,

@@ -1,0 +1,73 @@
+--- a/src/components/AvailabilitySearch.astro
++++ b/src/components/AvailabilitySearch.astro
+@@ -14,7 +14,7 @@
+ </section>
+ <script>
+ import {bogotaToday,searchDateError,airbnbSearchLink,trustworthyResponse} from '../lib/availability';
+-import type {SearchQuery} from '../lib/availability';
++import type {StayDates} from '../lib/availability';
+ const form=document.querySelector<HTMLFormElement>('#availability-form');
+ if(form){
+  const arrival=form.querySelector<HTMLInputElement>('#arrival')!,departure=form.querySelector<HTMLInputElement>('#departure')!;
+@@ -24,17 +24,16 @@
+  arrival.min=bogotaToday();departure.min=bogotaToday();
+  arrival.addEventListener('change',()=>{departure.min=arrival.value||bogotaToday()});
+  function resetCards(){cards.forEach(c=>{c.hidden=false;const note=c.querySelector<HTMLElement>('[data-availability]')!;note.hidden=true;note.removeAttribute('data-state');const link=c.querySelector<HTMLAnchorElement>('[data-airbnb-url]')!;link.href=link.dataset.airbnbUrl!;});sync.hidden=true;}
+- function render(q:SearchQuery,value?:unknown){
++ function render(q:StayDates,value?:unknown){
+   const valid=trustworthyResponse(value,q,cards.map(c=>c.dataset.apartment!));const data=valid?value:undefined;let count=0,unknown=0;
+   cards.forEach(c=>{const state=data?.apartments.find(a=>a.slug===c.dataset.apartment)?.status||'unknown';c.hidden=state==='occupied';if(!c.hidden){count++;if(state==='unknown')unknown++;}const note=c.querySelector<HTMLElement>('[data-availability]')!;note.hidden=false;note.dataset.state=state;note.textContent=state==='available'?'Disponible según el calendario sincronizado':state==='occupied'?'No disponible para esas fechas':'Consultar en Airbnb';c.querySelector<HTMLAnchorElement>('[data-airbnb-url]')!.href=airbnbSearchLink(c.querySelector<HTMLAnchorElement>('[data-airbnb-url]')!.dataset.airbnbUrl!,q);});
+   feedback.textContent=!data||data.sourceStatus!=='ready'?'No pudimos confirmar la disponibilidad. Puedes consultarla directamente en Airbnb.':unknown?`${count} apartamentos para consultar. Algunas fechas requieren confirmación en Airbnb.`:count?`${count} ${count===1?'apartamento':'apartamentos'} para tus fechas`:'No encontramos apartamentos para esas fechas. Prueba otras fechas.';
+   sync.hidden=true;if(data?.sourceStatus==='ready'&&data.lastSyncedAt){const fmt=(t:string)=>new Intl.DateTimeFormat('es-CO',{dateStyle:'short',timeStyle:'short',timeZone:'America/Bogota'}).format(new Date(t));sync.textContent=`Última sincronización del origen: ${fmt(data.lastSyncedAt)}. Consulta realizada: ${fmt(data.queriedAt)} (hora de Colombia).`;sync.hidden=false;}
+  }
+  form.addEventListener('submit',async e=>{e.preventDefault();pending?.abort();const id=++sequence;
+-  // Compatibility with AirAdmin's existing required parameter, not a party-size selection.
+-  const q={arrival:arrival.value,departure:departure.value,guests:1};const error=searchDateError(q);submit.disabled=false;form.removeAttribute('aria-busy');resetCards();if(error){feedback.textContent=error;return;}if(location.protocol==='file:'){render(q);return;}
++  const q={arrival:arrival.value,departure:departure.value};const error=searchDateError(q);submit.disabled=false;form.removeAttribute('aria-busy');resetCards();if(error){feedback.textContent=error;return;}if(location.protocol==='file:'){render(q);return;}
+   const controller=new AbortController();pending=controller;submit.disabled=true;form.setAttribute('aria-busy','true');feedback.textContent='Consultando las fechas…';const timeout=setTimeout(()=>controller.abort(),6000);
+-  try{const u=new URL(form.dataset.endpoint!,document.baseURI);u.search=new URLSearchParams({arrival:q.arrival,departure:q.departure,guests:String(q.guests)}).toString();const response=await fetch(u,{signal:controller.signal,headers:{Accept:'application/json'},cache:'no-store'});const data=response.ok?await response.json():undefined;if(id===sequence)render(q,data);}catch{if(id===sequence)render(q);}finally{clearTimeout(timeout);if(id===sequence){submit.disabled=false;form.removeAttribute('aria-busy');}}
++  try{const u=new URL(form.dataset.endpoint!,document.baseURI);u.search=new URLSearchParams({arrival:q.arrival,departure:q.departure}).toString();const response=await fetch(u,{signal:controller.signal,headers:{Accept:'application/json'},cache:'no-store'});const data=response.ok?await response.json():undefined;if(id===sequence)render(q,data);}catch{if(id===sequence)render(q);}finally{clearTimeout(timeout);if(id===sequence){submit.disabled=false;form.removeAttribute('aria-busy');}}
+  });
+  form.addEventListener('reset',()=>{sequence++;pending?.abort();submit.disabled=false;form.removeAttribute('aria-busy');resetCards();feedback.textContent='Los ocho apartamentos están a la vista. Elige las fechas de llegada y salida para consultar.';});
+ }
+--- a/src/lib/availability.ts
++++ b/src/lib/availability.ts
+@@ -1,15 +1,16 @@
+ export type StayDates={arrival:string;departure:string};
+ export type SearchQuery=StayDates&{guests:number};
++export type PublicSearchQuery=StayDates&{guests?:number};
+ export type AvailabilityState='available'|'occupied'|'unknown';
+ export type PublicApartment={slug:string;status:AvailabilityState};
+-export type PublicAvailability={query:SearchQuery;queriedAt:string;lastSyncedAt:string|null;coverage:{from:string;to:string}|null;sourceStatus:'ready'|'unconfigured'|'unavailable'|'stale'|'incomplete';apartments:PublicApartment[]};
++export type PublicAvailability={query:PublicSearchQuery;queriedAt:string;lastSyncedAt:string|null;coverage:{from:string;to:string}|null;sourceStatus:'ready'|'unconfigured'|'unavailable'|'stale'|'incomplete';apartments:PublicApartment[]};
+ export function bogotaToday(now=new Date()){return new Intl.DateTimeFormat('en-CA',{timeZone:'America/Bogota',year:'numeric',month:'2-digit',day:'2-digit'}).format(now);}
+ export function calendarDate(value:unknown):value is string {if(typeof value!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(value))return false;const d=new Date(value+'T12:00:00Z');return Number.isFinite(d.valueOf())&&d.toISOString().slice(0,10)===value;}
+ export function isoInstant(value:unknown){return typeof value==='string'&&/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value)?Date.parse(value):NaN;}
+ export function searchDateError(q:StayDates,today=bogotaToday()){if(!calendarDate(q.arrival)||!calendarDate(q.departure))return 'Selecciona fechas válidas de llegada y salida.';if(q.arrival<today)return 'La llegada no puede ser anterior a hoy.';if(q.departure<=q.arrival)return 'La salida debe ser posterior a la llegada.';return '';}
+ export function searchError(q:SearchQuery,today=bogotaToday(),maxGuests=9){const error=searchDateError(q,today);if(error)return error;if(!Number.isInteger(q.guests)||q.guests<1||q.guests>maxGuests)return `Selecciona entre 1 y ${maxGuests} huéspedes.`;return '';}
+ export function airbnbSearchLink(base:string,q:StayDates){const u=new URL(base);u.searchParams.set('check_in',q.arrival);u.searchParams.set('check_out',q.departure);for(const key of ['adults','guests','children','infants'])u.searchParams.delete(key);return u.href;}
+-export function trustworthyResponse(value:unknown,q:SearchQuery,slugs:string[],now=new Date()):value is PublicAvailability {
++export function trustworthyResponse(value:unknown,q:PublicSearchQuery,slugs:string[],now=new Date()):value is PublicAvailability {
+  if(!value||typeof value!=='object')return false;const v=value as PublicAvailability;
+  if(v.query?.arrival!==q.arrival||v.query?.departure!==q.departure||v.query?.guests!==q.guests||!Array.isArray(v.apartments)||v.apartments.length!==slugs.length)return false;
+  if(!['ready','unconfigured','unavailable','stale','incomplete'].includes(v.sourceStatus))return false;
+--- a/scripts/test-audit-ui.mjs
++++ b/scripts/test-audit-ui.mjs
+@@ -10,7 +10,7 @@
+ const future=days=>new Date(Date.now()+days*86400000).toISOString().slice(0,10);
+ const arrival=future(30),departure=future(32);
+ let mode='unknown',calls=0,resolvePending,lastRequest;
+-async function mockedFetch(url){calls++;const u=new URL(url);lastRequest=u;const query={arrival:u.searchParams.get('arrival'),departure:u.searchParams.get('departure'),guests:Number(u.searchParams.get('guests'))};if(mode==='pending')return new Promise(r=>resolvePending=r);if(mode==='error')throw new Error('network');let body={query,queriedAt:new Date().toISOString(),lastSyncedAt:new Date().toISOString(),coverage:{from:arrival,to:future(60)},sourceStatus:'ready',apartments:apts.map((a,i)=>({slug:a.slug,status:mode==='occupied'?'occupied':mode==='mixed'?(i===0?'available':i===1?'occupied':'unknown'):'available'}))};if(mode==='stale')body.lastSyncedAt='2020-01-01T00:00:00Z';if(mode==='partial')body.apartments.pop();if(mode==='unknown'){body.sourceStatus='unconfigured';body.lastSyncedAt=null;body.coverage=null;body.apartments.forEach(a=>a.status='unknown');}return {ok:true,json:async()=>body};}
++async function mockedFetch(url){calls++;const u=new URL(url);lastRequest=u;const query={arrival:u.searchParams.get('arrival'),departure:u.searchParams.get('departure'),...(u.searchParams.has('guests')?{guests:Number(u.searchParams.get('guests'))}:{})};if(mode==='pending')return new Promise(r=>resolvePending=r);if(mode==='error')throw new Error('network');let body={query,queriedAt:new Date().toISOString(),lastSyncedAt:new Date().toISOString(),coverage:{from:arrival,to:future(60)},sourceStatus:'ready',apartments:apts.map((a,i)=>({slug:a.slug,status:mode==='occupied'?'occupied':mode==='mixed'?(i===0?'available':i===1?'occupied':'unknown'):'available'}))};if(mode==='stale')body.lastSyncedAt='2020-01-01T00:00:00Z';if(mode==='partial')body.apartments.pop();if(mode==='unknown'){body.sourceStatus='unconfigured';body.lastSyncedAt=null;body.coverage=null;body.apartments.forEach(a=>a.status='unknown');}return {ok:true,json:async()=>body};}
+ function load(route='',url='https://preview.invalid/'){const errors=[];const vc=new VirtualConsole();vc.on('jsdomError',e=>{if(e.type!=='css-parsing')errors.push(e.message)});const dom=new JSDOM(fs.readFileSync(path.join(root,route,'index.html'),'utf8'),{url,runScripts:'dangerously',virtualConsole:vc,beforeParse:w=>w.fetch=mockedFetch});return {dom,d:dom.window.document,errors};}
+ const {dom,d,errors}=load();equal(errors,[],'compiled scripts work');
+ const form=d.querySelector('#availability-form');const visible=()=>[...d.querySelectorAll('[data-apartment]')].filter(c=>!c.hidden);
+@@ -20,7 +20,7 @@
+ async function submit(){form.dispatchEvent(new dom.window.Event('submit',{bubbles:true,cancelable:true}));await new Promise(r=>setTimeout(r,0));}
+ equal(visible().length,8);equal(d.querySelector('.hero-actions .button').getAttribute('href'),'#apartamentos');
+ set();mode='mixed';await submit();equal(visible().length,7);equal(d.querySelectorAll('[data-state=available]').length,1);equal(d.querySelector('#availability-sync').hidden,false);equal(d.querySelector('#availability-feedback').textContent.includes('requieren confirmación'),true);
+-equal(lastRequest.searchParams.get('guests'),'1','compatibility parameter for the existing API, not a visitor selection');
++equal(lastRequest.searchParams.has('guests'),false,'the request contains only dates, without a dummy party size');
+ for(const [i,a] of apts.entries()){const link=d.querySelectorAll('[data-airbnb-url]')[i];const u=new URL(link.href);equal(u.pathname.endsWith('/'+a.id),true);equal(u.searchParams.get('check_in'),arrival);equal(u.searchParams.get('check_out'),departure);equal(u.searchParams.has('adults'),false);equal(u.searchParams.has('guests'),false);}
+ mode='occupied';await submit();equal(visible().length,0);equal(d.querySelector('#availability-feedback').textContent.includes('No encontramos'),true);
+ for(const failure of ['stale','partial','error','unknown']){mode=failure;await submit();equal(visible().length,8,failure+' keeps all apartments');equal(d.querySelectorAll('[data-state=available]').length,0);equal(d.querySelector('#availability-feedback').textContent.includes('No pudimos confirmar'),true);}

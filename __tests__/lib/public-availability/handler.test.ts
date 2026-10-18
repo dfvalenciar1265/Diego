@@ -15,6 +15,7 @@ const READY: FakeDbOptions['results'] = {
   calendar_sync_runs: { data: [SYNC_RUN] },
   properties: { data: PROPERTIES_OK },
   availability_rules: { data: RULES_ROWS },
+  calendar_events: { data: [] },
   reservations: { data: [] },
 }
 
@@ -32,9 +33,16 @@ describe('parseAvailabilityQuery', () => {
     expect(parseAvailabilityQuery(P(OK_QS), NOW)).toEqual({ ok: true, query: { arrival: '2026-11-10', departure: '2026-11-13', guests: 2 } })
   })
 
+  it('acepta sólo fechas, sin inventar una cantidad de huéspedes', () => {
+    expect(parseAvailabilityQuery(P('arrival=2026-11-10&departure=2026-11-13'), NOW)).toEqual({
+      ok: true, query: { arrival: '2026-11-10', departure: '2026-11-13' },
+    })
+  })
+
   it.each([
     ['', 'falta todo'],
-    ['arrival=2026-11-10&departure=2026-11-13', 'falta guests'],
+    ['arrival=2026-11-10&departure=2026-11-13&guests=', 'guests vacío'],
+    ['arrival=2026-11-10&departure=2026-11-13&guests=1&guests=2', 'guests repetido'],
     ['arrival=2026-02-30&departure=2026-03-02&guests=2', 'fecha imposible'],
     ['arrival=2026-11-1&departure=2026-11-13&guests=2', 'formato'],
     ['arrival=11/10/2026&departure=2026-11-13&guests=2', 'formato'],
@@ -134,6 +142,11 @@ describe('GET: fallos de la fuente', () => {
     ok(await (await handleAvailability(get(OK_QS), d)).json(), 'unconfigured')
   })
 
+  it('función de lectura de migración 007 sin aplicar → unconfigured', async () => {
+    const { deps: d } = deps({ dbOpts: { results: { calendar_sync_runs: { error: { code: 'PGRST202' } } } } })
+    ok(await (await handleAvailability(get(OK_QS), d)).json(), 'unconfigured')
+  })
+
   it('sin corrida verificada → unconfigured', async () => {
     const { deps: d } = deps({ dbOpts: { results: { ...READY, calendar_sync_runs: { data: [] } } } })
     ok(await (await handleAvailability(get(OK_QS), d)).json(), 'unconfigured')
@@ -168,7 +181,7 @@ describe('GET: fallos de la fuente', () => {
   })
 
   it('sincronización antigua → stale', async () => {
-    const { deps: d } = deps({ dbOpts: { results: { ...READY, calendar_sync_runs: { data: [{ ...SYNC_RUN, completed_at: '2026-10-18T05:00:00Z' }] } } } })
+    const { deps: d } = deps({ dbOpts: { results: { ...READY, calendar_sync_runs: { data: [{ ...SYNC_RUN, data_as_of: '2026-10-18T05:00:00Z' }] } } } })
     ok(await (await handleAvailability(get(OK_QS), d)).json(), 'stale')
   })
 
@@ -181,12 +194,12 @@ describe('GET: fallos de la fuente', () => {
 describe('GET: datos sintéticos de punta a punta', () => {
   const PROPERTY = (slug: string) => CASA_BLUE_CATALOG.find(u => u.slug === slug)!.propertyId
   const PRIVATE = {
-    id: 'res-1', property_id: PROPERTY('palmetto-1001'), check_in: '2026-11-11', check_out: '2026-11-14',
+    id: 'res-1', property_id: PROPERTY('palmetto-1001'), check_in: '2026-11-11', check_out: '2026-11-14', source: 'direct',
     notes: 'Huésped: Ana Pérez | Código: HMABC123 | Tel +57 300 000 0000 | Check-out: 11:00 AM', pending_change: null,
     guest_name: 'Ana Pérez', amount: 1234567, airbnb_code: 'HMABC123',
   }
 
-  it('reserva → occupied; conflicto de capacidad → unknown; sin datos privados', async () => {
+  it('reserva directa → occupied; conflicto de capacidad → unknown; sin datos privados', async () => {
     const properties = PROPERTIES_OK.map(p => p.id === PROPERTY('crespo-1214') ? { ...p, capacity: 2 } : p)
     const { deps: d, log } = deps({ dbOpts: { results: { ...READY, properties: { data: properties }, reservations: { data: [PRIVATE] } } } })
     const res = await handleAvailability(get(OK_QS), d)
@@ -202,6 +215,29 @@ describe('GET: datos sintéticos de punta a punta', () => {
     expect(log).toHaveBeenCalledWith('conflictos de catálogo', ['crespo-1214: capacidad 2 en AirAdmin vs 4 en el catálogo'])
   })
 
+  it('sólo fechas ignora diferencias de capacidad pero conserva ocupación y reglas', async () => {
+    const properties = PROPERTIES_OK.map(p => ({ ...p, capacity: 0 }))
+    const { deps: d } = deps({ dbOpts: { results: { ...READY, properties: { data: properties }, reservations: { data: [PRIVATE] } } } })
+    const body = await (await handleAvailability(get('arrival=2026-11-10&departure=2026-11-13'), d)).json()
+    expect(body.query).toEqual({ arrival: '2026-11-10', departure: '2026-11-13' })
+    expect(body.apartments.find((a: {slug: string}) => a.slug === 'palmetto-1001').status).toBe('occupied')
+    expect(body.apartments.filter((a: {status: string}) => a.status === 'available')).toHaveLength(7)
+  })
+
+  it('una instantánea inconsistente nunca convierte eventos ausentes en noches libres', async () => {
+    const { deps: d } = deps({ dbOpts: { results: READY, consistent: false } })
+    const body = await (await handleAvailability(get(OK_QS), d)).json()
+    expect(body.sourceStatus).toBe('incomplete')
+    expect(body.apartments.every((a: {status: string}) => a.status === 'unknown')).toBe(true)
+  })
+
+  it('cambio pendiente de una directa fuera del rango impide available dentro del nuevo rango', async () => {
+    const moved = { ...PRIVATE, check_in: '2026-12-10', check_out: '2026-12-13', pending_change: { check_in_to: '2026-11-11', check_out_to: '2026-11-14' } }
+    const { deps: d } = deps({ dbOpts: { results: { ...READY, reservations: { data: [moved] } } } })
+    const body = await (await handleAvailability(get('arrival=2026-11-10&departure=2026-11-13'), d)).json()
+    expect(body.apartments.find((a: {slug: string}) => a.slug === 'palmetto-1001').status).toBe('unknown')
+  })
+
   it('apartamento fuera de la última sincronización → unknown', async () => {
     const run = { ...SYNC_RUN, property_ids: SYNC_RUN.property_ids.filter(id => id !== PROPERTY('tocahagua-1208')) }
     const { deps: d } = deps({ dbOpts: { results: { ...READY, calendar_sync_runs: { data: [run] } } } })
@@ -209,25 +245,33 @@ describe('GET: datos sintéticos de punta a punta', () => {
     expect(body.apartments.find((a: { slug: string }) => a.slug === 'tocahagua-1208').status).toBe('unknown')
   })
 
-  it('la consulta no escribe: solo SELECT, sin insert/update/delete/upsert/rpc', async () => {
+  it('la consulta sólo llama a la función SQL STABLE de lectura', async () => {
     const { deps: d, db } = deps({ dbOpts: { results: { ...READY, reservations: { data: [PRIVATE] } } } })
     await handleAvailability(get(OK_QS), d)
     const methods = db.calls.map(c => c.method)
-    expect(methods).toContain('select')
-    for (const w of ['insert', 'update', 'delete', 'upsert', 'rpc']) expect(methods).not.toContain(w)
+    expect(db.calls).toEqual([{table: 'rpc', method: 'rpc', args: ['read_casa_blue_availability', {p_arrival: '2026-11-10', p_departure: '2026-11-13'}]}])
+    for (const w of ['insert', 'update', 'delete', 'upsert']) expect(methods).not.toContain(w)
   })
 
-  it('solo consulta los ocho IDs del catálogo y excluye canceladas', async () => {
+  it('ocupación del calendario de Airbnb (iCal) → occupied; libre al lado → available', async () => {
+    const events = [
+      { property_id: PROPERTY('conquistador-1821'), start_date: '2026-11-12', end_date: '2026-11-15' },
+      { property_id: PROPERTY('tocahagua-1208'), start_date: '2026-11-07', end_date: '2026-11-10' },  // sale el día que llego
+    ]
+    const { deps: d } = deps({ dbOpts: { results: { ...READY, calendar_events: { data: events } } } })
+    const body = await (await handleAvailability(get(OK_QS), d)).json()
+    const status = (slug: string) => body.apartments.find((a: { slug: string }) => a.slug === slug).status
+    expect(body.sourceStatus).toBe('ready')
+    expect(status('conquistador-1821')).toBe('occupied')
+    expect(status('tocahagua-1208')).toBe('available')
+  })
+
+  it('no permite elegir IDs o tablas desde los parámetros de la función de lectura', async () => {
     const { deps: d, db } = deps()
     await handleAvailability(get(OK_QS), d)
-    const ids = [...CASA_BLUE_CATALOG.map(u => u.propertyId)]
-    for (const c of db.calls.filter(c => c.method === 'in' && (c.args[0] === 'id' || c.args[0] === 'property_id'))) {
-      expect(c.args[1]).toEqual(ids)
-    }
-    const statusFilters = db.calls.filter(c => c.table === 'reservations' && c.method === 'in' && c.args[0] === 'status')
-    expect(statusFilters.length).toBe(2)
-    for (const c of statusFilters) expect(c.args[1]).toEqual(['confirmed', 'blocked'])
+    expect(db.calls[0].args).toEqual(['read_casa_blue_availability', {p_arrival: '2026-11-10', p_departure: '2026-11-13'}])
   })
+
 })
 
 describe('source: periodos', () => {
@@ -239,11 +283,11 @@ describe('source: periodos', () => {
     expect(toPeriod({ ...base, notes: '', pending_change: { check_in_to: null, check_out_to: null } }).alternate).toBeNull()
   })
 
-  it('reglas sin verified_at no cuentan (filtra por verified_at)', async () => {
+  it('lee mediante la instantánea de SQL, sin lecturas separadas de eventos y metadatos', async () => {
     const db = fakeDb({ results: READY })
-    await loadSnapshot(db, { arrival: '2026-11-10', departure: '2026-11-13', guests: 2 }, NOW)
-    expect(db.calls).toContainEqual({ table: 'availability_rules', method: 'not', args: ['verified_at', 'is', null] })
-    expect(db.calls).toContainEqual({ table: 'calendar_sync_runs', method: 'eq', args: ['verified', true] })
+    await loadSnapshot(db, { arrival: '2026-11-10', departure: '2026-11-13', guests: 2 })
+    expect(db.calls).toHaveLength(1)
+    expect(db.calls[0].args[0]).toBe('read_casa_blue_availability')
   })
 })
 

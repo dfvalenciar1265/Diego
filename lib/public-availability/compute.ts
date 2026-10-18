@@ -36,8 +36,8 @@ export interface PublicAvailability {
 export interface UnitRules {
   minNights: number
   maxNights: number | null                 // null = sin máximo
-  /** Mínimos por fecha de llegada (conjuntos de reglas / ajustes de Airbnb). `from`/`to` inclusivos. */
-  minNightsOverrides: Array<{ from: string; to: string; minNights: number }>
+  /** Reglas por fecha de llegada (conjuntos de reglas / ajustes de Airbnb). `from`/`to` inclusivos. */
+  dateOverrides: DateOverride[]
   advanceNoticeHours: number               // horas entre ahora y la hora de entrada
   bookingWindowDays: number | null         // null = sin límite; última noche ≤ hoy + ventana
   preparationNights: number                // noches bloqueadas antes y después de cada periodo
@@ -47,6 +47,17 @@ export interface UnitRules {
   checkOutDays: number[] | null
   checkInTime: string | null               // HH:MM
   checkOutTime: string | null              // HH:MM
+}
+
+/** Lo que cambia para las llegadas entre `from` y `to` (inclusivos). Lo que no trae, vale la regla base. */
+export interface DateOverride {
+  from: string
+  to: string
+  minNights?: number
+  maxNights?: number | null
+  advanceNoticeHours?: number
+  checkInDays?: number[] | null
+  checkOutDays?: number[] | null
 }
 
 export interface BusyPeriod {
@@ -110,9 +121,18 @@ function sourceStatusFor(
   return 'ready'
 }
 
-function minNightsFor(rules: UnitRules, arrival: string): number {
-  const override = rules.minNightsOverrides.find(o => o.from <= arrival && arrival <= o.to)
-  return override?.minNights ?? rules.minNights
+/** Reglas que aplican a una llegada: la base con el ajuste de esa fecha encima (el primero que la cubra). */
+export function rulesForArrival(rules: UnitRules, arrival: string): UnitRules {
+  const o = rules.dateOverrides.find(d => d.from <= arrival && arrival <= d.to)
+  if (!o) return rules
+  return {
+    ...rules,
+    minNights: o.minNights ?? rules.minNights,
+    maxNights: o.maxNights !== undefined ? o.maxNights : rules.maxNights,
+    advanceNoticeHours: o.advanceNoticeHours ?? rules.advanceNoticeHours,
+    checkInDays: o.checkInDays !== undefined ? o.checkInDays : rules.checkInDays,
+    checkOutDays: o.checkOutDays !== undefined ? o.checkOutDays : rules.checkOutDays,
+  }
 }
 
 /** Estado de un apartamento cuando la fuente está lista. */
@@ -123,15 +143,15 @@ export function evaluateUnit(unit: UnitSnapshot, query: AvailabilityQuery, cover
   // Ocupación confirmada: es un hecho aunque falten reglas o haya un conflicto de catálogo.
   if (certain.some(p => overlaps(p.start, p.end, arrival, departure))) return 'occupied'
   if (unit.conflicts.length > 0) return 'unknown'
-  if (guests > unit.capacity) return 'occupied'
+  if (guests !== undefined && guests > unit.capacity) return 'occupied'
   if (unit.periods.some(p => p.datesUncertain)) return 'unknown'
   if (unit.periods.some(p => p.alternate && overlaps(p.alternate.start, p.alternate.end, arrival, departure))) return 'unknown'
 
-  const rules = unit.rules
-  if (!rules) return 'unknown'
+  if (!unit.rules) return 'unknown'
+  const rules = rulesForArrival(unit.rules, arrival)
 
   const nights = daysBetween(arrival, departure)
-  if (nights < minNightsFor(rules, arrival)) return 'occupied'
+  if (nights < rules.minNights) return 'occupied'
   if (rules.maxNights != null && nights > rules.maxNights) return 'occupied'
   if (rules.checkInDays && !rules.checkInDays.includes(weekday(arrival))) return 'occupied'
   if (rules.checkOutDays && !rules.checkOutDays.includes(weekday(departure))) return 'occupied'
@@ -139,6 +159,9 @@ export function evaluateUnit(unit: UnitSnapshot, query: AvailabilityQuery, cover
   const today = todayInBogota(now)
   if (rules.bookingWindowDays != null && addDays(departure, -1) > addDays(today, rules.bookingWindowDays)) return 'occupied'
 
+  // Airbnb's "same day" notice also has a booking cutoff hour (e.g. 8:00 p.m.) that the rules
+  // table does not store, so a same-day arrival can't be confirmed: never claim it's available.
+  if (rules.advanceNoticeHours === 0 && arrival === today) return 'unknown'
   if (rules.advanceNoticeHours > 0) {
     if (!rules.checkInTime) return 'unknown'
     const arrivalAt = Date.parse(`${arrival}T${rules.checkInTime}:00${BOGOTA_OFFSET}`)
@@ -149,7 +172,10 @@ export function evaluateUnit(unit: UnitSnapshot, query: AvailabilityQuery, cover
   const n = rules.preparationNights
   const from = addDays(arrival, -n)
   const to = addDays(departure, n)
-  if (coverage.from > addDays(from, -1) || coverage.to < to) return 'unknown'
+  const needsAdjacentNight = n === 0 && (!rules.sameDayTurnover || rules.turnoverHours != null)
+  const requiredFrom = needsAdjacentNight ? addDays(arrival, -1) : from
+  const requiredTo = needsAdjacentNight ? addDays(departure, 1) : to
+  if (coverage.from > requiredFrom || coverage.to < requiredTo) return 'unknown'
   if (certain.some(p => overlaps(p.start, p.end, from, to))) return 'occupied'
 
   // Entrada y salida el mismo día (solo puede pasar con preparación 0).
