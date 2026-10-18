@@ -41,6 +41,7 @@ export interface FakeDbOptions {
   results?: Record<string, { data?: unknown; error?: { code?: string; message?: string } | null }>
   delayMs?: number
   throws?: boolean
+  consistent?: boolean
 }
 
 /** Doble de supabase-js: encadena filtros, registra cada llamada y nunca toca la red. */
@@ -48,6 +49,27 @@ export function fakeDb(opts: FakeDbOptions = {}) {
   const calls: Array<{ table: string; method: string; args: unknown[] }> = []
   const db = {
     calls,
+    rpc(fn: string, args: Record<string, unknown>) {
+      calls.push({ table: 'rpc', method: 'rpc', args: [fn, args] })
+      const builder = {
+        abortSignal() { return builder },
+        then(resolve: (v: unknown) => void, reject: (e: unknown) => void) {
+          if (opts.throws) return reject(new Error('connect ECONNREFUSED 10.0.0.1:5432 password=secret'))
+          const results = opts.results ?? {}
+          const error = Object.values(results).find(r => r.error)?.error ?? null
+          const rows = (name: string) => results[name]?.data ?? []
+          const value = { error, data: {
+            run: (rows('calendar_sync_runs') as unknown[])[0] ?? null,
+            consistent: opts.consistent !== false,
+            properties: rows('properties'), rules: rows('availability_rules'),
+            events: rows('calendar_events'), manual: rows('reservations'),
+          } }
+          if (opts.delayMs) setTimeout(() => resolve(value), opts.delayMs)
+          else resolve(value)
+        },
+      }
+      return builder
+    },
     from(table: string) {
       const builder: Record<string, unknown> = {}
       const chain = (method: string) => (...args: unknown[]) => {

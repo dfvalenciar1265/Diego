@@ -1,12 +1,20 @@
 #!/usr/bin/env bash
-# Prueba las migraciones 001–006 en una base Postgres LOCAL y temporal (nunca en Supabase).
+# Prueba las migraciones 001–004 + 20261018130754 (base de calendarios aplicada) en una base Postgres LOCAL y temporal (nunca en Supabase).
 # Requiere psql/createdb (p. ej. Postgres.app). Uso: bash scripts/test-migrations.sh
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-DB="airadmin_migrations_test_$$"
+# Refuse network/service selectors: this test must never create a DB on Supabase.
+if [[ -n "${PGHOSTADDR:-}" || -n "${PGSERVICE:-}" || ( -n "${PGHOST:-}" && "${PGHOST}" != /* ) ]]; then
+  echo 'La prueba solo admite un socket Unix local; no admite PGHOST remoto, PGHOSTADDR ni PGSERVICE.' >&2
+  exit 1
+fi
+DB="${CASA_BLUE_LOCAL_TEST_DB:-airadmin_migrations_test_$$}"
+[[ "$DB" =~ ^airadmin_migrations_test_[a-zA-Z0-9_]+$ ]] || { echo 'Solo se admiten nombres de base local de prueba.' >&2; exit 1; }
 createdb "$DB"
-trap 'dropdb --if-exists "$DB" >/dev/null 2>&1 || true' EXIT
+if [[ "${CASA_BLUE_KEEP_LOCAL_TEST_DB:-0}" != 1 ]]; then
+  trap 'dropdb --if-exists "$DB" >/dev/null 2>&1 || true' EXIT
+fi
 PSQL=(psql -X -q -v ON_ERROR_STOP=1 -d "$DB")
 
 # Lo que Supabase trae de fábrica y las columnas que se agregaron fuera de las migraciones.
@@ -24,8 +32,13 @@ GRANT EXECUTE ON FUNCTION auth.uid() TO anon, authenticated, service_role;
 SQL
 
 for f in supabase/migrations/00{1,2}_*.sql; do "${PSQL[@]}" -f "$f"; done
+# Existing app columns added outside the checked-in baseline migrations.
+"${PSQL[@]}" -c "ALTER TABLE public.properties ADD COLUMN active boolean NOT NULL DEFAULT true;
+  ALTER TABLE public.reservations ADD COLUMN pending_change jsonb;"
 "${PSQL[@]}" -c "CREATE TABLE public.expenses (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), property_id uuid, date date);"
-for f in supabase/migrations/00{3,4,5,6}_*.sql; do "${PSQL[@]}" -f "$f"; done
+for f in supabase/migrations/00{3,4}_*.sql; do "${PSQL[@]}" -f "$f"; done
+# La base de calendarios tal como se aplicó en Supabase el 18-oct-2026 (incluye las antiguas 005–007).
+"${PSQL[@]}" -f supabase/migrations/20261018130754_casa_blue_calendar_foundation.sql
 # Como en Supabase: los roles de la API tienen permisos de tabla y RLS decide qué filas ven.
 "${PSQL[@]}" -c "GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
   GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;"
@@ -137,4 +150,5 @@ DO $$ BEGIN
 END $$;
 RESET ROLE;
 SQL
-echo "Migraciones 001–006: todas las comprobaciones pasaron."
+"${PSQL[@]}" -f scripts/test-availability-snapshot.sql
+echo "Migraciones 001–004 + 20261018130754: todas las comprobaciones pasaron."

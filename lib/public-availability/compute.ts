@@ -143,7 +143,7 @@ export function evaluateUnit(unit: UnitSnapshot, query: AvailabilityQuery, cover
   // Ocupación confirmada: es un hecho aunque falten reglas o haya un conflicto de catálogo.
   if (certain.some(p => overlaps(p.start, p.end, arrival, departure))) return 'occupied'
   if (unit.conflicts.length > 0) return 'unknown'
-  if (guests > unit.capacity) return 'occupied'
+  if (guests !== undefined && guests > unit.capacity) return 'occupied'
   if (unit.periods.some(p => p.datesUncertain)) return 'unknown'
   if (unit.periods.some(p => p.alternate && overlaps(p.alternate.start, p.alternate.end, arrival, departure))) return 'unknown'
 
@@ -159,6 +159,9 @@ export function evaluateUnit(unit: UnitSnapshot, query: AvailabilityQuery, cover
   const today = todayInBogota(now)
   if (rules.bookingWindowDays != null && addDays(departure, -1) > addDays(today, rules.bookingWindowDays)) return 'occupied'
 
+  // Airbnb's "same day" notice also has a booking cutoff hour (e.g. 8:00 p.m.) that the rules
+  // table does not store, so a same-day arrival can't be confirmed: never claim it's available.
+  if (rules.advanceNoticeHours === 0 && arrival === today) return 'unknown'
   if (rules.advanceNoticeHours > 0) {
     if (!rules.checkInTime) return 'unknown'
     const arrivalAt = Date.parse(`${arrival}T${rules.checkInTime}:00${BOGOTA_OFFSET}`)
@@ -169,7 +172,10 @@ export function evaluateUnit(unit: UnitSnapshot, query: AvailabilityQuery, cover
   const n = rules.preparationNights
   const from = addDays(arrival, -n)
   const to = addDays(departure, n)
-  if (coverage.from > addDays(from, -1) || coverage.to < to) return 'unknown'
+  const needsAdjacentNight = n === 0 && (!rules.sameDayTurnover || rules.turnoverHours != null)
+  const requiredFrom = needsAdjacentNight ? addDays(arrival, -1) : from
+  const requiredTo = needsAdjacentNight ? addDays(departure, 1) : to
+  if (coverage.from > requiredFrom || coverage.to < requiredTo) return 'unknown'
   if (certain.some(p => overlaps(p.start, p.end, from, to))) return 'occupied'
 
   // Entrada y salida el mismo día (solo puede pasar con preparación 0).

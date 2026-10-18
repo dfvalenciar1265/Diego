@@ -3,10 +3,11 @@ import { describe, it, expect } from 'vitest'
 import { CASA_BLUE_CATALOG } from '@/lib/public-availability/catalog'
 import { computeAvailability, evaluateUnit, isoInstant } from '@/lib/public-availability/compute'
 import { COVERAGE, NOW, RULES, snapshot, unit } from './fixtures'
+import type { AvailabilityQuery } from '@/lib/public-availability/query'
 
 const Q = { arrival: '2026-11-10', departure: '2026-11-13', guests: 2 }
 const statusOf = (res: ReturnType<typeof computeAvailability>, slug: string) => res.apartments.find(a => a.slug === slug)!.status
-const evalWith = (over: Parameters<typeof unit>[1], q = Q, now = NOW) => evaluateUnit(unit('conquistador-1821', over), q, COVERAGE, now)
+const evalWith = (over: Parameters<typeof unit>[1], q: AvailabilityQuery = Q, now = NOW) => evaluateUnit(unit('conquistador-1821', over), q, COVERAGE, now)
 
 describe('catálogo', () => {
   it('tiene los ocho apartamentos confirmados, sin duplicados, con sus capacidades', () => {
@@ -191,6 +192,14 @@ describe('evaluateUnit: reglas', () => {
     expect(evalWith({ rules: { ...RULES, advanceNoticeHours: 12, checkInTime: null } }, today)).toBe('unknown')
   })
 
+  it('preaviso "mismo día": la llegada de hoy no se confirma (Airbnb tiene una hora límite que no guardamos)', () => {
+    const today = { arrival: '2026-10-18', departure: '2026-10-20' }
+    expect(evalWith({ rules: { ...RULES, advanceNoticeHours: 0 } }, today)).toBe('unknown')
+    // Ocupación confirmada sigue siendo occupied, y mañana ya se puede confirmar.
+    expect(evalWith({ rules: { ...RULES, advanceNoticeHours: 0 }, periods: [{ start: '2026-10-18', end: '2026-10-19' }] }, today)).toBe('occupied')
+    expect(evalWith({ rules: { ...RULES, advanceNoticeHours: 0 } }, { arrival: '2026-10-19', departure: '2026-10-21' })).toBe('available')
+  })
+
   it('preparación: bloquea noches vecinas', () => {
     const rules = { ...RULES, preparationNights: 1 }
     expect(evalWith({ rules, periods: [{ start: '2026-11-07', end: '2026-11-10' }] })).toBe('occupied')
@@ -201,9 +210,22 @@ describe('evaluateUnit: reglas', () => {
 
   it('preparación sin cobertura de los vecinos → unknown', () => {
     const rules = { ...RULES, preparationNights: 2 }
-    const q = { arrival: '2026-10-18', departure: '2026-10-20', guests: 2 }
-    expect(evaluateUnit(unit('conquistador-1821', { rules }), q, { from: '2026-10-17', to: '2027-04-30' }, NOW)).toBe('unknown')
-    expect(evaluateUnit(unit('conquistador-1821', { rules }), q, { from: '2026-10-15', to: '2027-04-30' }, NOW)).toBe('available')
+    const q = { arrival: '2026-10-19', departure: '2026-10-21', guests: 2 }
+    expect(evaluateUnit(unit('conquistador-1821', { rules }), q, { from: '2026-10-18', to: '2027-04-30' }, NOW)).toBe('unknown')
+    expect(evaluateUnit(unit('conquistador-1821', { rules }), q, { from: '2026-10-17', to: '2027-04-30' }, NOW)).toBe('available')
+  })
+
+  it('sin preparación ni restricciones de cambio de huésped no exige una noche anterior innecesaria', () => {
+    expect(evaluateUnit(unit('conquistador-1821'), Q, {from: Q.arrival, to: Q.departure}, NOW)).toBe('available')
+  })
+
+  it('restricciones de cambio el mismo día exigen cobertura de ambas noches vecinas', () => {
+    for (const rules of [{...RULES, sameDayTurnover:false}, {...RULES, turnoverHours:4}]) {
+      const u = unit('conquistador-1821', {rules})
+      expect(evaluateUnit(u, Q, {from:'2026-11-09',to:Q.departure}, NOW)).toBe('unknown')
+      expect(evaluateUnit(u, Q, {from:Q.arrival,to:'2026-11-14'}, NOW)).toBe('unknown')
+      expect(evaluateUnit(u, Q, {from:'2026-11-09',to:'2026-11-14'}, NOW)).toBe('available')
+    }
   })
 
   it('entrada/salida el mismo día solo si la unidad lo permite', () => {

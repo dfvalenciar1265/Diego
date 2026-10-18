@@ -136,6 +136,7 @@ describe('runCalendarSync', () => {
   it.each([
     ['falta una URL', { env: env({ CASA_BLUE_ICAL_PALMETTO_1001: undefined }) }, /CASA_BLUE_ICAL_PALMETTO_1001/],
     ['URL que no es Airbnb', { env: env({ CASA_BLUE_ICAL_CRESPO_1214: 'https://evil.example/x.ics' }) }, /CASA_BLUE_ICAL_CRESPO_1214/],
+    ['calendario repetido en dos unidades', { env: env({ CASA_BLUE_ICAL_CRESPO_1214: `https://www.airbnb.com/calendar/ical/0.ics?${SECRET}` }) }, /repetidos/],
     ['sin cobertura configurada', { env: env({ [COVERAGE_ENV]: undefined }) }, /CASA_BLUE_ICAL_COVERAGE_DAYS/],
     ['un calendario caído', { fetch: fetchFeeds({ 3: { status: 503 } }) }, /conquistador-1821 \(HTTP 503\)/],
     ['un calendario incompleto', { fetch: fetchFeeds({ 5: 'BEGIN:VCALENDAR\r\nPRODID:Airbnb' }) }, /palmetto-1001/],

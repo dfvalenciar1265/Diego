@@ -1,9 +1,10 @@
 CASA BLUE CARTAGENA — API PÚBLICA DE DISPONIBILIDAD (AirAdmin)
-Actualizado: 18-oct-2026
-  · PR #12 (endpoint): en producción, verificado.
-  · PR #13 (documento): mergeado.
-  · Sincronización real del calendario: rama claude/casa-blue-sync-real, PR abierto para revisión.
-    NO desplegada; migraciones NO aplicadas.
+ESTADO VIGENTE (18-oct-2026, tarde): ver CASA-BLUE-ACTIVACION.md, que prevalece sobre este texto.
+  · La base de calendarios YA ESTÁ APLICADA en Supabase (20261018130754_casa_blue_calendar_foundation);
+    en el repo reemplaza a 005/006/007. No volver a aplicar nada de eso.
+  · La API corregida (consulta sin guests) sigue en el PR #14, sin desplegar.
+  · Faltan los calendarios iCal en Vercel, las reglas verificadas y el programador cada 5 min.
+El resto del documento conserva el diagnóstico y la entrega anteriores.
 
 ESTADO EN UNA LÍNEA
 La búsqueda de disponibilidad TODAVÍA NO FUNCIONA. Producción responde "unconfigured" con los ocho en

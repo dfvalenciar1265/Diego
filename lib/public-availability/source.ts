@@ -16,23 +16,20 @@
  * - `properties`: capacidad y estado en AirAdmin, para detectar conflictos con el catálogo fijo.
  */
 import { parseClockTime } from '@/lib/gpt-api/turnovers'
-import { addDays } from '@/lib/gpt-api/dates'
-import { CASA_BLUE_CATALOG, CATALOG_PROPERTY_IDS } from './catalog'
+import { CASA_BLUE_CATALOG } from './catalog'
 import type { BusyPeriod, SourceSnapshot, UnitRules, UnitSnapshot } from './compute'
 import type { AvailabilityQuery } from './query'
 import type { DateOverrideRow } from './rules-input'
 
-/** Margen alrededor de la estadía para ver vecinos que afectan la preparación (máx. 7 noches en la tabla). */
-const NEIGHBOR_MARGIN_DAYS = 8
 export const CALENDAR_SOURCE = 'airbnb-ical'
 
 // Cliente mínimo que usamos: así las pruebas pasan un doble sin red.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type ReadDb = { from: (table: string) => any }
+export type ReadDb = { rpc: (fn: string, args: Record<string, unknown>) => any }
 
 interface QueryError { code?: string; message?: string }
 
-const isMissingTable = (e: QueryError | null) => !!e && (e.code === '42P01' || e.code === 'PGRST205' || e.code === '42703')
+const isMissingTable = (e: QueryError | null) => !!e && ['42P01', 'PGRST205', '42703', '42883', 'PGRST202'].includes(e.code ?? '')
 
 class SourceError extends Error {
   constructor(readonly status: 'unconfigured' | 'unavailable', reason: string) {
@@ -64,6 +61,14 @@ interface RulesDbRow {
   check_out_time: string | null
 }
 interface EventRow { property_id: string; start_date: string; end_date: string }
+interface SnapshotRows {
+  run: SyncRunRow | null
+  consistent: boolean
+  properties: PropertyRow[]
+  rules: RulesDbRow[]
+  events: EventRow[]
+  manual: ReservationRow[]
+}
 interface ReservationRow {
   id: string
   property_id: string
@@ -123,38 +128,18 @@ export function toPeriod(r: ReservationRow): BusyPeriod {
 }
 
 export async function loadSnapshot(db: ReadDb, query: AvailabilityQuery, signal?: AbortSignal): Promise<SourceSnapshot> {
-  const ids = [...CATALOG_PROPERTY_IDS]
-  const from = addDays(query.arrival, -NEIGHBOR_MARGIN_DAYS)
-  const to = addDays(query.departure, NEIGHBOR_MARGIN_DAYS)
   const withSignal = <Q extends { abortSignal?: (s: AbortSignal) => Q }>(q: Q): Q => (signal && q.abortSignal ? q.abortSignal(signal) : q)
 
   try {
-    const [runRes, propRes, rulesRes, eventsRes, manualRes] = await Promise.all([
-      withSignal(db.from('calendar_sync_runs').select('data_as_of, coverage_from, coverage_to, property_ids')
-        .eq('source', CALENDAR_SOURCE).eq('status', 'complete').eq('verified', true).not('data_as_of', 'is', null)
-        .order('data_as_of', { ascending: false }).limit(1)),
-      withSignal(db.from('properties').select('id, capacity, active').in('id', ids)),
-      withSignal(db.from('availability_rules').select(
-        'property_id, min_nights, max_nights, date_overrides, advance_notice_hours, booking_window_days, ' +
-        'preparation_nights, same_day_turnover, turnover_hours, check_in_days, check_out_days, check_in_time, check_out_time',
-      ).in('property_id', ids).not('verified_at', 'is', null)),
-      // Ocupación del calendario de Airbnb que toca la estadía o sus vecinos.
-      withSignal(db.from('calendar_events').select('property_id, start_date, end_date').in('property_id', ids)
-        .eq('source', CALENDAR_SOURCE).lte('start_date', to).gte('end_date', from)),
-      // Reservas directas y bloqueos cargados a mano en AirAdmin. Las canceladas no ocupan.
-      withSignal(db.from('reservations').select('id, property_id, check_in, check_out, notes, pending_change').in('property_id', ids)
-        .in('status', ['confirmed', 'blocked']).or('source.eq.direct,status.eq.blocked')
-        .lte('check_in', to).gte('check_out', from)),
-    ])
-
-    const runs = check<SyncRunRow[]>(runRes, 'calendar_sync_runs')
-    const properties = check<PropertyRow[]>(propRes, 'properties')
-    const rules = check<RulesDbRow[]>(rulesRes, 'availability_rules')
-    const events = check<EventRow[]>(eventsRes, 'calendar_events')
-    const manual = check<ReservationRow[]>(manualRes, 'reservations')
-
-    const run = runs[0]
+    // One STABLE SQL statement: metadata, events and manual changes share a DB snapshot.
+    // It also avoids PostgREST's row limit truncating a busy calendar into false free nights.
+    const rows = check<SnapshotRows>(await withSignal(db.rpc('read_casa_blue_availability', {
+      p_arrival: query.arrival, p_departure: query.departure,
+    })), 'read_casa_blue_availability')
+    const run = rows?.run
     if (!run) return { kind: 'problem', status: 'unconfigured', reason: 'no hay sincronización de calendario verificada' }
+    if (rows.consistent !== true) return { kind: 'problem', status: 'incomplete', reason: 'eventos y corrida no corresponden' }
+    const { properties, rules, events, manual } = rows
 
     const synced = new Set(run.property_ids ?? [])
     const coverage = run.coverage_from && run.coverage_to ? { from: run.coverage_from, to: run.coverage_to } : null
@@ -173,7 +158,7 @@ export async function loadSnapshot(db: ReadDb, query: AvailabilityQuery, signal?
       if (!prop) conflicts.push('no existe en AirAdmin')
       else {
         if (prop.active === false) conflicts.push('inactivo en AirAdmin')
-        if (prop.capacity !== c.capacity) conflicts.push(`capacidad ${prop.capacity} en AirAdmin vs ${c.capacity} en el catálogo`)
+        if (query.guests !== undefined && prop.capacity !== c.capacity) conflicts.push(`capacidad ${prop.capacity} en AirAdmin vs ${c.capacity} en el catálogo`)
       }
       if (!synced.has(c.propertyId)) conflicts.push('fuera de la última sincronización verificada')
       const r = rulesById.get(c.propertyId)

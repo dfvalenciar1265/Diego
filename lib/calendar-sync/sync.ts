@@ -80,6 +80,9 @@ export async function runCalendarSync(deps: SyncDeps): Promise<SyncOutcome> {
   if (missing.length > 0) return fail(`faltan URL iCal: ${missing.join(', ')}`)
   const invalid = feeds.filter(f => !isAirbnbIcalUrl(f.url)).map(f => icalEnvName(f.unit.slug))
   if (invalid.length > 0) return fail(`URL iCal que no es https de Airbnb: ${invalid.join(', ')}`)
+  if (new Set(feeds.map(f => new URL(f.url).origin + new URL(f.url).pathname)).size !== feeds.length) {
+    return fail('hay calendarios iCal repetidos: cada apartamento requiere su propio calendario')
+  }
 
   // Las ocho a la vez; cualquier fallo invalida la corrida completa.
   const results = await Promise.all(feeds.map(async f => {
