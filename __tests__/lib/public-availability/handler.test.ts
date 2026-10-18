@@ -15,6 +15,7 @@ const READY: FakeDbOptions['results'] = {
   calendar_sync_runs: { data: [SYNC_RUN] },
   properties: { data: PROPERTIES_OK },
   availability_rules: { data: RULES_ROWS },
+  calendar_events: { data: [] },
   reservations: { data: [] },
 }
 
@@ -168,7 +169,7 @@ describe('GET: fallos de la fuente', () => {
   })
 
   it('sincronización antigua → stale', async () => {
-    const { deps: d } = deps({ dbOpts: { results: { ...READY, calendar_sync_runs: { data: [{ ...SYNC_RUN, completed_at: '2026-10-18T05:00:00Z' }] } } } })
+    const { deps: d } = deps({ dbOpts: { results: { ...READY, calendar_sync_runs: { data: [{ ...SYNC_RUN, data_as_of: '2026-10-18T05:00:00Z' }] } } } })
     ok(await (await handleAvailability(get(OK_QS), d)).json(), 'stale')
   })
 
@@ -181,12 +182,12 @@ describe('GET: fallos de la fuente', () => {
 describe('GET: datos sintéticos de punta a punta', () => {
   const PROPERTY = (slug: string) => CASA_BLUE_CATALOG.find(u => u.slug === slug)!.propertyId
   const PRIVATE = {
-    id: 'res-1', property_id: PROPERTY('palmetto-1001'), check_in: '2026-11-11', check_out: '2026-11-14',
+    id: 'res-1', property_id: PROPERTY('palmetto-1001'), check_in: '2026-11-11', check_out: '2026-11-14', source: 'direct',
     notes: 'Huésped: Ana Pérez | Código: HMABC123 | Tel +57 300 000 0000 | Check-out: 11:00 AM', pending_change: null,
     guest_name: 'Ana Pérez', amount: 1234567, airbnb_code: 'HMABC123',
   }
 
-  it('reserva → occupied; conflicto de capacidad → unknown; sin datos privados', async () => {
+  it('reserva directa → occupied; conflicto de capacidad → unknown; sin datos privados', async () => {
     const properties = PROPERTIES_OK.map(p => p.id === PROPERTY('crespo-1214') ? { ...p, capacity: 2 } : p)
     const { deps: d, log } = deps({ dbOpts: { results: { ...READY, properties: { data: properties }, reservations: { data: [PRIVATE] } } } })
     const res = await handleAvailability(get(OK_QS), d)
@@ -217,6 +218,26 @@ describe('GET: datos sintéticos de punta a punta', () => {
     for (const w of ['insert', 'update', 'delete', 'upsert', 'rpc']) expect(methods).not.toContain(w)
   })
 
+  it('ocupación del calendario de Airbnb (iCal) → occupied; libre al lado → available', async () => {
+    const events = [
+      { property_id: PROPERTY('conquistador-1821'), start_date: '2026-11-12', end_date: '2026-11-15' },
+      { property_id: PROPERTY('tocahagua-1208'), start_date: '2026-11-07', end_date: '2026-11-10' },  // sale el día que llego
+    ]
+    const { deps: d } = deps({ dbOpts: { results: { ...READY, calendar_events: { data: events } } } })
+    const body = await (await handleAvailability(get(OK_QS), d)).json()
+    const status = (slug: string) => body.apartments.find((a: { slug: string }) => a.slug === slug).status
+    expect(body.sourceStatus).toBe('ready')
+    expect(status('conquistador-1821')).toBe('occupied')
+    expect(status('tocahagua-1208')).toBe('available')
+  })
+
+  it('las reservas de Airbnb importadas por correo no cuentan: solo directas y bloqueos manuales', async () => {
+    const { deps: d, db } = deps()
+    await handleAvailability(get(OK_QS), d)
+    expect(db.calls).toContainEqual({ table: 'reservations', method: 'or', args: ['source.eq.direct,status.eq.blocked'] })
+    expect(db.calls).toContainEqual({ table: 'calendar_events', method: 'eq', args: ['source', 'airbnb-ical'] })
+  })
+
   it('solo consulta los ocho IDs del catálogo y excluye canceladas', async () => {
     const { deps: d, db } = deps()
     await handleAvailability(get(OK_QS), d)
@@ -225,7 +246,7 @@ describe('GET: datos sintéticos de punta a punta', () => {
       expect(c.args[1]).toEqual(ids)
     }
     const statusFilters = db.calls.filter(c => c.table === 'reservations' && c.method === 'in' && c.args[0] === 'status')
-    expect(statusFilters.length).toBe(2)
+    expect(statusFilters.length).toBe(1)
     for (const c of statusFilters) expect(c.args[1]).toEqual(['confirmed', 'blocked'])
   })
 })
@@ -241,7 +262,7 @@ describe('source: periodos', () => {
 
   it('reglas sin verified_at no cuentan (filtra por verified_at)', async () => {
     const db = fakeDb({ results: READY })
-    await loadSnapshot(db, { arrival: '2026-11-10', departure: '2026-11-13', guests: 2 }, NOW)
+    await loadSnapshot(db, { arrival: '2026-11-10', departure: '2026-11-13', guests: 2 })
     expect(db.calls).toContainEqual({ table: 'availability_rules', method: 'not', args: ['verified_at', 'is', null] })
     expect(db.calls).toContainEqual({ table: 'calendar_sync_runs', method: 'eq', args: ['verified', true] })
   })

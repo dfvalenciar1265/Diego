@@ -46,7 +46,7 @@ export async function handleAvailability(req: Request, deps: HandlerDeps): Promi
     snapshot = { kind: 'problem', status: 'unconfigured', reason: 'faltan variables de Supabase' }
   } else {
     try {
-      snapshot = await withTimeout(SOURCE_TIMEOUT_MS, signal => loadSnapshot(db, parsed.query, now, signal))
+      snapshot = await withTimeout(SOURCE_TIMEOUT_MS, signal => loadSnapshot(db, parsed.query, signal))
     } catch (err) {
       snapshot = { kind: 'problem', status: 'unavailable', reason: err instanceof Error ? err.message : 'error' }
     }

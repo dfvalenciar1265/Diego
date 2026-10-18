@@ -36,8 +36,8 @@ export interface PublicAvailability {
 export interface UnitRules {
   minNights: number
   maxNights: number | null                 // null = sin máximo
-  /** Mínimos por fecha de llegada (conjuntos de reglas / ajustes de Airbnb). `from`/`to` inclusivos. */
-  minNightsOverrides: Array<{ from: string; to: string; minNights: number }>
+  /** Reglas por fecha de llegada (conjuntos de reglas / ajustes de Airbnb). `from`/`to` inclusivos. */
+  dateOverrides: DateOverride[]
   advanceNoticeHours: number               // horas entre ahora y la hora de entrada
   bookingWindowDays: number | null         // null = sin límite; última noche ≤ hoy + ventana
   preparationNights: number                // noches bloqueadas antes y después de cada periodo
@@ -47,6 +47,17 @@ export interface UnitRules {
   checkOutDays: number[] | null
   checkInTime: string | null               // HH:MM
   checkOutTime: string | null              // HH:MM
+}
+
+/** Lo que cambia para las llegadas entre `from` y `to` (inclusivos). Lo que no trae, vale la regla base. */
+export interface DateOverride {
+  from: string
+  to: string
+  minNights?: number
+  maxNights?: number | null
+  advanceNoticeHours?: number
+  checkInDays?: number[] | null
+  checkOutDays?: number[] | null
 }
 
 export interface BusyPeriod {
@@ -110,9 +121,18 @@ function sourceStatusFor(
   return 'ready'
 }
 
-function minNightsFor(rules: UnitRules, arrival: string): number {
-  const override = rules.minNightsOverrides.find(o => o.from <= arrival && arrival <= o.to)
-  return override?.minNights ?? rules.minNights
+/** Reglas que aplican a una llegada: la base con el ajuste de esa fecha encima (el primero que la cubra). */
+export function rulesForArrival(rules: UnitRules, arrival: string): UnitRules {
+  const o = rules.dateOverrides.find(d => d.from <= arrival && arrival <= d.to)
+  if (!o) return rules
+  return {
+    ...rules,
+    minNights: o.minNights ?? rules.minNights,
+    maxNights: o.maxNights !== undefined ? o.maxNights : rules.maxNights,
+    advanceNoticeHours: o.advanceNoticeHours ?? rules.advanceNoticeHours,
+    checkInDays: o.checkInDays !== undefined ? o.checkInDays : rules.checkInDays,
+    checkOutDays: o.checkOutDays !== undefined ? o.checkOutDays : rules.checkOutDays,
+  }
 }
 
 /** Estado de un apartamento cuando la fuente está lista. */
@@ -127,11 +147,11 @@ export function evaluateUnit(unit: UnitSnapshot, query: AvailabilityQuery, cover
   if (unit.periods.some(p => p.datesUncertain)) return 'unknown'
   if (unit.periods.some(p => p.alternate && overlaps(p.alternate.start, p.alternate.end, arrival, departure))) return 'unknown'
 
-  const rules = unit.rules
-  if (!rules) return 'unknown'
+  if (!unit.rules) return 'unknown'
+  const rules = rulesForArrival(unit.rules, arrival)
 
   const nights = daysBetween(arrival, departure)
-  if (nights < minNightsFor(rules, arrival)) return 'occupied'
+  if (nights < rules.minNights) return 'occupied'
   if (rules.maxNights != null && nights > rules.maxNights) return 'occupied'
   if (rules.checkInDays && !rules.checkInDays.includes(weekday(arrival))) return 'occupied'
   if (rules.checkOutDays && !rules.checkOutDays.includes(weekday(departure))) return 'occupied'

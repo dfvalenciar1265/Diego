@@ -23,6 +23,8 @@ CREATE TABLE IF NOT EXISTS public.calendar_sync_runs (
   source        TEXT NOT NULL,                       -- p. ej. 'airbnb-ical'
   started_at    TIMESTAMPTZ NOT NULL,
   completed_at  TIMESTAMPTZ,
+  -- Instante desde el que los datos son seguros: el inicio de las descargas (no la hora de guardado).
+  data_as_of    TIMESTAMPTZ,
   status        TEXT NOT NULL CHECK (status IN ('running', 'complete', 'failed')),
   verified      BOOLEAN NOT NULL DEFAULT false,
   coverage_from DATE,
@@ -31,7 +33,8 @@ CREATE TABLE IF NOT EXISTS public.calendar_sync_runs (
   error         TEXT,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
   CONSTRAINT complete_has_coverage CHECK (
-    status <> 'complete' OR (completed_at IS NOT NULL AND coverage_from IS NOT NULL AND coverage_to >= coverage_from)
+    status <> 'complete' OR (completed_at IS NOT NULL AND data_as_of IS NOT NULL
+                             AND coverage_from IS NOT NULL AND coverage_to >= coverage_from)
   )
 );
 
@@ -42,8 +45,10 @@ CREATE TABLE IF NOT EXISTS public.availability_rules (
   property_id           UUID PRIMARY KEY REFERENCES public.properties(id) ON DELETE CASCADE,
   min_nights            INT NOT NULL CHECK (min_nights >= 1),
   max_nights            INT CHECK (max_nights IS NULL OR max_nights >= min_nights),
-  -- Mínimos por fecha de llegada: [{"from":"2026-12-15","to":"2027-01-10","min_nights":3}]
-  min_nights_overrides  JSONB NOT NULL DEFAULT '[]'::jsonb,
+  -- Reglas por fecha de llegada (conjuntos de reglas / ajustes de Airbnb), `from`/`to` inclusivos:
+  -- [{"from":"2026-12-15","to":"2027-01-10","min_nights":3,"check_in_days":[5,6]}]
+  -- Campos admitidos: min_nights, max_nights, advance_notice_hours, check_in_days, check_out_days.
+  date_overrides        JSONB NOT NULL DEFAULT '[]'::jsonb CHECK (jsonb_typeof(date_overrides) = 'array'),
   advance_notice_hours  INT NOT NULL CHECK (advance_notice_hours >= 0),
   booking_window_days   INT CHECK (booking_window_days IS NULL OR booking_window_days >= 0),
   preparation_nights    INT NOT NULL CHECK (preparation_nights BETWEEN 0 AND 7),
@@ -55,6 +60,7 @@ CREATE TABLE IF NOT EXISTS public.availability_rules (
   check_out_time        TIME,
   verified_at           TIMESTAMPTZ,                 -- NULL = borrador, el endpoint lo ignora
   verified_by           UUID REFERENCES public.team_members(id),
+  source_note           TEXT NOT NULL DEFAULT '',    -- de dónde salió (p. ej. "Airbnb > Disponibilidad, 18-oct-2026")
   updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 

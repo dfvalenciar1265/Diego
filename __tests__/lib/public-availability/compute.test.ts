@@ -153,9 +153,22 @@ describe('evaluateUnit: reglas', () => {
   })
 
   it('mínimo por fecha de llegada (conjuntos de reglas)', () => {
-    const rules = { ...RULES, minNightsOverrides: [{ from: '2026-11-01', to: '2026-11-15', minNights: 4 }] }
+    const rules = { ...RULES, dateOverrides: [{ from: '2026-11-01', to: '2026-11-15', minNights: 4 }] }
     expect(evalWith({ rules })).toBe('occupied')
-    expect(evalWith({ rules: { ...RULES, minNights: 3, minNightsOverrides: [{ from: '2026-11-10', to: '2026-11-10', minNights: 1 }] } }, { ...Q, departure: '2026-11-11' })).toBe('available')
+    expect(evalWith({ rules: { ...RULES, minNights: 3, dateOverrides: [{ from: '2026-11-10', to: '2026-11-10', minNights: 1 }] } }, { ...Q, departure: '2026-11-11' })).toBe('available')
+  })
+
+  it('ajustes por fecha: días de llegada, máximo y preaviso solo para esas llegadas', () => {
+    const rules = { ...RULES, dateOverrides: [{ from: '2026-11-01', to: '2026-11-30', checkInDays: [5, 6], maxNights: 2 }] }
+    expect(evalWith({ rules })).toBe('occupied')                                              // martes, fuera de vie/sáb
+    expect(evalWith({ rules }, { arrival: '2026-11-13', departure: '2026-11-15', guests: 2 })).toBe('available')
+    expect(evalWith({ rules }, { arrival: '2026-11-13', departure: '2026-11-16', guests: 2 })).toBe('occupied') // 3 > máx 2
+    expect(evalWith({ rules }, { arrival: '2026-12-01', departure: '2026-12-03', guests: 2 })).toBe('available') // fuera del ajuste
+    const notice = { ...RULES, dateOverrides: [{ from: '2026-10-18', to: '2026-10-18', advanceNoticeHours: 48 }] }
+    expect(evalWith({ rules: notice }, { arrival: '2026-10-18', departure: '2026-10-20', guests: 2 })).toBe('occupied')
+    // Un ajuste puede quitar una restricción con null explícito.
+    const open = { ...RULES, checkInDays: [5], dateOverrides: [{ from: '2026-11-10', to: '2026-11-10', checkInDays: null }] }
+    expect(evalWith({ rules: open })).toBe('available')
   })
 
   it('días permitidos de entrada y salida', () => {
