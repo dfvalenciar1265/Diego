@@ -1,5 +1,5 @@
 CASA BLUE CARTAGENA — API PÚBLICA DE DISPONIBILIDAD (AirAdmin)
-Entrega: 18-oct-2026 · Rama: claude/casa-blue-availability-api-23a1a2 · Estado: lista para revisión, NO desplegada
+Entrega: 18-oct-2026 · PR dfvalenciar1265/Diego#12 · Estado: EN PRODUCCIÓN (mergeado y verificado el 18-oct-2026)
 
 RESUMEN EN UNA LÍNEA
 El endpoint ya existe, se probó y es seguro, pero hoy responde siempre sourceStatus "unconfigured"
@@ -50,9 +50,11 @@ Preflight: OPTIONS en la misma ruta. Otros métodos → 405.
 
 Comprobada SOLO en local: http://localhost:4010/api/public/casa-blue/availability
 (build de producción con `next start`, contra la base real de Supabase en modo lectura).
-No hay URL desplegada: no se publicó nada. La URL definitiva será
-  https://<dominio de AirAdmin en Vercel>/api/public/casa-blue/availability
-cuando Diego despliegue la rama. No se inventa aquí.
+Producción (desplegada el 18-oct-2026 con el merge del PR #12):
+  https://diegoprueba.vercel.app/api/public/casa-blue/availability
+Verificada en producción con curl: 200 con el contrato, no-store y CORS para el sitio (~0,45 s);
+guests=9 → 400; origen ajeno → sin Access-Control-Allow-Origin; OPTIONS → 204; ráfaga → 429.
+Respuesta real en producción: sourceStatus "unconfigured", los ocho en "unknown" (igual que en local).
 
 ======================================================================================
 3. CURL (SIN SECRETOS) Y RESPUESTA REAL DEL LOCAL
@@ -170,7 +172,7 @@ Bloqueos, en orden:
   3. Cargar y verificar las reglas reales de los 8 apartamentos en availability_rules (mínimos por
      fecha incluidos), marcando verified_at. No se inventó ninguna.
   4. Resolver los 4 conflictos de capacidad de la sección 4 (en el catálogo o en AirAdmin).
-  5. Desplegar la rama y obtener la URL HTTPS real.
+  5. (Hecho 18-oct-2026) Desplegado en https://diegoprueba.vercel.app.
 
 Limitaciones conocidas:
   - El límite de tráfico (30 consultas/min por IP, 600/min por instancia) vive en la memoria de cada
@@ -186,12 +188,12 @@ Limitaciones conocidas:
   - El precio final, la confirmación y el pago siguen en Airbnb.
 
 ======================================================================================
-7. CÓMO CONECTAR EL HTML (cuando la rama esté desplegada)
+7. CÓMO CONECTAR EL HTML
 ======================================================================================
 1. En el proyecto del sitio, abrir src/components/AvailabilitySearch.astro y cambiar
      data-endpoint="api/availability"
    por
-     data-endpoint="https://<dominio de AirAdmin en Vercel>/api/public/casa-blue/availability"
+     data-endpoint="https://diegoprueba.vercel.app/api/public/casa-blue/availability"
    (URL HTTPS absoluta, sin parámetros: el componente ya agrega arrival, departure y guests).
 2. Reconstruir el sitio y generar el ZIP como siempre; subir el contenido a public_html.
 3. Probarlo servido por HTTPS desde https://casabluecartagena.com (con file:// el buscador usa el
@@ -199,7 +201,7 @@ Limitaciones conocidas:
 4. Si el sitio también se sirve desde otro origen (p. ej. https://www.casabluecartagena.com),
    agregarlo en CASA_BLUE_CORS_ORIGINS en Vercel después de confirmarlo.
 5. Comprobación rápida en el navegador del sitio (consola):
-     fetch('https://<dominio>/api/public/casa-blue/availability?arrival=2026-11-10&departure=2026-11-13&guests=2').then(r => r.json())
+     fetch('https://diegoprueba.vercel.app/api/public/casa-blue/availability?arrival=2026-11-10&departure=2026-11-13&guests=2').then(r => r.json())
    Hasta cumplir la sección 6 verá sourceStatus "unconfigured" y los ocho "unknown": el buscador
    debe mostrar entonces su salida a Airbnb, no "sin disponibilidad".
 Para desarrollo local del sitio: correr AirAdmin con `npm run dev` (puerto 4000) y
