@@ -1,0 +1,207 @@
+CASA BLUE CARTAGENA — API PÚBLICA DE DISPONIBILIDAD (AirAdmin)
+Entrega: 18-oct-2026 · Rama: claude/casa-blue-availability-api-23a1a2 · Estado: lista para revisión, NO desplegada
+
+RESUMEN EN UNA LÍNEA
+El endpoint ya existe, se probó y es seguro, pero hoy responde siempre sourceStatus "unconfigured"
+con los ocho apartamentos en "unknown". Es lo correcto: AirAdmin todavía no tiene una sincronización
+completa del calendario ni las reglas de los apartamentos (ver sección 6). No inventa disponibilidad.
+
+======================================================================================
+1. ARCHIVOS Y PRUEBAS
+======================================================================================
+Nuevos:
+  app/api/public/casa-blue/availability/route.ts   Ruta (GET + OPTIONS), sin sesión ni claves
+  lib/public-availability/catalog.ts               Catálogo fijo: 8 slugs, capacidades e IDs confirmados
+  lib/public-availability/query.ts                 Validación de arrival/departure/guests
+  lib/public-availability/compute.ts               Cálculo puro (reloj inyectado) y respuesta pública
+  lib/public-availability/source.ts                Lectura de Supabase (solo SELECT) → foto de la fuente
+  lib/public-availability/http.ts                  CORS, cabeceras, límite de tráfico, tiempo de espera
+  lib/public-availability/handler.ts               Une todo; 200 / 400 / 429
+  supabase/migrations/005_public_availability.sql  PROPUESTA, NO APLICADA (tablas de sincronización y reglas)
+  __tests__/lib/public-availability/*.test.ts      70 pruebas con datos sintéticos y reloj controlado
+  CASA-BLUE-API-HANDOFF.txt                        Este documento
+Modificados: ninguno de los archivos existentes.
+
+Comprobaciones ejecutadas (todas en verde):
+  npx vitest run                 30 archivos, 292 pruebas (70 nuevas)
+  npx tsc --noEmit               sin errores
+  npx eslint .                   sin errores
+  npm run build                  compila; la ruta aparece como ƒ /api/public/casa-blue/availability
+
+Qué cubren las pruebas nuevas:
+  - Ocho unidades, una vez cada una, en orden, sin duplicados, capacidades del catálogo, sin IDs internos.
+  - Solapamiento [arrival, departure), bordes de salida, cambio de día en Bogotá (23:30 vs 00:00).
+  - Preparación (noches vecinas y cobertura de vecinos), mínimo/máximo de noches, mínimos por fecha,
+    días de entrada/salida, ventana de reserva, preaviso en horas, entrada/salida el mismo día
+    (permitido / prohibido / con horas mínimas y salida tardía).
+  - Bloqueos, cancelaciones (excluidas), cambios de fechas pendientes y reservas con "⚠️" por verificar.
+  - Fuente ausente, sin tablas, sin corrida verificada, antigua (>900 s), en el futuro (>60 s),
+    incompleta, caída, error de consulta, lenta (corta a 3,5 s), fuera de cobertura.
+  - Consultas inválidas y ambiguas (repetidos, parámetros extra como property/tenant), CORS, preflight, 429.
+  - Ningún dato privado en la respuesta ni en los errores (nombres, códigos, montos, teléfonos,
+    intervalos, IDs, textos de error de la base de datos).
+  - La consulta no escribe: el doble de la base registra solo SELECT, nunca insert/update/delete/upsert/rpc.
+
+======================================================================================
+2. RUTA Y URL COMPROBADA
+======================================================================================
+Ruta:      GET /api/public/casa-blue/availability?arrival=YYYY-MM-DD&departure=YYYY-MM-DD&guests=N
+Preflight: OPTIONS en la misma ruta. Otros métodos → 405.
+
+Comprobada SOLO en local: http://localhost:4010/api/public/casa-blue/availability
+(build de producción con `next start`, contra la base real de Supabase en modo lectura).
+No hay URL desplegada: no se publicó nada. La URL definitiva será
+  https://<dominio de AirAdmin en Vercel>/api/public/casa-blue/availability
+cuando Diego despliegue la rama. No se inventa aquí.
+
+======================================================================================
+3. CURL (SIN SECRETOS) Y RESPUESTA REAL DEL LOCAL
+======================================================================================
+curl -s -H "Origin: https://casabluecartagena.com" \
+  "http://localhost:4010/api/public/casa-blue/availability?arrival=2026-11-10&departure=2026-11-13&guests=2"
+
+HTTP/1.1 200 OK
+content-type: application/json; charset=utf-8
+cache-control: no-store
+access-control-allow-origin: https://casabluecartagena.com
+vary: Origin
+
+{"query":{"arrival":"2026-11-10","departure":"2026-11-13","guests":2},
+ "queriedAt":"2026-10-18T06:38:19Z","lastSyncedAt":null,"coverage":null,
+ "sourceStatus":"unconfigured",
+ "apartments":[{"slug":"mar-adentro-1305","status":"unknown"},{"slug":"torres-del-lago-1303","status":"unknown"},
+  {"slug":"crespo-1214","status":"unknown"},{"slug":"conquistador-1821","status":"unknown"},
+  {"slug":"marina-del-rey-1104","status":"unknown"},{"slug":"palmetto-1001","status":"unknown"},
+  {"slug":"tocahagua-1208","status":"unknown"},{"slug":"tocahagua-708","status":"unknown"}]}
+
+Esta es la respuesta REAL de hoy, no una simulación: "unconfigured" porque la tabla
+calendar_sync_runs no existe aún. Otros resultados comprobados en local:
+  guests=9                       → 400 {"error":"invalid_request","message":"guests debe ser un entero entre 1 y 8."}
+  &property=x                    → 400 "Solo se admiten los parámetros arrival, departure y guests."
+  Origin: https://evil.example   → 200 sin Access-Control-Allow-Origin (el navegador no deja leerla)
+  OPTIONS desde el sitio         → 204 con CORS
+  31.ª consulta en 1 min por IP  → 429 con Retry-After
+  Tiempo de respuesta local      → ~0,2 s
+
+======================================================================================
+4. FUENTE, SINCRONIZACIÓN, COBERTURA Y REGLAS (lo que se verificó en AirAdmin, solo lectura)
+======================================================================================
+Fuente real hoy: tabla `reservations` de Supabase. La llenan (a) la importación de correos de Airbnb
+(/api/gmail-sync: cron diario a las 11:44 UTC con 7 días de correos, más corridas manuales) y
+(b) lo que se carga a mano en la app.
+
+Por qué eso NO alcanza para decir "disponible":
+  - Es una fuente de CORREOS: no trae los bloqueos del calendario de Airbnb. Hoy no hay ni una fila
+    status 'blocked' ni source 'direct' con salida futura (52 confirmadas + 6 canceladas, todas de
+    Airbnb), y Diego confirmó que las noches bloqueadas en Airbnb son reservas directas. Esas noches
+    no están en AirAdmin.
+  - La última corrida de gmail_sync_log (17-oct 15:50 UTC) es una lectura de correos, no una
+    sincronización completa y verificada. Por regla, no se usa como lastSyncedAt.
+  - Frecuencia real: una vez al día. El sitio exige ≤ 900 s. Aunque contara, siempre sería "stale".
+  - No hay cobertura conocida (qué fechas están completas).
+  - Reglas: AirAdmin no guarda mínimo/máximo de noches, preaviso, ventana, preparación, días
+    permitidos ni horas. Viven en Airbnb y cambian por fecha (conjunto "Temporada baja": llegada
+    vie/sáb = 2 noches, resto = 1; ajustes de 1 noche en noches huérfanas). No se inventó ninguna.
+
+Qué hace el código cuando la fuente exista (migración 005):
+  - lastSyncedAt / coverage salen SOLO de la última fila de calendar_sync_runs con status 'complete'
+    y verified = true. Nunca de la hora del GET, de una lectura de la base ni del último correo.
+  - Las reservas se leen de `reservations` (confirmed + blocked; las canceladas no ocupan), con
+    8 días de margen para ver vecinos. Las horas se toman de las notas ("Check-out: 11:00 AM").
+  - Un cambio de fechas pendiente (pending_change) que toca la estadía → unknown. Una reserva con
+    "⚠️ Fechas actualizadas" o "⚠️ Diferencia con Airbnb" → ese apartamento unknown.
+  - Reglas: solo filas de availability_rules con verified_at.
+  - Un apartamento que no esté en property_ids de la corrida → unknown.
+
+CONFLICTOS DEL CATÁLOGO CON AIRADMIN (no se sobrescribió nada):
+  IDs: los 8 existen, activos, y coinciden con el nombre esperado.
+  Capacidades distintas (estos 4 quedarán "unknown" hasta que Diego decida cuál vale):
+    torres-del-lago-1303   catálogo 8 · AirAdmin 6  ("Apto 1303")
+    crespo-1214            catálogo 4 · AirAdmin 2  ("Cartagena Beach Crespo 1214")
+    marina-del-rey-1104    catálogo 5 · AirAdmin 4  ("Marina Rey 1104")
+    palmetto-1001          catálogo 6 · AirAdmin 4  ("Palmetto 1001")
+  Coinciden: mar-adentro-1305 (6), conquistador-1821 (8), tocahagua-1208 (4), tocahagua-708 (4).
+  El servidor registra los conflictos en sus logs; nunca salen en la respuesta.
+
+Reglas de cálculo implementadas (lib/public-availability/compute.ts):
+  - Noches [arrival, departure) en días de Bogotá; solapa si periodo.start < departure && periodo.end > arrival.
+  - occupied: solapamiento confirmado, huéspedes > capacidad confirmada o una regla verificada lo impide.
+  - unknown: conflicto de catálogo, reglas sin verificar, fechas dudosas, vecinos fuera de cobertura,
+    o falta una hora que una regla en horas necesita.
+  - available: solo si todo lo anterior está verificado y se cumple.
+  - sourceStatus ≠ ready → los ocho unknown. ready exige: sincronización ≤ 900 s, no más de 60 s en el
+    futuro (si no, "unavailable"), y cobertura que incluya arrival..departure (si no, "incomplete").
+
+Seguridad:
+  - La respuesta se arma campo por campo; no lleva IDs, reservas, intervalos, huéspedes, códigos,
+    montos, notas, contactos, claves ni errores internos. Errores: {"error","message"} genéricos.
+  - Lee con la clave de servicio SOLO en el servidor y SOLO con SELECT de columnas puntuales de los
+    8 IDs del catálogo. No se tocó RLS ni se abrió ninguna tabla a anon. Las tablas nuevas tienen RLS
+    activo y solo políticas de administrador.
+  - El cliente no puede elegir propiedades ni tenants: cualquier parámetro extra → 400.
+  - CORS: solo https://casabluecartagena.com. CORS no hace privado el endpoint (curl funciona igual),
+    por eso la respuesta no tiene nada privado.
+  - Tiempos: la fuente se corta a 3,5 s (el sitio cancela a los 6 s) → "unavailable".
+  - Un fallo de la fuente nunca se convierte en "cero disponibles": siempre es unknown.
+
+======================================================================================
+5. VARIABLES DE ENTORNO (solo nombres)
+======================================================================================
+Ya existentes y necesarias:
+  NEXT_PUBLIC_SUPABASE_URL
+  SUPABASE_SERVICE_ROLE_KEY        (sin ellas el endpoint responde "unconfigured")
+Nuevas, opcionales:
+  CASA_BLUE_CORS_ORIGINS           Orígenes extra CONFIRMADOS, solo https, separados por coma
+                                   (p. ej. si el sitio también se sirve en www.). Hoy vacío.
+  CASA_BLUE_CORS_DEV_ORIGINS       Orígenes de desarrollo (http://localhost:4321…). Se ignora en producción.
+
+======================================================================================
+6. LIMITACIONES Y DEPENDENCIAS PENDIENTES (por qué hoy no dice "available")
+======================================================================================
+Bloqueos, en orden:
+  1. Sincronización completa del calendario cada ≤ 15 min. Hace falta un sincronizador que traiga
+     TODO lo que ocupa cada anuncio (reservas y bloqueos de Airbnb, p. ej. su exportación iCal por
+     anuncio), lo deje en `reservations` (bloqueos como status 'blocked') y escriba una fila
+     verificada en calendar_sync_runs con su cobertura. No se construyó: necesita las URL iCal de
+     cada anuncio (son secretas), decidir qué hacer con las reservas que ya vienen del correo para
+     no duplicarlas, y una frecuencia de cron que el plan actual de Vercel tal vez no permita
+     (hoy el cron es diario). Mientras no exista: "unconfigured" y todo unknown.
+  2. Aplicar la migración 005 en Supabase (no se aplicó; decisión de Diego).
+  3. Cargar y verificar las reglas reales de los 8 apartamentos en availability_rules (mínimos por
+     fecha incluidos), marcando verified_at. No se inventó ninguna.
+  4. Resolver los 4 conflictos de capacidad de la sección 4 (en el catálogo o en AirAdmin).
+  5. Desplegar la rama y obtener la URL HTTPS real.
+
+Limitaciones conocidas:
+  - El límite de tráfico (30 consultas/min por IP, 600/min por instancia) vive en la memoria de cada
+    instancia de Vercel: frena ráfagas, pero no es global. Para un límite global, configurar una
+    regla de rate limit en el firewall de Vercel.
+  - Los 900 s son un límite del sitio, no una frecuencia comprobada de AirAdmin: con el cron actual
+    (diario) nunca se cumplirían.
+  - Las horas por reserva salen de las notas importadas del correo; las horas editadas a mano en las
+    tareas de limpieza/preparación no se leen.
+  - Consultas de más de 365 noches o con llegada a más de 730 días → 400 (límite anti-abuso).
+  - No se probó el sitio HTML real: su código (src/components/AvailabilitySearch.astro) no está en
+    esta máquina ni en este repo. Se probaron las cabeceras CORS con curl y en pruebas.
+  - El precio final, la confirmación y el pago siguen en Airbnb.
+
+======================================================================================
+7. CÓMO CONECTAR EL HTML (cuando la rama esté desplegada)
+======================================================================================
+1. En el proyecto del sitio, abrir src/components/AvailabilitySearch.astro y cambiar
+     data-endpoint="api/availability"
+   por
+     data-endpoint="https://<dominio de AirAdmin en Vercel>/api/public/casa-blue/availability"
+   (URL HTTPS absoluta, sin parámetros: el componente ya agrega arrival, departure y guests).
+2. Reconstruir el sitio y generar el ZIP como siempre; subir el contenido a public_html.
+3. Probarlo servido por HTTPS desde https://casabluecartagena.com (con file:// el buscador usa el
+   acceso directo a Airbnb y no llama a la API).
+4. Si el sitio también se sirve desde otro origen (p. ej. https://www.casabluecartagena.com),
+   agregarlo en CASA_BLUE_CORS_ORIGINS en Vercel después de confirmarlo.
+5. Comprobación rápida en el navegador del sitio (consola):
+     fetch('https://<dominio>/api/public/casa-blue/availability?arrival=2026-11-10&departure=2026-11-13&guests=2').then(r => r.json())
+   Hasta cumplir la sección 6 verá sourceStatus "unconfigured" y los ocho "unknown": el buscador
+   debe mostrar entonces su salida a Airbnb, no "sin disponibilidad".
+Para desarrollo local del sitio: correr AirAdmin con `npm run dev` (puerto 4000) y
+CASA_BLUE_CORS_DEV_ORIGINS=http://localhost:<puerto del sitio>; data-endpoint apuntando a
+http://localhost:4000/api/public/casa-blue/availability.
