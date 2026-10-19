@@ -1,6 +1,6 @@
 /**
- * Herramientas del MCP de AirAdmin: las 6 del GPT, las horas de salida y llegada y las reservas
- * (crear, modificar, cancelar), sobre lib/gpt-api/service.ts.
+ * Herramientas del MCP de AirAdmin: las 6 del GPT, las horas de salida y llegada, las reservas
+ * (crear, modificar, cancelar) y sus cobros adicionales y solicitudes especiales, sobre lib/gpt-api/service.ts.
  * Las de solo lectura van con readOnlyHint; ChatGPT confirma con el usuario las demás.
  * Los esquemas describen los tipos; la validación con mensajes en español la hace el servicio.
  */
@@ -12,7 +12,9 @@ import {
   compareReservationsTool, createMaintenanceTool, listMaintenanceTool, listReservationsTool,
   propertiesTool, setCheckinTimeTool, setCheckoutTimeTool, turnoversTool, updateMaintenanceTool,
   cancelReservationTool, createReservationTool, updateReservationTool, type ServiceResult,
+  listFollowupsTool, createChargeTool, updateChargeTool, createSpecialRequestTool, updateSpecialRequestTool,
 } from '@/lib/gpt-api/service'
+import type { Actor } from '@/lib/gpt-api/followups'
 import { memberFromAuth } from './auth'
 
 const READ = { readOnlyHint: true, openWorldHint: false }
@@ -35,9 +37,17 @@ const timeChange = z.object({
   guest_name: z.string().optional().describe('Solo si ese día hay más de una reserva en el apartamento'),
 })
 
+function actorFrom(authInfo: Parameters<typeof memberFromAuth>[0]): Actor | null {
+  const member = memberFromAuth(authInfo)
+  return member ? { id: member.id, via: 'mcp' } : null
+}
+
 /** Resultado del servicio → resultado de herramienta MCP (errores con isError, en español). */
 export function toToolResult(result: ServiceResult): CallToolResult {
-  if (!result.ok) return { content: [{ type: 'text', text: result.error }], isError: true }
+  if (!result.ok) {
+    const current = result.current === undefined ? '' : `\nEstado actual: ${JSON.stringify(result.current)}`
+    return { content: [{ type: 'text', text: result.error + current }], isError: true }
+  }
   const data = result.data as Record<string, unknown>
   return { content: [{ type: 'text', text: JSON.stringify(data) }], structuredContent: data }
 }
@@ -48,7 +58,10 @@ async function run(fn: () => Promise<ServiceResult>): Promise<CallToolResult> {
   } catch (err) {
     console.error('[mcp]', err instanceof Error ? err.message : err)
     return {
-      content: [{ type: 'text', text: 'Error interno del servidor. El detalle quedó en los registros de Vercel.' }],
+      content: [{
+        type: 'text',
+        text: 'Error interno del servidor; el resultado es incierto. Si era un cambio, consulta el estado (list_followups, list_reservations…) antes de repetirlo. El detalle quedó en los registros de Vercel.',
+      }],
       isError: true,
     }
   }
@@ -120,7 +133,7 @@ export function registerTools(server: McpServer) {
 
   server.registerTool('list_turnovers', {
     title: 'Salidas y llegadas del día',
-    description: 'Salidas (check-out) y llegadas (check-in) de un día con su hora actual, como "Salidas de hoy" y "Preparación hoy" de la app. time_source: app = la fijó alguien en la app; reservation = la del correo de Airbnb; default = 11:00 salida / 15:00 llegada. Por defecto hoy.',
+    description: 'Salidas (check-out) y llegadas (check-in) de un día con su hora actual, como "Salidas de hoy" y "Preparación hoy" de la app. Salida: estándar 11:00 (America/Bogota) salvo excepción fijada en la app (time_source=app). Llegada: app, la del correo de Airbnb (reservation) o 15:00 (default). Cada salida trae sus cobros pendientes (pending_charges) y cada llegada sus solicitudes especiales; other_charges_due = cobros que vencen ese día de otras reservas. Por defecto hoy.',
     inputSchema: z.object({
       date: date.optional().describe('Fecha AAAA-MM-DD; por defecto hoy, hasta 30 días adelante'),
     }),
@@ -182,4 +195,77 @@ export function registerTools(server: McpServer) {
     }),
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
   }, (body) => run(() => cancelReservationTool(serviceDb(), body)))
+  server.registerTool('list_followups', {
+    title: 'Cobros y solicitudes de reservas',
+    description: 'Cobros adicionales (aparte del precio de la reserva) y solicitudes especiales (cuna, camas…) de una reserva o de las reservas con noches en un rango (por defecto, de hoy a 60 días). Trae la version de cada uno, que piden los cambios. totals separa pendiente de cobrado.',
+    inputSchema: z.object({
+      reservation_id: z.string().optional().describe('id de la reserva (de list_reservations)'),
+      from: date.optional(),
+      to: date.optional(),
+      property: z.string().optional().describe('Nombre del apartamento'),
+    }),
+    annotations: READ,
+  }, (query) => run(() => listFollowupsTool(serviceDb(), query, todayInBogota())))
+
+  server.registerTool('create_charge', {
+    title: 'Registrar cobro adicional',
+    description: 'Registra un cobro adicional de una reserva en COP (persona extra, adicional acordado…), aparte del precio de la reserva: no cambia el monto de la reserva ni cuenta como ingreso hasta marcarlo cobrado. Si ya hay uno con el mismo concepto y fecha, no duplica: devuelve created=false y el existente.',
+    inputSchema: z.object({
+      reservation_id: z.string().describe('id de la reserva (de list_reservations)'),
+      concept: z.string(),
+      amount: z.number().describe('Monto en pesos colombianos'),
+      due_date: date.optional().describe('Fecha prevista de cobro; por defecto, el día de salida'),
+      notes: z.string().optional(),
+    }),
+    annotations: { ...WRITE, idempotentHint: true },
+  }, (body, ctx) => run(() => createChargeTool(serviceDb(), body, actorFrom(ctx.http?.authInfo))))
+
+  server.registerTool('update_charge', {
+    title: 'Actualizar cobro adicional',
+    description: 'Marca un cobro como cobrado (exige confirmation: referencia o comprobante; collected_on = fecha real, por defecto hoy) o anulado (void_reason), corrige monto, concepto o fecha, agrega una nota o lo da por revisado (reviewed=true). Cobrado y anulado son finales. Exige expected_version (de list_followups): si cambió, no aplica nada y devuelve el estado actual.',
+    inputSchema: z.object({
+      id: z.string().describe('id del cobro (de list_followups)'),
+      expected_version: z.number().int(),
+      status: z.enum(['pending', 'collected', 'void']).optional(),
+      confirmation: z.string().optional(),
+      collected_on: date.optional(),
+      void_reason: z.string().optional(),
+      amount: z.number().optional(),
+      concept: z.string().optional(),
+      due_date: date.optional(),
+      note: z.string().optional().describe('Se agrega al final de las notas, con la fecha'),
+      reviewed: z.boolean().optional().describe('true = ya se revisó tras un cambio o cancelación de la reserva'),
+    }),
+    annotations: { ...WRITE, idempotentHint: false },
+  }, (body, ctx) => run(() => updateChargeTool(serviceDb(), body, actorFrom(ctx.http?.authInfo), todayInBogota())))
+
+  server.registerTool('create_special_request', {
+    title: 'Registrar solicitud especial',
+    description: 'Registra una solicitud de una reserva (crib = cuna, beds = preparación de camas, other) con fecha y hora límite en Colombia y responsable opcional. Queda "registered": no avisa a nadie ni envía mensajes. No duplica: si ya existe, devuelve created=false y la existente.',
+    inputSchema: z.object({
+      reservation_id: z.string().describe('id de la reserva (de list_reservations)'),
+      kind: z.enum(['crib', 'beds', 'other']),
+      description: z.string(),
+      due_date: date.describe('Fecha límite para tenerla lista'),
+      due_time: z.string().optional().describe('Hora límite HH:MM (24 h, Colombia); por defecto 09:00'),
+      responsible: z.string().optional().describe('Nombre de quien debe hacerla (equipo de la app)'),
+    }),
+    annotations: { ...WRITE, idempotentHint: true },
+  }, (body, ctx) => run(() => createSpecialRequestTool(serviceDb(), body, actorFrom(ctx.http?.authInfo))))
+
+  server.registerTool('update_special_request', {
+    title: 'Actualizar solicitud especial',
+    description: 'notified = ya se avisó (notified_note: a quién y por dónde; no significa que esté lista). ready = quedó hecha y alguien lo confirmó (ready_confirmation). cancelled exige cancel_reason. También cambia el responsable o la da por revisada (reviewed=true). Lista y cancelada son finales. No envía mensajes. Exige expected_version (de list_followups).',
+    inputSchema: z.object({
+      id: z.string().describe('id de la solicitud (de list_followups)'),
+      expected_version: z.number().int(),
+      status: z.enum(['notified', 'ready', 'cancelled']).optional(),
+      notified_note: z.string().optional(),
+      ready_confirmation: z.string().optional(),
+      cancel_reason: z.string().optional(),
+      responsible: z.string().optional(),
+      reviewed: z.boolean().optional(),
+    }),
+    annotations: { ...WRITE, idempotentHint: false },
+  }, (body, ctx) => run(() => updateSpecialRequestTool(serviceDb(), body, actorFrom(ctx.http?.authInfo))))
 }

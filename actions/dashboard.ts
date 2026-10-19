@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { format, startOfMonth, endOfMonth } from 'date-fns'
 import type { DashboardKPIs, OccupancyData } from '@/lib/types'
 import { getOccupiedDaysInWeek } from '@/lib/utils'
+import { STANDARD_CHECKOUT } from '@/lib/checkout'
 
 export interface TodayCheckOut {
   id: string
@@ -15,9 +16,8 @@ export interface TodayCheckOut {
 }
 
 /**
- * Returns today's confirmed check-outs with property name and the
- * check-out time extracted from the reservation notes field.
- * Notes format: "... | Check-out: 12:00 p.m."
+ * Returns today's confirmed check-outs with property name and check-out time: the exception
+ * set in the app on today's cleaning task, else the standard 11:00 (never the reservation notes).
  */
 /** Parses any time string ("07:00", "12pm", "12:00 p.m.") to 24h parts, or null. */
 function parseTimeParts(raw: string | null | undefined): { h: number; m: number } | null {
@@ -78,9 +78,7 @@ export async function getTodayCheckOuts(): Promise<TodayCheckOut[]> {
       t => t.type === 'cleaning' && t.scheduled_for === today
     )
     const taskTimeMatch = cleaningTask?.notes?.match(/^(\d{2}:\d{2})\|/)
-    const rawTime = taskTimeMatch
-      ? taskTimeMatch[1]                                          // "07:00" from task
-      : r.notes?.match(/Check-out:\s*([^|]+)/i)?.[1] ?? null    // from reservation notes
+    const rawTime = taskTimeMatch?.[1] ?? STANDARD_CHECKOUT
 
     const parts = parseTimeParts(rawTime)
     const prop = Array.isArray(r.property) ? r.property[0] : r.property

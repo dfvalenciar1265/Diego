@@ -57,9 +57,11 @@ describe('checkoutSlot', () => {
     })
   })
 
-  it('falls back to the reservation email time, then to noon', () => {
+  it('without an exception set in the app it is always the standard 11:00, whatever the email said', () => {
     const task = { id: 't1', type: 'cleaning', scheduled_for: '2026-10-13', notes: 'Limpieza post-estadía — Laura', status: 'pending' }
-    expect(checkoutSlot(reservation({ tasks: [task] }), '2026-10-13', 'P')).toMatchObject({ time: '11:00', time_source: 'reservation' })
+    expect(checkoutSlot(reservation({ tasks: [task] }), '2026-10-13', 'P')).toMatchObject({ time: '11:00', time_source: 'default' })
+    expect(checkoutSlot(reservation({ notes: 'Check-in: 3pm | Check-out: 12pm', tasks: [task] }), '2026-10-13', 'P'))
+      .toMatchObject({ time: '11:00', time_source: 'default' })
     expect(checkoutSlot(reservation({ notes: '', tasks: [] }), '2026-10-13', 'P')).toMatchObject({
       time: '11:00', time_source: 'default', cleaning_task_id: null,
     })

@@ -75,15 +75,15 @@ export interface TimeChangeInput {
 /** `active` = abiertos + en progreso. */
 export type MaintenanceFilter = MaintenanceStatus | 'active'
 
-function isRecord(v: unknown): v is Record<string, unknown> {
+export function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v)
 }
 
-function oneOf<T extends string>(value: unknown, options: readonly T[]): value is T {
+export function oneOf<T extends string>(value: unknown, options: readonly T[]): value is T {
   return typeof value === 'string' && (options as readonly string[]).includes(value)
 }
 
-function text(v: unknown, field: string, max: number, required: boolean): Parsed<string> {
+export function text(v: unknown, field: string, max: number, required: boolean): Parsed<string> {
   if (v === undefined || v === null || v === '') return required ? fail(`Falta "${field}".`) : ok('')
   if (typeof v !== 'string') return fail(`"${field}" debe ser texto.`)
   const s = v.trim()
@@ -283,7 +283,7 @@ function parseGuestCount(v: unknown): Parsed<number | null> {
   return ok(v)
 }
 
-function parseAmount(v: unknown): Parsed<number> {
+export function parseAmount(v: unknown): Parsed<number> {
   if (typeof v !== 'number' || !Number.isFinite(v) || v < 0 || v > LIMITS.amount) {
     return fail('"amount" debe ser un número mayor o igual a 0 (pesos colombianos).')
   }
