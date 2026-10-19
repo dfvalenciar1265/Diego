@@ -1,5 +1,6 @@
 import type { DueCharge, OpenRequest } from '@/actions/followups'
 import { shortDate } from '@/lib/gpt-api/dates'
+import { CollectChargeButton, RequestButtons } from './FollowupActions'
 
 const cop = (n: number) => `$${n.toLocaleString('es-CO')}`
 
@@ -15,6 +16,7 @@ export function ChargeLine({ charge, showStay = false }: { charge: DueCharge; sh
         pendiente, vence {shortDate(charge.due_date)}
       </p>
       {charge.review_reason && <p className="text-[11px] text-[#b91c1c] mt-0.5">⚠️ Revisar: {charge.review_reason}</p>}
+      <div className="mt-1"><CollectChargeButton id={charge.id} version={charge.version} /></div>
     </div>
   )
 }
@@ -49,6 +51,7 @@ export function RequestLine({ request }: { request: OpenRequest }) {
         <span className="text-[#64748b]"> · límite {dueText(request.due_at)}{request.responsible_name ? ` · ${request.responsible_name}` : ''}</span>
       </p>
       {request.review_reason && <p className="text-[11px] text-[#b91c1c]">⚠️ Revisar: {request.review_reason}</p>}
+      <RequestButtons id={request.id} version={request.version} status={request.status} />
     </div>
   )
 }

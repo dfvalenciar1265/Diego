@@ -9,7 +9,7 @@ import {
 import {
   createChargeTool, createSpecialRequestTool, listFollowupsTool, turnoversTool, updateChargeTool, updateSpecialRequestTool,
 } from '@/lib/gpt-api/service'
-import type { Db } from '@/lib/gpt-api/db'
+import { fakeDb, type Row } from '../../helpers/fake-db'
 
 const RES = '00000000-0000-0000-0000-00000000e001'
 const RES_OCT = '00000000-0000-0000-0000-00000000e002'
@@ -84,53 +84,6 @@ describe('duplicados', () => {
 })
 
 // ── Servicio sobre una base en memoria (imita lo que hace PostgREST y los triggers) ─────────────
-
-type Row = Record<string, unknown>
-function fakeDb(tables: Record<string, Row[]>, opts: { failInsertOnce?: string } = {}) {
-  let failNext = opts.failInsertOnce
-  function from(table: string) {
-    const filters: ((r: Row) => boolean)[] = []
-    let op: 'select' | 'insert' | 'update' = 'select'
-    let payload: Row = {}
-    let single: 'single' | 'maybe' | null = null
-    const q = {
-      select: () => q, order: () => q, limit: () => q,
-      eq: (k: string, v: unknown) => { filters.push(r => r[k] === v); return q },
-      neq: (k: string, v: unknown) => { filters.push(r => r[k] !== v); return q },
-      in: (k: string, v: unknown[]) => { filters.push(r => v.includes(r[k])); return q },
-      lte: (k: string, v: string) => { filters.push(r => String(r[k]) <= v); return q },
-      gt: (k: string, v: string) => { filters.push(r => String(r[k]) > v); return q },
-      insert: (row: Row) => { op = 'insert'; payload = row; return q },
-      update: (row: Row) => { op = 'update'; payload = row; return q },
-      single: () => { single = 'single'; return q },
-      maybeSingle: () => { single = 'maybe'; return q },
-      then: (resolve: (v: unknown) => void) => resolve(run()),
-    }
-    function run() {
-      const rows = tables[table] ?? (tables[table] = [])
-      if (op === 'insert') {
-        if (failNext === table) {
-          // Otra llamada igual se adelantó: la fila existe y el índice único rechaza esta.
-          failNext = undefined
-          rows.push({ ...payload, id: 'winner', status: payload.kind ? 'registered' : 'pending', version: 1 })
-          return { data: null, error: { code: '23505', message: 'duplicate key' } }
-        }
-        const row = { id: `00000000-0000-0000-0000-${String(rows.length + 1).padStart(12, '0')}`, status: payload.kind ? 'registered' : 'pending', version: 1, notes: '', review_reason: null, ...payload }
-        rows.push(row)
-        return { data: row, error: null }
-      }
-      const hits = rows.filter(r => filters.every(f => f(r)))
-      if (op === 'update') {
-        for (const r of hits) Object.assign(r, payload, { version: (r.version as number) + 1 })
-        return { data: hits, error: null }
-      }
-      if (single) return { data: hits[0] ?? null, error: null }
-      return { data: hits, error: null }
-    }
-    return q
-  }
-  return { from } as unknown as Db
-}
 
 function baseTables() {
   return {
