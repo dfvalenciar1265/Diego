@@ -2,6 +2,7 @@
 import { useState, useTransition } from 'react'
 import { updateTaskNotes } from '@/actions/tasks'
 import type { Task } from '@/lib/types'
+import { STANDARD_CHECKOUT } from '@/lib/checkout'
 import { toast } from '@/components/ui/feedback'
 
 type PrepTask = Task & {
@@ -21,7 +22,7 @@ type PrepTask = Task & {
  * Handles all formats from DB:
  *   "3pm" · "3:00pm" · "3:00 p.m." · "12pm" · "12:00 p.m."
  */
-function reservationTimeTo24h(notes: string | null, field: 'Check-in' | 'Check-out'): string {
+function reservationTimeTo24h(notes: string | null, field: 'Check-in'): string {
   if (!notes) return ''
   // Optional minutes, flexible am/pm suffix
   const re = new RegExp(`${field}:\\s*(\\d+)(?::(\\d+))?\\s*(a|p)\\.?m?\\.?`, 'i')
@@ -86,7 +87,7 @@ export function PrepTaskCard({ task }: Props) {
 
   // Times from reservation notes — fallback to our standard (3pm / 11am)
   const defaultCiTime = reservationTimeTo24h(resNotes, 'Check-in') || '15:00'
-  const defaultCoTime = reservationTimeTo24h(resNotes, 'Check-out') || '11:00'
+  const defaultCoTime = STANDARD_CHECKOUT
 
   const { time24: savedTime, note: savedNote } = parseAnnotation(task.notes)
 

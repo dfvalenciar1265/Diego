@@ -3,6 +3,7 @@ import { todayInBogota, addDays as addDaysISO } from '@/lib/gpt-api/dates'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import type { Task, TaskStatus } from '@/lib/types'
+import { STANDARD_CHECKOUT } from '@/lib/checkout'
 
 /**
  * Returns cleaning tasks: pending/in-progress from today forward + done
@@ -101,16 +102,15 @@ export async function getWeekCleaningSchedule(weekStart: string): Promise<WeekCl
     const prop = Array.isArray(t.property) ? t.property[0] : t.property
     const assignee = Array.isArray(t.assignee) ? t.assignee[0] : t.assignee
     const res = Array.isArray(t.reservation) ? t.reservation[0] : t.reservation
-    // Prefer the edited checkout time on the task ("HH:MM|..."), else reservation notes
+    // The edited checkout time on the task ("HH:MM|..."), else the standard 11:00
     const taskTime = (t.notes as string | null)?.match(/^(\d{2}:\d{2})\|/)?.[1]
-    const resTime  = (res?.notes as string | null)?.match(/Check-out:\s*([^|]+)/i)?.[1]?.trim()
     return {
       id:            t.id,
       scheduled_for: t.scheduled_for as string,
       property_name: prop?.name ?? '—',
       assignee_name: assignee?.name ?? null,
       status:        t.status as TaskStatus,
-      checkout_time: displayTime(taskTime ?? resTime),
+      checkout_time: displayTime(taskTime ?? STANDARD_CHECKOUT),
       guest_name:    res?.guest_name ?? null,
       guests:        (res as { guests?: number | null } | null)?.guests ?? null,
     }

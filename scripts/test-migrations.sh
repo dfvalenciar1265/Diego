@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Prueba las migraciones 001–004 + 20261018130754 (base de calendarios aplicada) en una base Postgres LOCAL y temporal (nunca en Supabase).
+# Prueba las migraciones 001–004 + 20261018130754 (base de calendarios aplicada) + 20261019130000 (cobros y solicitudes) en una base Postgres LOCAL y temporal (nunca en Supabase).
 # Requiere psql/createdb (p. ej. Postgres.app). Uso: bash scripts/test-migrations.sh
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -151,4 +151,7 @@ END $$;
 RESET ROLE;
 SQL
 "${PSQL[@]}" -f scripts/test-availability-snapshot.sql
-echo "Migraciones 001–004 + 20261018130754: todas las comprobaciones pasaron."
+# Cobros adicionales y solicitudes especiales (aún sin aplicar en Supabase).
+"${PSQL[@]}" -f supabase/migrations/20261019130000_reservation_followups.sql
+"${PSQL[@]}" -f scripts/test-followups.sql
+echo "Migraciones 001–004 + 20261018130754 + 20261019130000: todas las comprobaciones pasaron."

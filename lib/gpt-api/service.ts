@@ -7,6 +7,10 @@ import { guestNameMatches } from '@/lib/gmail-sync'
 import { compareReservations } from './compare'
 import { shortDate } from './dates'
 import type { Db } from './db'
+import {
+  chargesFor, createCharge, pendingChargesDue, createRequest, findCharge, findRequest, parseChargePatch, parseNewCharge,
+  parseNewRequest, parseRequestPatch, requestsFor, updateCharge, updateRequest, type Actor,
+} from './followups'
 import { createMaintenance, listMaintenance, updateMaintenance } from './maintenance'
 import { listProperties, resolveProperty } from './properties'
 import {
@@ -25,7 +29,7 @@ import {
 
 export type ServiceResult<T = unknown> =
   | { ok: true; status: number; data: T }
-  | { ok: false; status: number; error: string }
+  | { ok: false; status: number; error: string; current?: unknown }
 
 const done = <T>(data: T, status = 200): ServiceResult<T> => ({ ok: true, status, data })
 const failed = (status: number, error: string): ServiceResult<never> => ({ ok: false, status, error })
@@ -167,14 +171,32 @@ export async function turnoversTool(db: Db, query: { date?: string | null }, tod
   if (!date.ok) return failed(400, date.error)
   const properties = await listProperties(db)
   const nameOf = (id: string) => properties.find(p => p.id === id)?.name ?? '—'
-  const [checkouts, checkins] = await Promise.all([
+  const [checkouts, checkins, dueToday] = await Promise.all([
     reservationsTurningOver(db, 'checkout', date.value),
     reservationsTurningOver(db, 'checkin', date.value),
+    pendingChargesDue(db, date.value),
   ])
+  const [charges, requests] = await Promise.all([
+    chargesFor(db, checkouts.map(r => r.id)),
+    requestsFor(db, checkins.map(r => r.id)),
+  ])
+  const pending = [...charges.filter(c => c.status === 'pending'), ...dueToday]
+    .filter((c, i, all) => all.findIndex(x => x.id === c.id) === i)
+    .map(c => ({ ...c, amount: Number(c.amount) }))
+  const checkoutIds = new Set(checkouts.map(r => r.id))
   return done({
     date: date.value,
-    checkouts: checkouts.map(r => checkoutSlot(r, date.value, nameOf(r.property_id))),
-    checkins: checkins.map(r => checkinSlot(r, nameOf(r.property_id))),
+    checkouts: checkouts.map(r => ({
+      ...checkoutSlot(r, date.value, nameOf(r.property_id)),
+      pending_charges: pending.filter(c => c.reservation_id === r.id),
+    })),
+    // Cobros que vencen ese día de reservas que no salen ese día (no se pierden de vista).
+    other_charges_due: pending.filter(c => !checkoutIds.has(c.reservation_id))
+      .map(c => ({ ...c, property: nameOf(c.property_id) })),
+    checkins: checkins.map(r => ({
+      ...checkinSlot(r, nameOf(r.property_id)),
+      special_requests: requests.filter(q => q.reservation_id === r.id && q.status !== 'cancelled'),
+    })),
   })
 }
 
@@ -324,4 +346,146 @@ export async function cancelReservationTool(db: Db, body: unknown) {
   const { reservation, tasks_deleted } = await cancelReservationRow(db, current.id)
   refreshReservations()
   return done({ already_cancelled: false, reservation: toReservationOut(reservation, propertyName), tasks_deleted })
+}
+
+// ── Cobros adicionales y solicitudes especiales ──────────────────────────────
+
+const noActor = () => failed(403, 'No sé quién está conectado: vuelve a autorizar el conector.')
+const conflict = (what: string, current: unknown) => ({
+  ok: false as const, status: 409,
+  error: `${what} cambió desde que lo leíste (otra persona o una llamada anterior). No se aplicó nada; revisa el estado actual y vuelve a intentarlo con su version.`,
+  current,
+})
+
+function refreshFollowups() {
+  revalidatePath('/')
+  revalidatePath('/cleaning')
+}
+
+async function memberIdByName(db: Db, name: string): Promise<string | null> {
+  const { data, error } = await db.from('team_members').select('id, name').eq('active', true)
+  if (error) throw new Error(error.message)
+  const hit = (data ?? []).find(m => guestNameMatches(m.name, name) || guestNameMatches(name, m.name))
+  return hit?.id ?? null
+}
+
+/**
+ * Cobros y solicitudes de una reserva o de las reservas con noches en un rango. Los totales
+ * separan lo pendiente de lo cobrado: un cobro pendiente no es ingreso recibido.
+ */
+export async function listFollowupsTool(
+  db: Db,
+  query: { reservation_id?: string | null; from?: string | null; to?: string | null; property?: string | null },
+  today: string,
+) {
+  const properties = await listProperties(db)
+  const nameOf = (id: string) => properties.find(p => p.id === id)?.name ?? '—'
+  let reservations: { id: string; property_id: string; guest_name: string; check_in: string; check_out: string; status: string; airbnb_code: string | null }[]
+  if (query.reservation_id) {
+    if (!isUuid(query.reservation_id)) return failed(400, '"reservation_id" debe ser el id de la reserva (de list_reservations).')
+    const r = await findReservationById(db, query.reservation_id)
+    if (!r) return failed(404, 'No existe esa reserva.')
+    reservations = [r]
+  } else {
+    const range = parseRange(query.from ?? null, query.to ?? null, today)
+    if (!range.ok) return failed(400, range.error)
+    let propertyId: string | undefined
+    if (query.property) {
+      const property = resolveProperty(query.property, properties)
+      if (!property) return unknownProperty(query.property)
+      propertyId = property.id
+    }
+    reservations = await listReservations(db, range.value, propertyId)
+  }
+  const ids = reservations.map(r => r.id)
+  const [charges, requests] = await Promise.all([chargesFor(db, ids), requestsFor(db, ids)])
+  const sum = (status: string) => charges.filter(c => c.status === status).reduce((s, c) => s + Number(c.amount), 0)
+  return done({
+    totals: { pending_cop: sum('pending'), collected_cop: sum('collected') },
+    needs_review: charges.filter(c => c.review_reason).length + requests.filter(q => q.review_reason).length,
+    reservations: reservations
+      .filter(r => query.reservation_id || charges.some(c => c.reservation_id === r.id) || requests.some(q => q.reservation_id === r.id))
+      .map(r => ({
+        id: r.id,
+        airbnb_code: r.airbnb_code,
+        guest_name: r.guest_name,
+        property: nameOf(r.property_id),
+        check_in: r.check_in,
+        check_out: r.check_out,
+        status: r.status,
+        charges: charges.filter(c => c.reservation_id === r.id).map(c => ({ ...c, amount: Number(c.amount) })),
+        special_requests: requests.filter(q => q.reservation_id === r.id),
+      })),
+  })
+}
+
+/** Registra un cobro adicional (aparte del precio de la reserva); repetir la llamada no duplica. */
+export async function createChargeTool(db: Db, body: unknown, actor: Actor | null) {
+  if (!actor) return noActor()
+  const input = parseNewCharge(body)
+  if (!input.ok) return failed(400, input.error)
+  const reservation = await findReservationById(db, input.value.reservation_id)
+  if (!reservation) return failed(404, 'No existe esa reserva.')
+  if (reservation.status === 'cancelled') return failed(409, 'Esa reserva está cancelada; no le registro cobros.')
+  const result = await createCharge(db, {
+    ...input.value,
+    due_date: input.value.due_date ?? reservation.check_out,
+    property_id: reservation.property_id,
+  }, actor)
+  if (result.created) refreshFollowups()
+  return done({ ...result, charge: { ...result.charge, amount: Number(result.charge.amount) } }, result.created ? 201 : 200)
+}
+
+export async function updateChargeTool(db: Db, body: unknown, actor: Actor | null, today: string) {
+  if (!actor) return noActor()
+  const patch = parseChargePatch(body, today)
+  if (!patch.ok) return failed(400, patch.error)
+  const current = await findCharge(db, patch.value.id)
+  if (!current) return failed(404, 'No existe ese cobro.')
+  if (current.version !== patch.value.expected_version) return conflict('El cobro', current)
+  const result = await updateCharge(db, patch.value, current, actor, today)
+  if (result.kind === 'not_found') return failed(404, 'No existe ese cobro.')
+  if (result.kind === 'conflict') return conflict('El cobro', result.current)
+  if (result.kind === 'rejected') return failed(409, result.message)
+  refreshFollowups()
+  return done({ previous: current, charge: { ...result.row, amount: Number(result.row.amount) } })
+}
+
+/** Registra una solicitud especial (cuna, camas…) de una reserva; repetir la llamada no duplica. */
+export async function createSpecialRequestTool(db: Db, body: unknown, actor: Actor | null) {
+  if (!actor) return noActor()
+  const input = parseNewRequest(body)
+  if (!input.ok) return failed(400, input.error)
+  const reservation = await findReservationById(db, input.value.reservation_id)
+  if (!reservation) return failed(404, 'No existe esa reserva.')
+  if (reservation.status === 'cancelled') return failed(409, 'Esa reserva está cancelada; no le registro solicitudes.')
+  let responsibleId: string | null = null
+  if (input.value.responsible) {
+    responsibleId = await memberIdByName(db, input.value.responsible)
+    if (!responsibleId) return failed(404, `No encuentro a «${input.value.responsible}» en el equipo activo.`)
+  }
+  const { reservation_id, kind, description, due_at } = input.value
+  const result = await createRequest(db, { reservation_id, kind, description, due_at, responsible_id: responsibleId, property_id: reservation.property_id }, actor)
+  if (result.created) refreshFollowups()
+  return done(result, result.created ? 201 : 200)
+}
+
+export async function updateSpecialRequestTool(db: Db, body: unknown, actor: Actor | null) {
+  if (!actor) return noActor()
+  const patch = parseRequestPatch(body)
+  if (!patch.ok) return failed(400, patch.error)
+  const current = await findRequest(db, patch.value.id)
+  if (!current) return failed(404, 'No existe esa solicitud.')
+  if (current.version !== patch.value.expected_version) return conflict('La solicitud', current)
+  let responsibleId: string | undefined
+  if (patch.value.responsible) {
+    responsibleId = (await memberIdByName(db, patch.value.responsible)) ?? undefined
+    if (!responsibleId) return failed(404, `No encuentro a «${patch.value.responsible}» en el equipo activo.`)
+  }
+  const result = await updateRequest(db, { ...patch.value, responsible_id: responsibleId }, actor)
+  if (result.kind === 'not_found') return failed(404, 'No existe esa solicitud.')
+  if (result.kind === 'conflict') return conflict('La solicitud', result.current)
+  if (result.kind === 'rejected') return failed(409, result.message)
+  refreshFollowups()
+  return done({ previous: current, request: result.row })
 }

@@ -8,6 +8,7 @@ import { uploadCleaningPhoto } from '@/lib/upload'
 import { toast } from '@/components/ui/feedback'
 import { useRef } from 'react'
 import type { Task } from '@/lib/types'
+import { STANDARD_CHECKOUT } from '@/lib/checkout'
 import type { TeamMember } from '@/lib/types'
 import { Sparkles } from 'lucide-react'
 
@@ -43,7 +44,7 @@ const PHOTO_PROOF_ENABLED = false
 
 // ── Time helpers ──────────────────────────────────────────────────────────────
 
-function reservationTimeTo24h(notes: string | null, field: 'Check-in' | 'Check-out'): string {
+function reservationTimeTo24h(notes: string | null, field: 'Check-in'): string {
   if (!notes) return ''
   const re = new RegExp(`${field}:\\s*(\\d+)(?::(\\d+))?\\s*(a|p)\\.?m?\\.?`, 'i')
   const m = notes.match(re)
@@ -329,7 +330,7 @@ function CleaningTaskCard({
 
   const guestName     = res?.guest_name ?? '—'
   const ciTime        = reservationTimeTo24h(resNotes, 'Check-in')  || '15:00'
-  const defaultCoTime = reservationTimeTo24h(resNotes, 'Check-out') || '11:00'
+  const defaultCoTime = STANDARD_CHECKOUT
   const savedCoTime   = parseCoTime(task.notes)
 
   const [coTime, setCoTime]          = useState(savedCoTime || defaultCoTime)

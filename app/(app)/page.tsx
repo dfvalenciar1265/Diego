@@ -6,6 +6,8 @@ import { getDashboardKPIs, getTodayCheckOuts } from '@/actions/dashboard'
 import { getTasks } from '@/actions/tasks'
 import { getMaintenance } from '@/actions/maintenance'
 import { getAcceptedChanges } from '@/actions/reservations'
+import { getTodayFollowups } from '@/actions/followups'
+import { ChargeLine, RequestLine } from '@/components/dashboard/FollowupItems'
 import { PendingChangeCard } from '@/components/dashboard/PendingChangeCard'
 import { getLowStockAlerts } from '@/actions/supplies'
 import { getPurchaseRequests } from '@/actions/purchases'
@@ -43,7 +45,7 @@ export default async function DashboardPage() {
 
   // All dashboard data fetched concurrently (no waterfall)
   const supabase = await createClient()
-  const [prepTasksRaw, kpis, todayTasks, stockAlerts, pendingPurchases, checkOuts, maintenanceAll, acceptedChanges] = await Promise.all([
+  const [prepTasksRaw, kpis, todayTasks, stockAlerts, pendingPurchases, checkOuts, maintenanceAll, acceptedChanges, followups] = await Promise.all([
     // Prep tasks for today's check-ins — ALL statuses (done tasks show with ✓)
     supabase
       .from('tasks')
@@ -60,7 +62,14 @@ export default async function DashboardPage() {
     getTodayCheckOuts(),
     getMaintenance(),
     getAcceptedChanges(),
+    getTodayFollowups(),
   ])
+
+  // Cobros adicionales: los de quien sale hoy van con su salida; el resto (vencidos u otros) aparte.
+  const showCharges = canDo(member.role, 'finances:view')
+  const charges = showCharges ? followups.charges : []
+  const checkoutIds = new Set(checkOuts.map(co => co.id))
+  const otherCharges = charges.filter(c => !checkoutIds.has(c.reservation_id))
 
   // Unresolved REPORTED incidences surfaced on the home so an urgent report isn't
   // siloed in the Mantenimiento tab. Excludes 'scheduled' (preventive/recurring —
@@ -121,8 +130,35 @@ export default async function DashboardPage() {
             </p>
             <div className="space-y-2.5">
               {checkOuts.map(co => (
-                <CheckoutCard key={co.id} co={co} />
+                <div key={co.id} className="space-y-1.5">
+                  <CheckoutCard co={co} />
+                  {charges.filter(c => c.reservation_id === co.id).map(c => <ChargeLine key={c.id} charge={c} />)}
+                </div>
               ))}
+            </div>
+          </section>
+        )}
+
+        {/* Cobros adicionales pendientes que no son de una salida de hoy (vencidos o de otras reservas) */}
+        {otherCharges.length > 0 && (
+          <section className="bg-white border border-[#fde68a] rounded-xl p-4 shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
+            <p className="text-xs font-semibold text-[#d97706] uppercase tracking-wide mb-3">
+              💰 Cobros adicionales pendientes ({otherCharges.length})
+            </p>
+            <div className="space-y-1.5">
+              {otherCharges.map(c => <ChargeLine key={c.id} charge={c} showStay />)}
+            </div>
+          </section>
+        )}
+
+        {/* Solicitudes especiales (cuna, camas…) que vencen hasta mañana o llegan hoy */}
+        {followups.requests.length > 0 && (
+          <section className="bg-white border border-[#e2e8f0] rounded-xl p-4 shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
+            <p className="text-xs font-semibold text-[#64748b] uppercase tracking-wide mb-2">
+              🧸 Solicitudes especiales ({followups.requests.length})
+            </p>
+            <div className="divide-y divide-[#f1f5f9]">
+              {followups.requests.map(q => <RequestLine key={q.id} request={q} />)}
             </div>
           </section>
         )}

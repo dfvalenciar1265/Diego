@@ -1,9 +1,10 @@
 /**
  * Horas de salida (check-out) y de llegada para la preparación (check-in), como las muestran
  * "Salidas de hoy" y "Preparación hoy" en la portada. La hora editada vive en la tarea del día:
- * limpieza → "HH:MM|", preparación → "HH:MM|nota". Sin hora editada vale la que quedó en la
- * reserva desde el correo de Airbnb ("Check-out: 11:00 AM") o la de siempre (11:00 / 15:00).
+ * limpieza → "HH:MM|", preparación → "HH:MM|nota". Sin hora editada, la salida es la estándar
+ * (11:00, lib/checkout.ts) y la llegada la del correo de Airbnb o 15:00.
  */
+import { STANDARD_CHECKOUT } from '@/lib/checkout'
 import type { Db } from './db'
 
 export interface TurnoverTask {
@@ -26,7 +27,10 @@ export interface TurnoverReservation {
   tasks: TurnoverTask[] | null
 }
 
-/** app = la fijó alguien en la app; reservation = la de la reserva (correo de Airbnb); default = la de siempre. */
+/**
+ * app = la fijó alguien en la app (en la salida, una excepción autorizada); reservation = la del correo
+ * de Airbnb (solo llegadas); default = la estándar (salida 11:00, llegada 15:00).
+ */
 export type TimeSource = 'app' | 'reservation' | 'default'
 
 export interface CheckoutSlot {
@@ -50,7 +54,6 @@ export interface CheckinSlot {
   preparation_status: string | null
 }
 
-const DEFAULT_CHECKOUT = '11:00'
 const DEFAULT_CHECKIN = '15:00'
 const TIME_PREFIX = /^(\d{2}:\d{2})\|/
 
@@ -82,8 +85,8 @@ function taskTime(notes: string | null): string | null {
   return notes?.match(TIME_PREFIX)?.[1] ?? null
 }
 
-/** Hora que quedó en la reserva desde el correo ("Check-out: 11:00 AM | …"), o null. */
-function reservationTime(notes: string | null, field: 'Check-in' | 'Check-out'): string | null {
+/** Hora de llegada que quedó en la reserva desde el correo ("Check-in: 3:00 PM | …"), o null. */
+function reservationTime(notes: string | null, field: 'Check-in'): string | null {
   const raw = notes?.match(new RegExp(`${field}:\\s*([^|]+)`, 'i'))?.[1]?.trim()
   return raw ? parseClockTime(raw) : null
 }
@@ -109,13 +112,12 @@ export function withCheckinTime(notes: string | null, time: string): string {
 export function checkoutSlot(r: TurnoverReservation, date: string, property: string): CheckoutSlot {
   const task = r.tasks?.find(t => t.type === 'cleaning' && t.scheduled_for === date) ?? null
   const fromApp = taskTime(task?.notes ?? null)
-  const fromReservation = reservationTime(r.notes, 'Check-out')
   return {
     property,
     guest_name: r.guest_name,
     airbnb_code: r.airbnb_code,
-    time: fromApp ?? fromReservation ?? DEFAULT_CHECKOUT,
-    time_source: fromApp ? 'app' : fromReservation ? 'reservation' : 'default',
+    time: fromApp ?? STANDARD_CHECKOUT,
+    time_source: fromApp ? 'app' : 'default',
     cleaning_task_id: task?.id ?? null,
   }
 }
