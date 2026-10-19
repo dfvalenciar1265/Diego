@@ -508,13 +508,13 @@ export function parseConfirmationEmail(
 
   // ── Times — extracted from email for prepopulating task cards ────────────
   const ciTimeMatch = text.match(/(?:Check-in|Llegada)[:\s\n]+(\d{1,2}(?::\d{2})?\s*[ap]\.?m\.?)/i)
-  const coTimeMatch = text.match(/(?:Check-out|Salida)[:\s\n]+(\d{1,2}(?::\d{2})?\s*[ap]\.?m\.?)/i)
 
   // Notes: only store times (used by task cards) + cancellation policy.
   // Guests/code are now dedicated columns; times are needed for CleaningView/PrepTaskCard.
+  // Check-out is always 11am in every apartment, whatever time the email shows.
   const notes = [
     ciTimeMatch ? `Check-in: ${ciTimeMatch[1]}` : 'Check-in: 3pm',
-    coTimeMatch ? `Check-out: ${coTimeMatch[1]}` : 'Check-out: 11am',
+    'Check-out: 11am',
     `Cancelación: ${cancelPolicy}`,
   ].join(' | ')
 
