@@ -1,5 +1,9 @@
 'use server'
+import { revalidatePath } from 'next/cache'
+import { getCurrentMember } from '@/lib/auth'
 import { addDays, todayInBogota } from '@/lib/gpt-api/dates'
+import type { Db } from '@/lib/gpt-api/db'
+import { findCharge, findRequest, parseChargePatch, parseRequestPatch, updateCharge, updateRequest } from '@/lib/gpt-api/followups'
 import { createClient } from '@/lib/supabase/server'
 
 /** Cobro adicional pendiente (no es ingreso recibido), tal como lo muestra la portada. */
@@ -10,6 +14,7 @@ export interface DueCharge {
   amount: number
   due_date: string
   review_reason: string | null
+  version: number
   property_name: string
   guest_name: string
 }
@@ -22,6 +27,7 @@ export interface OpenRequest {
   status: 'registered' | 'notified' | 'ready' | 'cancelled'
   due_at: string
   review_reason: string | null
+  version: number
   property_name: string
   guest_name: string
   check_in: string
@@ -45,12 +51,12 @@ export async function getTodayFollowups(): Promise<{ charges: DueCharge[]; reque
 
   const [chargesRes, requestsRes] = await Promise.all([
     supabase.from('reservation_charges')
-      .select('id, reservation_id, concept, amount, due_date, review_reason, reservation:reservations!inner(guest_name, check_in, check_out, property:properties(name))')
+      .select('id, reservation_id, concept, amount, due_date, review_reason, version, reservation:reservations!inner(guest_name, check_in, check_out, property:properties(name))')
       .eq('status', 'pending')
       .order('due_date')
       .limit(300),
     supabase.from('special_requests')
-      .select('id, kind, description, status, due_at, review_reason, responsible:team_members!special_requests_responsible_id_fkey(name), reservation:reservations!inner(guest_name, check_in, check_out, property:properties(name))')
+      .select('id, kind, description, status, due_at, review_reason, version, responsible:team_members!special_requests_responsible_id_fkey(name), reservation:reservations!inner(guest_name, check_in, check_out, property:properties(name))')
       .in('status', ['registered', 'notified', 'ready'])
       .lt('due_at', limit)
       .gte('reservation.check_out', today)
@@ -85,4 +91,52 @@ export async function getTodayFollowups(): Promise<{ charges: DueCharge[]; reque
     // Las ya listas solo se muestran el día de la llegada, como confirmación.
     .filter(q => q.status !== 'ready' || q.check_in === today)
   return { charges, requests }
+}
+
+export type FollowupActionResult = { success: true } | { success: false; error: string }
+
+const CHANGED = 'Alguien lo cambió hace un momento. Recarga la página y revisa antes de repetir.'
+
+/** Marca un cobro adicional como cobrado: exige la referencia o comprobante. Solo administradores. */
+export async function markChargeCollected(
+  id: string, expectedVersion: number, confirmation: string, collectedOn?: string,
+): Promise<FollowupActionResult> {
+  const member = await getCurrentMember()
+  if (!member || member.role !== 'admin') return { success: false, error: 'Solo un administrador marca cobros.' }
+  const today = todayInBogota()
+  const patch = parseChargePatch({
+    id, expected_version: expectedVersion, status: 'collected', confirmation, collected_on: collectedOn || today,
+  }, today)
+  if (!patch.ok) return { success: false, error: patch.error }
+  const db = (await createClient()) as unknown as Db
+  const current = await findCharge(db, id)
+  if (!current) return { success: false, error: 'Ese cobro ya no existe.' }
+  const result = await updateCharge(db, patch.value, current, { id: member.id, via: 'app' }, today)
+  if (result.kind === 'conflict') return { success: false, error: CHANGED }
+  if (result.kind !== 'ok') return { success: false, error: result.kind === 'rejected' ? result.message : 'Ese cobro ya no existe.' }
+  revalidatePath('/')
+  return { success: true }
+}
+
+/**
+ * Solicitud especial: "notified" = se avisó (a quién y por dónde); "ready" = quedó hecha y alguien
+ * lo confirma. Cualquiera del equipo puede hacerlo; la base solo le deja cambiar eso.
+ */
+export async function advanceSpecialRequest(
+  id: string, expectedVersion: number, status: 'notified' | 'ready', text: string,
+): Promise<FollowupActionResult> {
+  const member = await getCurrentMember()
+  if (!member) return { success: false, error: 'Tu sesión expiró. Vuelve a entrar.' }
+  const patch = parseRequestPatch({
+    id, expected_version: expectedVersion, status,
+    ...(status === 'notified' ? { notified_note: text } : { ready_confirmation: `${member.name}: ${text}` }),
+  })
+  if (!patch.ok) return { success: false, error: patch.error }
+  const db = (await createClient()) as unknown as Db
+  if (!(await findRequest(db, id))) return { success: false, error: 'Esa solicitud ya no existe.' }
+  const result = await updateRequest(db, patch.value, { id: member.id, via: 'app' })
+  if (result.kind === 'conflict') return { success: false, error: CHANGED }
+  if (result.kind !== 'ok') return { success: false, error: result.kind === 'rejected' ? result.message : 'Esa solicitud ya no existe.' }
+  revalidatePath('/')
+  return { success: true }
 }
