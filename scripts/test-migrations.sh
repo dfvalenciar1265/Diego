@@ -34,7 +34,8 @@ SQL
 for f in supabase/migrations/00{1,2}_*.sql; do "${PSQL[@]}" -f "$f"; done
 # Existing app columns added outside the checked-in baseline migrations.
 "${PSQL[@]}" -c "ALTER TABLE public.properties ADD COLUMN active boolean NOT NULL DEFAULT true;
-  ALTER TABLE public.reservations ADD COLUMN pending_change jsonb;"
+  ALTER TABLE public.reservations ADD COLUMN pending_change jsonb;
+  ALTER TABLE public.reservations ADD COLUMN guests int;"
 "${PSQL[@]}" -c "CREATE TABLE public.expenses (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), property_id uuid, date date);"
 for f in supabase/migrations/00{3,4}_*.sql; do "${PSQL[@]}" -f "$f"; done
 # La base de calendarios tal como se aplicó en Supabase el 18-oct-2026 (incluye las antiguas 005–007).
@@ -158,4 +159,7 @@ SQL
 "${PSQL[@]}" -f supabase/migrations/20261030131630_reservation_times.sql
 "${PSQL[@]}" -f scripts/test-reservation-times.sql
 bash scripts/test-reservation-times-concurrency.sh "$DB"
-echo "Migraciones 001–004 + 20261018130754 + 20261019130000 + horarios: todas las comprobaciones pasaron."
+"${PSQL[@]}" -f supabase/migrations/20261030153122_gmail_reconciliation.sql
+"${PSQL[@]}" -f scripts/test-gmail-reconciliation.sql
+bash scripts/test-gmail-concurrency.sh "$DB"
+echo "Migraciones base + cobros/solicitudes + horarios + conciliación Gmail: todas las comprobaciones pasaron."
