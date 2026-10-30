@@ -21,7 +21,9 @@ export function DashboardPrepCard({ task, canEdit = false }: { task: PrepTask; c
   const timing = r ? resolveReservationTiming(r, 'checkin', task) : null
   const heading = <>
     <p className="text-sm font-semibold text-[#0f172a]">{task.status === 'done' ? '✅' : '🛏️'} {task.property?.name ?? '—'}</p>
-    <p className="text-xs text-[#64748b]">{r?.guest_name ?? '—'} · {r?.guests ?? '—'} huéspedes</p>
+    <p className="text-xs text-[#64748b]">{r?.guest_name ?? '—'} · <span className="font-semibold text-[#0f172a]">
+      {r?.guests == null ? 'Huéspedes por confirmar' : `${r.guests} huésped${r.guests === 1 ? '' : 'es'}`}
+    </span></p>
     {r ? <p className="text-xs text-[#64748b]">Llega el {new Intl.DateTimeFormat('es-CO', {
       timeZone: 'America/Bogota', day: 'numeric', month: 'short',
     }).format(new Date(`${r.check_in}T12:00:00-05:00`))}</p> : null}
