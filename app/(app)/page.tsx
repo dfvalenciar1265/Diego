@@ -127,7 +127,7 @@ export default async function DashboardPage() {
           <section className="bg-white border border-[#e2e8f0] rounded-xl p-4
                               shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
             <p className="text-xs font-semibold text-[#64748b] uppercase tracking-wide mb-3">
-              🚪 Check-outs de hoy — horarios
+              🚪 Salidas de hoy
             </p>
             <div className="space-y-2.5">
               {checkOuts.map(co => (

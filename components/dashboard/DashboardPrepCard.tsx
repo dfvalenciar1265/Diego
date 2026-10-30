@@ -19,6 +19,13 @@ export function DashboardPrepCard({ task, canEdit = false }: { task: PrepTask; c
   const [error, setError] = useState('')
   const [pending, startTransition] = useTransition()
   const timing = r ? resolveReservationTiming(r, 'checkin', task) : null
+  const heading = <>
+    <p className="text-sm font-semibold text-[#0f172a]">{task.status === 'done' ? '✅' : '🛏️'} {task.property?.name ?? '—'}</p>
+    <p className="text-xs text-[#64748b]">{r?.guest_name ?? '—'} · {r?.guests ?? '—'} huéspedes</p>
+    {r ? <p className="text-xs text-[#64748b]">Llega el {new Intl.DateTimeFormat('es-CO', {
+      timeZone: 'America/Bogota', day: 'numeric', month: 'short',
+    }).format(new Date(`${r.check_in}T12:00:00-05:00`))}</p> : null}
+  </>
   function saveNote() {
     startTransition(async () => {
       try {
@@ -29,12 +36,10 @@ export function DashboardPrepCard({ task, canEdit = false }: { task: PrepTask; c
     })
   }
   return <div className="rounded-xl border bg-white px-3 py-2.5 shadow-sm">
-    <p className="text-sm font-semibold">{task.status === 'done' ? '✅' : '🛏️'} {task.property?.name ?? '—'}</p>
-    <p className="text-xs text-[#64748b]">{r?.guest_name ?? '—'} · {r?.guests ?? '—'} huéspedes · entrada {r?.check_in}</p>
-    {timing && r ? <ReservationTimePanel key={timing.version} timing={timing} stay={r} canEdit={canEdit} /> : null}
-    <label className="mt-2 block text-xs">Nota de preparación
-      <textarea rows={2} value={note} disabled={pending} onChange={e => setNote(e.target.value)} onBlur={saveNote}
-        className="mt-1 w-full rounded border p-2" />
+    {timing && r ? <ReservationTimePanel key={timing.version} timing={timing} stay={r} canEdit={canEdit} heading={heading} /> : heading}
+    <label className="mt-1 block text-xs">Nota para el equipo
+      <textarea rows={1} value={note} disabled={pending} onChange={e => setNote(e.target.value)} onBlur={saveNote}
+        placeholder="Indicaciones para esta llegada" className="mt-1 min-h-11 w-full rounded border p-2" />
     </label>
     {error ? <p role="alert" className="text-xs text-red-700">{error}</p> : null}
     {r ? <NotifyBuildingButton taskId={task.id} notifiedAt={task.building_notified_at ?? null} data={{
