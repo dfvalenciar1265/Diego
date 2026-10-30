@@ -151,7 +151,11 @@ END $$;
 RESET ROLE;
 SQL
 "${PSQL[@]}" -f scripts/test-availability-snapshot.sql
-# Cobros adicionales y solicitudes especiales (aún sin aplicar en Supabase).
+# Cobros adicionales y solicitudes especiales (base ya aplicada en Supabase).
 "${PSQL[@]}" -f supabase/migrations/20261019130000_reservation_followups.sql
 "${PSQL[@]}" -f scripts/test-followups.sql
-echo "Migraciones 001–004 + 20261018130754 + 20261019130000: todas las comprobaciones pasaron."
+"${PSQL[@]}" -f scripts/test-reservation-times-before.sql
+"${PSQL[@]}" -f supabase/migrations/20261030131630_reservation_times.sql
+"${PSQL[@]}" -f scripts/test-reservation-times.sql
+bash scripts/test-reservation-times-concurrency.sh "$DB"
+echo "Migraciones 001–004 + 20261018130754 + 20261019130000 + horarios: todas las comprobaciones pasaron."

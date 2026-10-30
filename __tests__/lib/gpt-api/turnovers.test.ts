@@ -51,7 +51,7 @@ const reservation = (over: Partial<TurnoverReservation> = {}): TurnoverReservati
 describe('checkoutSlot', () => {
   it('uses the time set in the app on that day\'s cleaning task', () => {
     const r = reservation({ tasks: [{ id: 't1', type: 'cleaning', scheduled_for: '2026-10-13', notes: '09:30|', status: 'pending' }] })
-    expect(checkoutSlot(r, '2026-10-13', 'Palmetto 1001')).toEqual({
+    expect(checkoutSlot(r, '2026-10-13', 'Palmetto 1001')).toMatchObject({
       property: 'Palmetto 1001', guest_name: 'Laura Gómez', airbnb_code: 'HMAAA111',
       time: '09:30', time_source: 'app', cleaning_task_id: 't1',
     })
@@ -71,16 +71,16 @@ describe('checkoutSlot', () => {
 describe('checkinSlot', () => {
   it('uses the time and note set in the app on the preparation task', () => {
     const r = reservation({ tasks: [{ id: 't2', type: 'preparation', scheduled_for: '2026-10-09', notes: '18:00|Llega tarde', status: 'done' }] })
-    expect(checkinSlot(r, 'Palmetto 1001')).toEqual({
+    expect(checkinSlot(r, 'Palmetto 1001')).toMatchObject({
       property: 'Palmetto 1001', guest_name: 'Laura Gómez', airbnb_code: 'HMAAA111', guests: 2,
       time: '18:00', time_source: 'app', note: 'Llega tarde', preparation_task_id: 't2', preparation_status: 'done',
     })
   })
 
-  it('falls back to the reservation email time, then to 3pm', () => {
+  it('mantiene las 15:00; el horario del correo no autoriza una excepción', () => {
     const task = { id: 't2', type: 'preparation', scheduled_for: '2026-10-09', notes: 'Preparación para Laura (check-in 2026-10-10)', status: 'pending' }
-    expect(checkinSlot(reservation({ tasks: [task] }), 'P')).toMatchObject({ time: '15:00', time_source: 'reservation', note: '' })
-    expect(checkinSlot(reservation({ notes: 'Check-in: 4pm', tasks: [] }), 'P')).toMatchObject({ time: '16:00', time_source: 'reservation' })
+    expect(checkinSlot(reservation({ tasks: [task] }), 'P')).toMatchObject({ time: '15:00', time_source: 'default', note: '' })
+    expect(checkinSlot(reservation({ notes: 'Check-in: 4pm', tasks: [] }), 'P')).toMatchObject({ time: '15:00', time_source: 'default' })
     expect(checkinSlot(reservation({ notes: '', tasks: [] }), 'P')).toMatchObject({
       time: '15:00', time_source: 'default', preparation_task_id: null, preparation_status: null,
     })

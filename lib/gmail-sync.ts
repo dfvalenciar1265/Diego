@@ -7,7 +7,10 @@
  * old plaintext and new HTML-only emails.
  */
 
+import { parseEmailTimeFacts, type EmailTimes } from './gmail-times'
+
 export interface ParsedReservation {
+  email_times?: EmailTimes
   airbnb_code: string
   property_id: string
   guest_name: string
@@ -202,6 +205,7 @@ interface GmailMessagePart {
 }
 
 interface GmailMessage {
+  id?: string
   internalDate?: string   // ms since epoch, as a string
   payload?: {
     headers?: Array<{ name: string; value: string }>
@@ -278,6 +282,8 @@ export async function getMessagePlaintext(
 }
 
 export interface EmailMessage {
+  date_known?: boolean
+  id: string
   text: string
   date: Date   // when Gmail received it
 }
@@ -296,6 +302,8 @@ async function getThreadMessages(accessToken: string, threadId: string): Promise
   if (!res.ok) return []
   const t = await res.json() as { messages?: GmailMessage[] }
   return (t.messages ?? []).map(m => ({
+    date_known: Boolean(m.internalDate),
+    id: m.id ?? `${threadId}:${m.internalDate ?? 'unknown'}`,
     text: messageToPlaintext(m),
     date: m.internalDate ? new Date(Number(m.internalDate)) : new Date(),
   }))
@@ -688,7 +696,7 @@ export async function fetchAirbnbEmails(
     // message of every thread synchronously, each with the date it was sent.
     const perThread = await mapWithConcurrency(threads, 10, t => getThreadMessages(accessToken, t.id))
 
-    for (const { text, date } of perThread.flat()) {
+    for (const { text, date, id, date_known } of perThread.flat()) {
       if (!text) { dEmptyText++; continue }
 
       // Determine email type by content (case-insensitive — Airbnb uses ALL CAPS in some formats)
@@ -727,7 +735,7 @@ export async function fetchAirbnbEmails(
         const property_id = resolvePropertyId(text) ?? undefined
         if (!property_id) { skippedNoRoom++; continue }
 
-        confirmed.push({ ...parsed, property_id })
+        confirmed.push({ ...parsed, property_id, ...(date_known ? { email_times: { reference: id, observed_at: date.toISOString(), facts: parseEmailTimeFacts(text) } } : {}) })
       }
     }
   } while (pageToken)
@@ -757,7 +765,7 @@ export async function fetchConfirmationByCode(
   const { threads = [] } = await gmailSearch(accessToken, query)
 
   for (const thread of threads) {
-    for (const { text, date } of await getThreadMessages(accessToken, thread.id)) {
+    for (const { text, date, id, date_known } of await getThreadMessages(accessToken, thread.id)) {
       if (!text.includes(code)) continue
       if (text.includes('SE ACTUALIZÓ') || text.includes('actualizó')) continue
 
@@ -767,7 +775,7 @@ export async function fetchConfirmationByCode(
       const property_id = resolvePropertyId(text) ?? undefined
       if (!property_id) return null
 
-      return { ...parsed, property_id }
+      return { ...parsed, property_id, ...(date_known ? { email_times: { reference: id, observed_at: date.toISOString(), facts: parseEmailTimeFacts(text) } } : {}) }
     }
   }
   return null

@@ -1,14 +1,15 @@
 'use client'
 import { addDays as addDaysISO } from '@/lib/gpt-api/dates'
 import { useState, useTransition } from 'react'
-import { assignAndStartTask, updateTaskNotes, updateTaskStatus, setTaskPhoto, type WeekCleaningTask } from '@/actions/tasks'
+import { assignAndStartTask, updateTaskStatus, setTaskPhoto, type WeekCleaningTask } from '@/actions/tasks'
 import { Pagination, paginate, pageCount } from '@/components/ui/Pagination'
 import { WeeklyScheduleView } from './WeeklyScheduleView'
 import { uploadCleaningPhoto } from '@/lib/upload'
 import { toast } from '@/components/ui/feedback'
 import { useRef } from 'react'
 import type { Task } from '@/lib/types'
-import { STANDARD_CHECKOUT } from '@/lib/checkout'
+import { resolveReservationTiming, type TimeEvent } from '@/lib/reservation-times'
+import { ReservationTimePanel } from '@/components/dashboard/ReservationTimePanel'
 import type { TeamMember } from '@/lib/types'
 import { Sparkles } from 'lucide-react'
 
@@ -16,6 +17,7 @@ type CleaningTask = Task & {
   property?: { name: string }
   assignee?: { name: string }
   reservation?: {
+    id: string; property_id: string; status: string; time_version?: number; time_events: TimeEvent[]
     check_in: string
     check_out: string
     notes: string | null
@@ -44,19 +46,6 @@ const PHOTO_PROOF_ENABLED = false
 
 // ── Time helpers ──────────────────────────────────────────────────────────────
 
-function reservationTimeTo24h(notes: string | null, field: 'Check-in'): string {
-  if (!notes) return ''
-  const re = new RegExp(`${field}:\\s*(\\d+)(?::(\\d+))?\\s*(a|p)\\.?m?\\.?`, 'i')
-  const m = notes.match(re)
-  if (!m) return ''
-  let h = parseInt(m[1], 10)
-  const mins = m[2] ?? '00'
-  const period = m[3].toLowerCase()
-  if (period === 'p' && h !== 12) h += 12
-  if (period === 'a' && h === 12) h = 0
-  return `${String(h).padStart(2, '0')}:${mins}`
-}
-
 function to12h(t: string): string {
   if (!t) return '—'
   const [h, m] = t.split(':').map(Number)
@@ -79,17 +68,6 @@ function fmtDatetime(iso: string | null): string {
   const months = ['ene', 'feb', 'mar', 'abr', 'may', 'jun',
     'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
   return `${d.getDate()} ${months[d.getMonth()]} · ${to12h(`${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`)}`
-}
-
-function parseCoTime(raw: string | null): string {
-  if (!raw) return ''
-  const m = raw.match(/^(\d{2}:\d{2})\|/)
-  if (m) return m[1]
-  return ''
-}
-
-function buildCoAnnotation(time24: string): string {
-  return time24 ? `${time24}|` : ''
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
@@ -326,16 +304,10 @@ function CleaningTaskCard({
   locked?: boolean   // future cleanings: read-only preview, can't start/finish early
 }) {
   const res      = task.reservation
-  const resNotes = res?.notes ?? null
-
-  const guestName     = res?.guest_name ?? '—'
-  const ciTime        = reservationTimeTo24h(resNotes, 'Check-in')  || '15:00'
-  const defaultCoTime = STANDARD_CHECKOUT
-  const savedCoTime   = parseCoTime(task.notes)
-
-  const [coTime, setCoTime]          = useState(savedCoTime || defaultCoTime)
-  const [editingCoTime, setEditing]  = useState(false)
-  const [pickingPerson, setPicking]  = useState(false)
+  const guestName = res?.guest_name ?? '—'
+  const timing = res ? resolveReservationTiming(res, 'checkout', task) : null
+  const ciTime = res ? resolveReservationTiming(res, 'checkin').effective_time : '15:00'
+  const [pickingPerson, setPicking] = useState(false)
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState('')
   const [photoUrl, setPhotoUrl]      = useState(task.photo_url)
@@ -371,18 +343,6 @@ function CleaningTaskCard({
     toast.error(message)
   }
 
-  function saveCoTime(time: string) {
-    setError('')
-    startTransition(async () => {
-      try {
-        const res = await updateTaskNotes(task.id, buildCoAnnotation(time))
-        if (!res.success) { fail('No se pudo guardar la hora. Revisa tu conexión.'); return }
-        toast.success(`Hora de salida: ${to12h(time)}`)
-      } catch {
-        fail('No se pudo guardar la hora. Revisa tu conexión.')
-      }
-    })
-  }
 
   function startWithPerson(memberId: string) {
     setError('')
@@ -471,32 +431,12 @@ function CleaningTaskCard({
           <p className="text-[11px] text-[#64748b] font-semibold mb-1.5">CHECK-OUT</p>
           <div className="flex items-baseline gap-1.5 flex-wrap">
             <span className="text-sm font-bold text-[#0f172a]">{shortDate(res?.check_out)}</span>
-            {editingCoTime ? (
-              <input
-                type="time"
-                autoFocus
-                value={coTime}
-                onChange={e => setCoTime(e.target.value)}
-                onBlur={() => {
-                  setEditing(false)
-                  saveCoTime(coTime)
-                }}
-                className="text-xs border border-[#6366f1] rounded-md px-1 py-0.5
-                           focus:outline-none bg-white w-[90px]"
-              />
-            ) : (
-              <button
-                onClick={() => setEditing(true)}
-                aria-label="Cambiar la hora de salida"
-                className="text-xs font-semibold text-[#6366f1] flex items-center gap-0.5 py-3 -my-3
-                           active:opacity-60 transition-opacity"
-              >
-                {coTime ? to12h(coTime) : '+ hora'} ✏️
-              </button>
-            )}
+            <span className="text-xs font-semibold text-[#6366f1]">{to12h(timing?.effective_time ?? '11:00')}</span>
           </div>
         </div>
       </div>
+
+      {timing && res ? <ReservationTimePanel key={timing.version} timing={timing} stay={res} canEdit={isAdmin} /> : null}
 
       {/* Guests + Assignee */}
       <div className="flex items-center gap-3 mb-3">

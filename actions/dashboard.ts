@@ -3,9 +3,11 @@ import { createClient } from '@/lib/supabase/server'
 import { format, startOfMonth, endOfMonth } from 'date-fns'
 import type { DashboardKPIs, OccupancyData } from '@/lib/types'
 import { getOccupiedDaysInWeek } from '@/lib/utils'
-import { STANDARD_CHECKOUT } from '@/lib/checkout'
+import { resolveReservationTiming, type ReservationTiming, type TimeEvent } from '@/lib/reservation-times'
 
 export interface TodayCheckOut {
+  timing: ReservationTiming
+  stay: { check_in: string; check_out: string }
   id: string
   guest_name: string
   check_out_time: string      // display, e.g. "12pm"
@@ -54,16 +56,18 @@ export async function getTodayCheckOuts(): Promise<TodayCheckOut[]> {
   const supabase = await createClient()
   const today = todayInBogota()
 
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('reservations')
-    .select(`id, guest_name, notes, guests, property:properties(name), tasks(id, notes, type, scheduled_for)`)
+    .select(`id, property_id, check_in, check_out, status, time_version, time_events:reservation_time_events(*), guest_name, notes, guests, property:properties(name), tasks(id, notes, type, scheduled_for)`)
     .eq('check_out', today)
     .eq('status', 'confirmed')
     .order('guest_name')
+  if (error) throw new Error(error.message)
   if (!data) return []
 
   type CheckoutTaskRow = { id: string; type: string; scheduled_for: string; notes: string | null }
   type CheckoutRow = {
+    property_id: string; check_in: string; check_out: string; status: string; time_version?: number; time_events: TimeEvent[]
     id: string
     guest_name: string | null
     notes: string | null
@@ -77,13 +81,13 @@ export async function getTodayCheckOuts(): Promise<TodayCheckOut[]> {
     const cleaningTask = r.tasks?.find(
       t => t.type === 'cleaning' && t.scheduled_for === today
     )
-    const taskTimeMatch = cleaningTask?.notes?.match(/^(\d{2}:\d{2})\|/)
-    const rawTime = taskTimeMatch?.[1] ?? STANDARD_CHECKOUT
-
-    const parts = parseTimeParts(rawTime)
+    const timing = resolveReservationTiming(r, 'checkout', cleaningTask)
+    const parts = parseTimeParts(timing.effective_time)
     const prop = Array.isArray(r.property) ? r.property[0] : r.property
     return {
       id: r.id,
+      timing,
+      stay: { check_in: r.check_in, check_out: r.check_out },
       guest_name: r.guest_name ?? '—',
       check_out_time: toDisplayTime(parts),
       check_out_time_24: to24hInput(parts),

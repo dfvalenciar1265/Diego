@@ -14,6 +14,7 @@
  *   4. Repairs active reservations left without their cleaning/preparation tasks
  *   5. Auto-completes tasks whose scheduled date is in the past
  */
+import { importEmailTimes } from '@/lib/gmail-times'
 import { todayInBogota } from '@/lib/gpt-api/dates'
 import { NextRequest, NextResponse } from 'next/server'
 import { revalidatePath } from 'next/cache'
@@ -113,9 +114,15 @@ async function syncHandler(req: NextRequest, fromCron: boolean) {
   let cancelledCount = 0
 
   // ── 1. Import new "Reservación confirmada" emails ────────────────────────
-  for (const r of emailResult.confirmed) {
-    const inserted = await insertReservationIfNew(db, r)
-    if (inserted) newCount++
+  try {
+    for (const r of emailResult.confirmed) {
+      const inserted = await insertReservationIfNew(db, r)
+      if (inserted) newCount++
+    }
+  } catch {
+    const error = 'La importación de horarios requiere revisión. Los ajustes manuales se conservaron.'
+    await db.from('gmail_sync_log').insert({ triggered_by: triggeredBy, new_count: newCount, error })
+    return NextResponse.json({ error }, { status: 409 })
   }
 
   // ── 1b. Process "Reservación cancelada" emails ───────────────────────────
@@ -341,7 +348,7 @@ async function insertReservationIfNew(
   r: ParsedReservation
 ): Promise<boolean> {
   const { data: existing } = await db
-    .from('reservations').select('id, amount, guests').eq('airbnb_code', r.airbnb_code).single()
+    .from('reservations').select('id, amount, guests, check_in, check_out, status').eq('airbnb_code', r.airbnb_code).single()
 
   if (existing) {
     const updates: Record<string, unknown> = {}
@@ -352,12 +359,19 @@ async function insertReservationIfNew(
     if (Object.keys(updates).length > 0) {
       await db.from('reservations').update(updates).eq('id', existing.id)
     }
+    if (r.email_times && existing.status === 'confirmed') {
+      // El RPC comprueba las fechas del correo: nunca atribuir una hora vieja a otra estancia.
+      await importEmailTimes(db, { id: existing.id, check_in: r.check_in, check_out: r.check_out }, r.email_times)
+    }
     return false
   }
 
+  const { email_times, ...reservationData } = r
   const { data: inserted, error } = await db
-    .from('reservations').insert(r).select('id').single()
+    .from('reservations').insert(reservationData).select('id').single()
   if (error || !inserted) return false
+
+  if (email_times) await importEmailTimes(db, { id: inserted.id, check_in: r.check_in, check_out: r.check_out }, email_times)
 
   // Auto-create cleaning + preparation tasks (a failure here is repaired by step 4).
   // A stay that already ended (old email caught by a long resync) needs none —

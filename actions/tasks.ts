@@ -3,6 +3,8 @@ import { todayInBogota, addDays as addDaysISO } from '@/lib/gpt-api/dates'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import type { Task, TaskStatus } from '@/lib/types'
+import { getCurrentMember } from '@/lib/auth'
+import { annotationTime, resolveReservationTiming } from '@/lib/reservation-times'
 import { STANDARD_CHECKOUT } from '@/lib/checkout'
 
 /**
@@ -12,7 +14,7 @@ import { STANDARD_CHECKOUT } from '@/lib/checkout'
 export async function getCleaningTasks(): Promise<(Task & {
   property?: { name: string }
   assignee?: { name: string }
-  reservation?: { check_in: string; check_out: string; notes: string | null; guest_name: string | null; guests: number | null } | null
+  reservation?: { id: string; property_id: string; status: string; time_events: import('@/lib/reservation-times').TimeEvent[]; check_in: string; check_out: string; notes: string | null; guest_name: string | null; guests: number | null } | null
 })[]> {
   const supabase = await createClient()
   const today   = todayInBogota()
@@ -21,7 +23,7 @@ export async function getCleaningTasks(): Promise<(Task & {
   // Active tasks: today and forward
   const activeQ = supabase
     .from('tasks')
-    .select('*, property:properties(name), assignee:team_members(name), reservation:reservations(check_in, check_out, notes, guest_name, guests)')
+    .select('*, property:properties(name), assignee:team_members(name), reservation:reservations(id, property_id, status, time_version, time_events:reservation_time_events(*), check_in, check_out, notes, guest_name, guests)')
     .eq('type', 'cleaning')
     .gte('scheduled_for', today)
     .neq('status', 'done')
@@ -30,7 +32,7 @@ export async function getCleaningTasks(): Promise<(Task & {
   // Done tasks: last 30 days
   const doneQ = supabase
     .from('tasks')
-    .select('*, property:properties(name), assignee:team_members(name), reservation:reservations(check_in, check_out, notes, guest_name, guests)')
+    .select('*, property:properties(name), assignee:team_members(name), reservation:reservations(id, property_id, status, time_version, time_events:reservation_time_events(*), check_in, check_out, notes, guest_name, guests)')
     .eq('type', 'cleaning')
     .eq('status', 'done')
     .gte('scheduled_for', ago30)
@@ -88,7 +90,7 @@ export async function getWeekCleaningSchedule(weekStart: string): Promise<WeekCl
 
   const { data, error } = await supabase
     .from('tasks')
-    .select('id, scheduled_for, status, notes, property:properties(name), assignee:team_members(name), reservation:reservations(notes, guest_name, guests)')
+    .select('id, scheduled_for, status, notes, property:properties(name), assignee:team_members(name), reservation:reservations(id, property_id, check_in, check_out, status, time_version, time_events:reservation_time_events(*), notes, guest_name, guests)')
     .eq('type', 'cleaning')
     .gte('scheduled_for', weekStart)
     .lte('scheduled_for', weekEnd)
@@ -102,15 +104,14 @@ export async function getWeekCleaningSchedule(weekStart: string): Promise<WeekCl
     const prop = Array.isArray(t.property) ? t.property[0] : t.property
     const assignee = Array.isArray(t.assignee) ? t.assignee[0] : t.assignee
     const res = Array.isArray(t.reservation) ? t.reservation[0] : t.reservation
-    // The edited checkout time on the task ("HH:MM|..."), else the standard 11:00
-    const taskTime = (t.notes as string | null)?.match(/^(\d{2}:\d{2})\|/)?.[1]
+    const timing = res ? resolveReservationTiming(res, 'checkout', { id: t.id, notes: t.notes, scheduled_for: t.scheduled_for }) : null
     return {
       id:            t.id,
       scheduled_for: t.scheduled_for as string,
       property_name: prop?.name ?? '—',
       assignee_name: assignee?.name ?? null,
       status:        t.status as TaskStatus,
-      checkout_time: displayTime(taskTime ?? STANDARD_CHECKOUT),
+      checkout_time: displayTime(timing?.effective_time ?? STANDARD_CHECKOUT),
       guest_name:    res?.guest_name ?? null,
       guests:        (res as { guests?: number | null } | null)?.guests ?? null,
     }
@@ -142,7 +143,7 @@ export async function getTasks(filters?: {
   const supabase = await createClient()
   let query = supabase
     .from('tasks')
-    .select('*, property:properties(name), assignee:team_members(name), reservation:reservations(check_in, check_out, notes, guest_name, guests)')
+    .select('*, property:properties(name), assignee:team_members(name), reservation:reservations(id, property_id, status, time_version, time_events:reservation_time_events(*), check_in, check_out, notes, guest_name, guests)')
     .order('scheduled_for', { ascending: true })
 
   if (filters?.type) query = query.eq('type', filters.type)
@@ -210,13 +211,23 @@ export async function setBuildingNotified(
 
 export async function updateTaskNotes(
   taskId: string,
-  notes: string
+  notes: string,
+  options: { noteOnly?: boolean } = {},
 ): Promise<{ success: boolean; error?: string }> {
+  const member = await getCurrentMember()
+  if (!member) return { success: false, error: 'La sesión no está activa.' }
   const supabase = await createClient()
-  const { error } = await supabase
-    .from('tasks')
-    .update({ notes })
-    .eq('id', taskId)
+  const { data: task, error: readError } = await supabase.from('tasks').select('id, notes').eq('id', taskId).maybeSingle()
+  if (readError || !task) return { success: false, error: 'No se pudo consultar la tarea.' }
+  if (options.noteOnly && annotationTime(notes)) return { success: false, error: 'Usa el control de horarios para registrar una hora; la nota no autoriza excepciones.' }
+  const currentTime = annotationTime(task.notes)
+  const nextNotes = options.noteOnly ? `${currentTime ? currentTime + '|' : ''}${notes}` : notes
+  if (currentTime !== annotationTime(nextNotes) && member.role !== 'admin') {
+    return { success: false, error: 'Solo un administrador autoriza una excepción de horario.' }
+  }
+  const query = supabase.from('tasks').update({ notes: nextNotes }).eq('id', taskId)
+  const { data: updated, error } = await (task.notes === null ? query.is('notes', null) : query.eq('notes', task.notes)).select('id')
+  if (!error && !updated?.length) return { success: false, error: 'La tarea cambió. Actualiza antes de reintentar.' }
   if (error) return { success: false, error: error.message }
   revalidatePath('/')
   revalidatePath('/tasks')

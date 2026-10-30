@@ -18,24 +18,6 @@ type PrepTask = Task & {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-/**
- * Handles all formats from DB:
- *   "3pm" · "3:00pm" · "3:00 p.m." · "12pm" · "12:00 p.m."
- */
-function reservationTimeTo24h(notes: string | null, field: 'Check-in'): string {
-  if (!notes) return ''
-  // Optional minutes, flexible am/pm suffix
-  const re = new RegExp(`${field}:\\s*(\\d+)(?::(\\d+))?\\s*(a|p)\\.?m?\\.?`, 'i')
-  const m = notes.match(re)
-  if (!m) return ''
-  let h = parseInt(m[1], 10)
-  const mins = m[2] ?? '00'
-  const period = m[3].toLowerCase()
-  if (period === 'p' && h !== 12) h += 12
-  if (period === 'a' && h === 12) h = 0
-  return `${String(h).padStart(2, '0')}:${mins}`
-}
-
 /** "15:00" → "3pm"  |  "15:30" → "3:30pm" */
 function to12h(t: string): string {
   if (!t) return '—'
@@ -80,13 +62,12 @@ interface Props { task: PrepTask }
 
 export function PrepTaskCard({ task }: Props) {
   const res     = task.reservation
-  const resNotes = res?.notes ?? null
 
   const guestName = res?.guest_name ?? '—'
   const guestsCount = res?.guests ?? null
 
   // Times from reservation notes — fallback to our standard (3pm / 11am)
-  const defaultCiTime = reservationTimeTo24h(resNotes, 'Check-in') || '15:00'
+  const defaultCiTime = '15:00'
   const defaultCoTime = STANDARD_CHECKOUT
 
   const { time24: savedTime, note: savedNote } = parseAnnotation(task.notes)
@@ -182,7 +163,12 @@ export function PrepTaskCard({ task }: Props) {
         rows={2}
         value={noteText}
         onChange={e => setNoteText(e.target.value)}
-        onBlur={() => saveAnnotation(ciTime, noteText)}
+        onBlur={() => {
+          startTransition(async () => {
+            const result = await updateTaskNotes(task.id, noteText, { noteOnly: true })
+            setSaveError(!result.success)
+          })
+        }}
         placeholder="Nota adicional…"
         className="w-full text-xs border border-[#e2e8f0] rounded-xl px-3 py-2
                    focus:outline-none focus:ring-1 focus:ring-[#ff385c] bg-[#fafafa]
