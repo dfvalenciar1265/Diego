@@ -2,26 +2,22 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({ notes: vi.fn(), save: vi.fn(), refresh: vi.fn() }))
 vi.mock('@/actions/tasks', () => ({ updateTaskNotes: mocks.notes }))
+vi.mock('@/actions/preparation', () => ({ saveArrivalPreparation: mocks.save }))
 vi.mock('@/actions/reservation-times', () => ({ saveReservationTime: mocks.save }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: mocks.refresh }) }))
 vi.mock('@/components/dashboard/NotifyBuildingButton', () => ({ NotifyBuildingButton: () => null }))
-import { DashboardPrepCard, type PrepTask } from '@/components/dashboard/DashboardPrepCard'
-import { timingReservation as r } from '../helpers/timing'
+import { DashboardPrepCard } from '@/components/dashboard/DashboardPrepCard'
+import { preparationArrival, preparationView } from '../helpers/preparation'
 
-const task: PrepTask = {
-  id: 'prep-synthetic', property_id: r.property_id, reservation_id: r.id, type: 'preparation',
-  assigned_to: null, scheduled_for: r.check_in, status: 'pending', notes: '15:00|Dejar dos toallas adicionales',
-  photo_url: null, completed_at: null, cost: null, building_notified_at: null, created_at: '2026-10-30T15:00:00Z',
-  property: { name: 'Apartamento Sintético 1214' },
-  reservation: { ...r, status: 'confirmed', time_events: [], notes: null, guest_name: 'Huésped Sintético', guests: 2 },
-}
+const arrival = preparationArrival()
+const view = preparationView()
 afterEach(cleanup)
 beforeEach(() => vi.clearAllMocks())
 
 describe('preparación compacta para el equipo', () => {
   it('muestra llegada legible y conserva la nota; editarla no autoriza una hora', async () => {
     mocks.notes.mockResolvedValue({ success: true })
-    render(<DashboardPrepCard task={task} />)
+    render(<DashboardPrepCard arrival={arrival} preparation={view} role="cleaning" />)
     expect(screen.getByText('🛏️ Apartamento Sintético 1214')).toBeVisible()
     expect(screen.getByText(/Huésped Sintético/)).toHaveTextContent('Huésped Sintético · 2 huéspedes')
     expect(screen.getByText('2 huéspedes')).toBeVisible()
@@ -32,14 +28,14 @@ describe('preparación compacta para el equipo', () => {
     expect(mocks.notes).not.toHaveBeenCalled()
     fireEvent.change(note, { target: { value: 'Dejar tres toallas adicionales' } })
     fireEvent.blur(note)
-    await waitFor(() => expect(mocks.notes).toHaveBeenCalledWith(task.id, 'Dejar tres toallas adicionales', { noteOnly: true }))
+    await waitFor(() => expect(mocks.notes).toHaveBeenCalledWith(arrival.tasks[0].id, 'Dejar tres toallas adicionales', { noteOnly: true }))
     expect(mocks.save).not.toHaveBeenCalled()
     expect(screen.getByText('3:00 p. m.')).toBeVisible()
   })
 
   it('conserva la indicación escrita y avisa si no se pudo guardar', async () => {
     mocks.notes.mockRejectedValue(new Error('fallo sintético'))
-    render(<DashboardPrepCard task={task} />)
+    render(<DashboardPrepCard arrival={arrival} preparation={view} role="cleaning" />)
     const note = screen.getByRole('textbox', { name: 'Nota para el equipo' })
     fireEvent.change(note, { target: { value: 'Indicación Sintética' } })
     fireEvent.blur(note)

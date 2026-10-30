@@ -13,6 +13,7 @@ import {
   propertiesTool, setCheckinTimeTool, setCheckoutTimeTool, turnoversTool, updateMaintenanceTool,
   cancelReservationTool, createReservationTool, updateReservationTool, type ServiceResult,
   listFollowupsTool, createChargeTool, updateChargeTool, createSpecialRequestTool, updateSpecialRequestTool,
+  setArrivalPreparationTool,
 } from '@/lib/gpt-api/service'
 import type { Actor } from '@/lib/gpt-api/followups'
 import { memberFromAuth } from './auth'
@@ -143,6 +144,19 @@ export function registerTools(server: McpServer) {
     }),
     annotations: READ,
   }, ({ date: day }) => run(() => turnoversTool(serviceDb(), { date: day }, todayInBogota())))
+
+  server.registerTool('set_arrival_preparation', {
+    title: 'Confirmar preparación de una llegada',
+    description: 'Confirma por separado limpieza terminada, revisión de funcionamiento o listo para recibir. No modifica tareas ni resuelve incidencias. Consulta primero preparation de list_turnovers y exige confirmación real de quien lo revisó; una tarea terminada o un aviso no certifican la llegada. Reabrir exige motivo y retira las etapas posteriores. Solo el día anterior o el día de llegada en Colombia. Requiere versión y clave estable de reintento.',
+    inputSchema: z.object({
+      reservation_id: z.string(), step: z.enum(['cleaning', 'functioning', 'ready']), confirmed: z.boolean(),
+      expected_version: z.number().int().nonnegative().describe('preparation.state.version o 0 si no hay registro'),
+      request_key: z.string().describe('Clave estable para reintentar exactamente la misma confirmación'),
+      stay_check_in: date, stay_check_out: date,
+      reason: z.string().max(500).optional().describe('Motivo obligatorio al reabrir'),
+    }),
+    annotations: { ...WRITE, idempotentHint: true },
+  }, (body, ctx) => run(() => setArrivalPreparationTool(serviceDb(), body, actorFrom(ctx.http?.authInfo))))
 
   server.registerTool('set_checkout_time', {
     title: 'Cambiar hora de salida',

@@ -36,7 +36,7 @@ describe('registerTools', () => {
     expect(calls.map(c => c.name)).toEqual([
       'list_properties', 'list_maintenance', 'create_maintenance',
       'update_maintenance', 'list_reservations', 'compare_reservations',
-      'list_turnovers', 'set_checkout_time', 'set_checkin_time',
+      'list_turnovers', 'set_arrival_preparation', 'set_checkout_time', 'set_checkin_time',
       'create_reservation', 'update_reservation', 'cancel_reservation',
       'list_followups', 'create_charge', 'update_charge', 'create_special_request', 'update_special_request',
     ])

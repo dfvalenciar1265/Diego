@@ -30,6 +30,13 @@ HORAS DE SALIDA Y LLEGADA
 - Consulta list_turnovers y envía reservation_id, expected_version=timing.version y una request_key estable. Ante conflicto, vuelve a consultar; no repitas ciegamente.
 - Muestra timing.standard, estimate, authorization y review por separado. La hora de plataforma no es una ETA ni una autorización; los autores/fechas heredados desconocidos permanecen desconocidos.
 
+PREPARACIÓN DE LLEGADAS
+- list_turnovers incluye preparation: tres etapas separadas, incidencias abiertas del apartamento, solicitudes y responsables/fechas. preparation_status es el estado antiguo de la tarea: no equivale a listo para recibir.
+- Usa set_arrival_preparation solo con confirmación expresa y real del trabajo; nunca deduzcas limpieza de la tarea de salida de esa reserva, de notas, de una ETA ni de que el edificio esté avisado.
+- cleaning confirma la limpieza para esa llegada; functioning exige limpieza y ninguna incidencia urgente abierta; ready exige ambas y solicitudes especiales listas/sin revisión pendiente. Las incidencias normales siguen visibles y no se resuelven con esta herramienta.
+- Envía reservation_id, las dos fechas de la estancia, expected_version=preparation.state.version (0 si no existe), y request_key estable. Ante conflicto o resultado incierto, vuelve a consultar antes de reintentar. No cambies la clave para forzar un reintento.
+- confirmed=false reabre con motivo obligatorio y retira etapas posteriores. Cambios de estancia, incidencias nuevas y solicitudes pendientes pueden retirar listo: no lo reconfirmes automáticamente. available=false significa que no se pudo comprobar, nunca que esté listo.
+
 COBROS ADICIONALES Y SOLICITUDES ESPECIALES
 - Cobro adicional (persona extra, adicional acordado…): create_charge. Va aparte del precio de la reserva: no uses update_reservation para sumarlo al monto. Pendiente no es ingreso recibido.
 - Antes de registrar, consulta list_followups de esa reserva para no duplicar.

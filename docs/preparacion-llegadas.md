@@ -1,0 +1,24 @@
+# Preparación de cada llegada
+
+Criterios de aceptación de esta fase:
+
+- Una llegada se identifica por reserva, apartamento y fechas. Limpieza terminada, revisión de funcionamiento y listo para recibir son confirmaciones distintas, con la persona que confirmó y fecha colombiana; no se atribuye el trabajo físico a otra persona por suposición. Una tarea antigua terminada no certifica estas etapas.
+- No se usa la limpieza posterior a la salida de esa misma reserva como limpieza de su llegada. En esta entrega se confirma expresamente la limpieza para recibir a ese huésped; no se completa otra tarea ni se inventa evidencia.
+- Limpieza: administración, anfitrión o limpieza. Revisión: cualquiera de esos roles o mantenimiento. Listo: administración o anfitrión. Miembros inactivos y anónimos no escriben. Se confirma durante el día anterior o el día de llegada, en America/Bogota, y no mientras siga vigente otra estancia del apartamento.
+- La revisión exige limpieza confirmada. Listo exige ambas etapas, ninguna incidencia urgente abierta y ninguna solicitud especial pendiente o por revisar. Las incidencias normales se muestran y no se resuelven al confirmar listo.
+- Reabrir una etapa exige motivo y retira las confirmaciones posteriores. Cambios de fechas/apartamento o cancelaciones retiran la preparación anterior, conservando historial. Si otra estancia ocupa el apartamento después de la limpieza confirmada, también se exige confirmar de nuevo. Una incidencia nueva/reabierta retira listo; si es urgente también exige revisar otra vez el funcionamiento. Una solicitud especial pendiente retira listo.
+- Hay una preparación por reserva, aunque existan varias tareas heredadas. Las notas duplicadas se conservan y se muestran para revisión, sin elegir, fusionar ni borrar una copia. Las llegadas de hoy y mañana se ven en Preparación hoy, con su fecha.
+- Cada escritura exige versión y clave de reintento. Reintentos exactos no duplican confirmaciones; cambios simultáneos devuelven conflicto y el estado actual. Las escrituras usan READ COMMITTED; un snapshot fijo se rechaza con 40001 para evitar confirmar con datos antiguos. El historial no se borra. Una consulta fallida se muestra como pendiente de comprobar y bloquea las confirmaciones.
+- Las incidencias se agrupan por apartamento junto a cada llegada, con prioridad y vínculo a Mantenimiento. Se conserva la hora operativa y el número de huéspedes del diseño aprobado; no se muestran montos al personal.
+- La app y el MCP comparten lectura y escritura. Los contratos anteriores de horarios se conservan.
+
+Verificación prevista: Vitest con fake-db, pruebas de acciones e interfaz, SQL local con concurrencia entre conexiones, tipos, lint, build con variables ficticias y revisión móvil con datos sintéticos. Ninguna prueba escribe datos reales. La migración se conserva solo en el PR, sin aplicar en Supabase. Sin merge ni producción; vista previa del PR autorizada por Diego durante esta fase.
+
+Despliegue posterior, sujeto a aprobación: probar SQL local; aplicar únicamente la nueva migración; mergear y comprobar la app/MCP con sesión real. Recuperación: volver al código previo y conservar tablas e historial. La migración no certifica etapas ni modifica tareas/reservas existentes.
+
+
+Verificación realizada (30-oct-2026): 494 pruebas Vitest aprobadas y 1 integración opcional PostgreSQL/HTTP omitida; tipos correctos; lint con 0 errores y los 6 avisos anteriores; build con variables ficticias correcto, 30 páginas. SQL local completo correcto, con conexiones simultáneas para conflicto, reintento idéntico, incidencia urgente, cambio de fechas y otra estancia entre limpieza y llegada; snapshot fijo rechazado con 40001. Auditor Supabase contra Postgres local: 0 errores, 25 avisos en objetos anteriores y ninguno en los objetos de preparación. Se cerró RLS del stub local de gastos que usa el ejecutor de pruebas; no cambia la tabla real de gastos.
+
+La interfaz se revisó en navegador integrado y Playwright a 1120, 393 y 320 px, con datos sintéticos y acciones simuladas: horas y huéspedes visibles, incidencias y cuna pendiente, listo bloqueado, permisos del personal y estado no comprobable; sin desbordamiento horizontal ni errores del navegador. No equivale a una prueba integrada con sesión real contra la nueva migración en Supabase. No se comprobó teléfono físico ni la operación por el equipo.
+
+Antes del despliegue real, inspeccionar el historial de migraciones: las versiones que Supabase asignó a los SQL anteriores difieren de sus nombres locales. Aplicar solo 20261030204811_arrival_preparation.sql con aprobación; no ejecutar un push ciego ni reaplicar los SQL anteriores. Comprobar después lecturas, confirmaciones y permisos en la app/MCP con cuentas reales autorizadas. No convertir tareas heredadas terminadas en confirmaciones.

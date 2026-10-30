@@ -36,7 +36,9 @@ for f in supabase/migrations/00{1,2}_*.sql; do "${PSQL[@]}" -f "$f"; done
 "${PSQL[@]}" -c "ALTER TABLE public.properties ADD COLUMN active boolean NOT NULL DEFAULT true;
   ALTER TABLE public.reservations ADD COLUMN pending_change jsonb;
   ALTER TABLE public.reservations ADD COLUMN guests smallint;"
-"${PSQL[@]}" -c "CREATE TABLE public.expenses (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), property_id uuid, date date);"
+# Stub local: no necesita acceso desde la API. No dejarlo expuesto al auditar la base de prueba.
+"${PSQL[@]}" -c "CREATE TABLE public.expenses (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), property_id uuid, date date);
+  ALTER TABLE public.expenses ENABLE ROW LEVEL SECURITY;"
 for f in supabase/migrations/00{3,4}_*.sql; do "${PSQL[@]}" -f "$f"; done
 # La base de calendarios tal como se aplicó en Supabase el 18-oct-2026 (incluye las antiguas 005–007).
 "${PSQL[@]}" -f supabase/migrations/20261018130754_casa_blue_calendar_foundation.sql
@@ -164,4 +166,7 @@ bash scripts/test-reservation-times-concurrency.sh "$DB"
 "${PSQL[@]}" -f scripts/test-gmail-reconciliation.sql
 bash scripts/test-gmail-concurrency.sh "$DB"
 "${PSQL[@]}" -f scripts/preflight-gmail.sql
-echo "Migraciones base + cobros/solicitudes + horarios + conciliación Gmail: todas las comprobaciones pasaron."
+"${PSQL[@]}" -f supabase/migrations/20261030204811_arrival_preparation.sql
+"${PSQL[@]}" -f scripts/test-arrival-preparation.sql
+bash scripts/test-arrival-preparation-concurrency.sh "$DB"
+echo "Migraciones base + cobros/solicitudes + horarios + conciliación Gmail + preparación: todas las comprobaciones pasaron."
