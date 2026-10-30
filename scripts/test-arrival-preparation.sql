@@ -35,7 +35,7 @@ DO $$ DECLARE j jsonb; BEGIN
  PERFORM pg_temp.assert_true((j->>'ok')='true' AND j#>>'{data,version}'='1' AND j#>>'{data,cleaned_name}'='Limpieza Sintética','limpieza con autor real');
  j:=pg_temp.command('cleaning',0,'clean-1');
  PERFORM pg_temp.assert_true((j->>'replayed')='true' AND j#>>'{data,version}'='1','reintento exacto');
- PERFORM pg_temp.assert_true((SELECT count(*)=1 FROM public.arrival_preparation_history),'sin duplicar historial');
+ PERFORM pg_temp.assert_true((SELECT count(*)=1 FROM public.arrival_preparation_history WHERE reservation_id='00000000-0000-0000-0000-00000000a601'),'sin duplicar historial');
  BEGIN PERFORM pg_temp.command('functioning',0,'clean-1'); RAISE EXCEPTION 'FALLA: clave reutilizada'; EXCEPTION WHEN check_violation THEN NULL; END;
  BEGIN PERFORM pg_temp.command('ready',1,'forbidden-ready'); RAISE EXCEPTION 'FALLA: limpieza confirmó listo'; EXCEPTION WHEN insufficient_privilege THEN NULL; END;
  BEGIN UPDATE public.arrival_preparations SET ready_at=now(); RAISE EXCEPTION 'FALLA: DML directo'; EXCEPTION WHEN insufficient_privilege THEN NULL; END;
@@ -145,4 +145,41 @@ DO $$ BEGIN
  PERFORM pg_temp.assert_true((SELECT bool_and(relrowsecurity) FROM pg_class WHERE oid IN ('public.arrival_preparations'::regclass,'public.arrival_preparation_history'::regclass)),'RLS habilitado');
  RAISE NOTICE 'OK: preparación por etapas, permisos, historial, reintentos, conflictos, incidencias, solicitudes y cambios de estancia';
 END $$;
+-- Compatibilidad: ejecutar Gmail y horarios DESPUÉS de instalar los nuevos triggers.
+INSERT INTO public.properties(id,name,capacity) VALUES
+ ('00000000-0000-0000-0000-00000000c701','Compatibilidad Gmail Sintética',4),
+ ('00000000-0000-0000-0000-00000000c702','Compatibilidad Horarios Sintética',4);
+UPDATE public.gmail_sync_runs SET lease_until=clock_timestamp()-interval '1 second' WHERE status='running';
+INSERT INTO public.reservations(id,property_id,source,guest_name,check_in,check_out) VALUES
+ ('00000000-0000-0000-0000-00000000c601','00000000-0000-0000-0000-00000000c702','direct','Horarios Sintético','2035-01-10','2035-01-13');
+INSERT INTO public.tasks(property_id,reservation_id,type,scheduled_for,notes) VALUES
+ ('00000000-0000-0000-0000-00000000c702','00000000-0000-0000-0000-00000000c601','preparation','2035-01-09','Nota Sintética preservada');
+SET LOCAL ROLE service_role;
+DO $$ DECLARE started jsonb; event jsonb; receipt jsonb; rid uuid; source_time timestamptz; BEGIN
+ PERFORM public.record_reservation_time('00000000-0000-0000-0000-00000000c601','checkin','authorization','16:00',0,'compatibility-time','mcp','00000000-0000-0000-0000-00000000a501',NULL,'2035-01-10','2035-01-13');
+ PERFORM pg_temp.assert_true((SELECT notes='16:00|Nota Sintética preservada' FROM public.tasks WHERE reservation_id='00000000-0000-0000-0000-00000000c601'),'horarios siguen compatibles tras preparación');
+ started:=public.gmail_sync_begin('00000000-0000-0000-0000-00000000c101','cron');
+ PERFORM pg_temp.assert_true((started->>'busy')='false','trabajador de compatibilidad disponible');
+ source_time:=(started#>>'{run,scope_to}')::timestamptz-interval '4 seconds';
+ event:=jsonb_build_object('message_id','preparation-compat-confirm','kind','confirmation','source_at',source_time,'payload',
+  jsonb_build_object('airbnb_code','HMPREP001','property_id','00000000-0000-0000-0000-00000000c701','guest_name','Gmail Sintético',
+   'check_in','2035-01-10','check_out','2035-01-13','amount',300000,'guests',2,'notes','Nota Sintética','email_times',jsonb_build_object('facts','[]'::jsonb)));
+ receipt:=public.gmail_sync_apply('00000000-0000-0000-0000-00000000c101',event);
+ PERFORM pg_temp.assert_true((receipt->>'status')='applied','Gmail importa con nuevos triggers');
+ rid:=(receipt->>'reservation_id')::uuid;
+ PERFORM pg_temp.assert_true((SELECT count(*)=2 FROM public.tasks WHERE reservation_id=rid),'Gmail conserva sus dos tareas');
+ event:=jsonb_set(jsonb_set(jsonb_set(event,'{message_id}','"preparation-compat-request"'),'{kind}','"change_request"'),'{source_at}',to_jsonb(source_time+interval '1 second'));
+ event:=jsonb_set(event,'{payload,check_in_from}','"2035-01-10"');event:=jsonb_set(event,'{payload,check_in_to}','"2035-01-11"');
+ receipt:=public.gmail_sync_apply('00000000-0000-0000-0000-00000000c101',event);
+ PERFORM pg_temp.assert_true((receipt->>'reason')='change_requested','Gmail conserva solicitud de cambio con nuevos triggers');
+ event:=jsonb_set(jsonb_set(jsonb_set(event,'{message_id}','"preparation-compat-update"'),'{kind}','"update"'),'{source_at}',to_jsonb(source_time+interval '2 seconds'));
+ receipt:=public.gmail_sync_apply('00000000-0000-0000-0000-00000000c101',event);
+ PERFORM pg_temp.assert_true((receipt->>'reason')='change_accepted' AND (SELECT check_in='2035-01-10'::date AND pending_change->>'accepted_at' IS NOT NULL FROM public.reservations WHERE id=rid),'Gmail acepta el cambio sin aplicar fechas por su cuenta');
+ event:=jsonb_set(jsonb_set(jsonb_set(event,'{message_id}','"preparation-compat-cancel"'),'{kind}','"cancellation"'),'{source_at}',to_jsonb(source_time+interval '3 seconds'));
+ receipt:=public.gmail_sync_apply('00000000-0000-0000-0000-00000000c101',event);
+ PERFORM pg_temp.assert_true((receipt->>'status')='applied' AND (SELECT status='cancelled' FROM public.reservations WHERE id=rid),'Gmail cancela con nuevos triggers');
+ PERFORM pg_temp.assert_true((SELECT count(*)=0 FROM public.arrival_preparations WHERE reservation_id IN (rid,'00000000-0000-0000-0000-00000000c601')),'ni Gmail ni un horario certifican preparación');
+ RAISE NOTICE 'OK: Gmail importa/solicita/acepta/cancela y horarios conservan HH:MM| después de instalar preparación';
+END $$;
+RESET ROLE;
 ROLLBACK;
