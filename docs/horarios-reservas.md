@@ -22,9 +22,12 @@ comunicada por el huésped y una excepción autorizada por un administrador acti
   pruebas cubren medianoche en Colombia, duplicados, reintentos, concurrencia real, permisos,
   cancelación y cambios de fecha. Solo datos sintéticos en una base temporal local.
 
-## Despliegue pendiente de aprobación
+## Vista previa autorizada y producción pendiente de aprobación
 
-1. Revisar el PR y aprobar por separado migración y despliegue; no ejecutar desde este trabajo.
+1. Revisar el PR mediante la vista previa automática de Vercel, autorizada por Diego el 30-oct-2026.
+   La nueva tabla/RPC no existe mientras no se aplique la migración en la base conectada: el build
+   no prueba la lectura/escritura autenticada de los nuevos horarios. No aplicar la migración para
+   resolver esta limitación sin aprobación expresa.
 2. Aplicar la nueva migración una sola vez, después de la base ya aplicada 20261019130000.
 3. Desplegar la app y actualizar herramientas del complemento AirAdmin en un chat nuevo.
 4. Comprobar lecturas de portada y MCP; cualquier prueba de escritura real requiere aprobación.
@@ -47,14 +50,14 @@ La nueva tabla conserva hechos y sus invalidaciones; la versión por reserva tam
 cambiar fechas, apartamento o estado, para rechazar formularios abiertos antes del cambio.
 Las notas de preparación se guardan sin convertir su hora sugerida en una autorización.
 
-Esta rama tiene la vista previa automática desactivada mediante `git.deploymentEnabled` en
-`vercel.json`, según la [documentación de Vercel](https://vercel.com/docs/project-configuration/git-configuration#git.deploymentenabled).
-La regla solo afecta `codex/horarios-reserva`; cualquier despliegue requiere aprobación.
+Diego autorizó la vista previa de Vercel para revisar el PR. Se eliminó de `vercel.json` el bloque
+`git.deploymentEnabled` que la desactivaba. La migración en Supabase y el merge/despliegue de
+producción siguen requiriendo su aprobación expresa.
 
 Quedan para las siguientes fases, en orden: conciliación de sincronización; etapas de
 preparación con incidencias; huéspedes reservados/acordados y cobros; inventario vendible.
 
-## Validación local del 30-oct-2026
+## Validación inicial del 30-oct-2026 (antes de incorporar el PR #18)
 
 | Control | Resultado observado |
 |---|---|
@@ -81,7 +84,7 @@ locales/de red necesarios. No se cambió ninguna dependencia del proyecto.
 
 No se verificaron la migración en Supabase, el RPC a través del PostgREST real, la actualización
 del complemento MCP ni escrituras desde una sesión real de la app. No se ejecutaron asesores
-remotos ni se hicieron despliegues. Los permisos SQL se comprobaron por rol en Postgres local;
+remotos ni se hicieron despliegues de producción. Los permisos SQL se comprobaron por rol en Postgres local;
 la comprobación visual fue sintética, no una sesión autenticada contra producción.
 
 ## Archivos por responsabilidad
@@ -98,4 +101,54 @@ la comprobación visual fue sintética, no una sesión autenticada contra produc
   horarios en `__tests__/actions`, `__tests__/components`, `__tests__/lib`, la adaptación de
   `__tests__/lib/gpt-api/turnovers.test.ts`, `scripts/test-reservation-times*.sql`,
   `scripts/test-reservation-times-concurrency.sh`, `scripts/test-migrations.sh`.
-- Entorno de validación: `vitest.config.ts`, `eslint.config.mjs`; protección de esta rama: `vercel.json`.
+- Entorno de validación: `vitest.config.ts`, `eslint.config.mjs`; vista previa de Vercel habilitada
+  con su configuración predeterminada en `vercel.json`.
+
+## Revisión contra AGENTS.md después del PR #18
+
+- Se incorporó `origin/main` en `codex/horarios-reserva` y se releyeron `AGENTS.md` y `docs/codex.md`.
+- Se conserva el centro de servicio en `lib/gpt-api/service.ts` y los nombres de herramientas MCP;
+  los esquemas e instrucciones explican ETA frente a autorización. No se agregan herramientas.
+- Se conserva la salida estándar 11:00, America/Bogota, separación de montos, estados e historial
+  de cobros/solicitudes, y cancelación sin borrar la reserva. Las notas de reserva no se sustituyen.
+- La única sustitución de prefijos de tareas es la proyección compatible `HH:MM|nota`: conserva
+  la nota de preparación, registra el hecho y requiere un administrador para autorizar una hora.
+- La migración incluye recuperación y se prueba exclusivamente con `bash scripts/test-migrations.sh`
+  en una base temporal de Postgres local. No se aplicó en Supabase.
+- Se mantienen las pruebas con `fake-db`, SQL sintético, reintentos, concurrencia, permisos,
+  cancelación, cambios de estancia y zona horaria. Los resultados de la nueva ejecución se
+  registran en el PR; no se da por verificado el funcionamiento autenticado de la vista previa.
+- Se corrigió la prueba de reintento del panel para esperar a que el botón vuelva a estar habilitado
+  antes del segundo clic. No se ampliaron timeouts ni se modificó la lógica de horarios de la app.
+- GitHub usa `info-softop`; los cambios personales previos permanecen fuera del PR. Se habilitó la vista previa
+  solicitada; no autoriza merge ni migración.
+
+## Revalidación después de incorporar el PR #18
+
+| Control | Resultado real de esta revisión |
+|---|---|
+| `git pull origin main` en `codex/horarios-reserva` | Incorporó `d3e0dd5` (PR #18) sin conflictos; se releyeron las instrucciones completas |
+| `npx vitest run --maxWorkers=1 --bail=1` | 411 pruebas correctas, 1 opcional omitida; 39 archivos correctos y 1 opcional omitido |
+| `npx tsc --noEmit -p .` después del build | Correcto, sin errores |
+| `npx eslint` | 0 errores y los mismos 6 avisos previos de `__tests__/lib/types.test.ts` |
+| Build con URL `https://example.invalid` y clave ficticia `dummy` | Correcto; generó las 28 páginas |
+| `bash scripts/test-migrations.sh` | Correcto; solo base temporal de Postgres local, incluidos permisos y concurrencia real |
+| Pruebas focalizadas de navegación y panel | 3/3 en cada archivo |
+| Vista previa | Vercel marcó `f78af7c` como `SUCCESS` y su comentario automático indicó `Ready` |
+| Diff | Revisado; comprobación de espacios correcta |
+
+En el primer intento paralelo, Vitest terminó con 410 pruebas correctas, un timeout de 5 segundos
+en `BottomNav` y una prueba opcional omitida. Tipos coincidió con la regeneración de `.next/types`
+del build y encontró archivos transitorios ausentes; lint se interrumpió para reducir la carga.
+Se pasó a controles secuenciales. Durante la revisión de la prueba de reintentos del panel se
+agregó la espera al botón habilitado antes del segundo clic. La ejecución final completa pasó
+con los límites originales de tiempo; no se cambiaron la lógica de la app ni los timeouts.
+
+La prueba opcional omitida es la integración HTTP/Postgres de disponibilidad de Casa Blue,
+que requiere activación explícita. En esta revisión la migración se probó únicamente con el
+script SQL local solicitado; la ejecución inicial anterior del caso HTTP figura por separado.
+
+No apliqué `20261030131630_reservation_times.sql` en Supabase ni consulté su historial remoto.
+La vista previa no verifica la migración, el RPC por PostgREST, las sesiones autenticadas ni las
+escrituras reales de horarios. El conector de Vercel respondió 403 para este equipo; el estado
+`Ready` y la URL se comprobaron mediante las publicaciones automáticas de Vercel en GitHub.

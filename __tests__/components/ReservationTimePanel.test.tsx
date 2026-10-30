@@ -37,6 +37,7 @@ describe('presentación y edición de horarios', () => {
     fireEvent.change(screen.getByLabelText('Hora autorizada'), { target: { value: '13:00' } })
     fireEvent.click(screen.getByRole('button', { name: 'Autorizar excepción' }))
     await screen.findByText(/El horario cambió/)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Autorizar excepción' })).toBeEnabled())
     fireEvent.click(screen.getByRole('button', { name: 'Autorizar excepción' }))
     await waitFor(() => expect(mocks.save).toHaveBeenCalledTimes(2))
     expect(mocks.save.mock.calls[0][0].request_key).toBe(mocks.save.mock.calls[1][0].request_key)
