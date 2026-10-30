@@ -20,4 +20,3 @@ export function parseClockTime(raw: string): string | null {
   }
   return null
 }
-

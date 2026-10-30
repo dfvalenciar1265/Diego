@@ -146,14 +146,14 @@ export function registerTools(server: McpServer) {
 
   server.registerTool('set_checkout_time', {
     title: 'Cambiar hora de salida',
-    description: 'Registra una ETA (kind=estimate) o una excepción expresamente autorizada (kind=authorization) de salida del huésped que sale ese día del apartamento. Queda en la tarea de limpieza, igual que el lápiz de "Salidas de hoy". Por defecto hoy.',
+    description: 'Registra una ETA (kind=estimate) o una excepción expresamente autorizada (kind=authorization) de salida del huésped que sale ese día del apartamento. Solo la excepción autorizada queda en la tarea de limpieza; la ETA se guarda por separado. Por defecto hoy.',
     inputSchema: timeChange,
     annotations: { ...WRITE, idempotentHint: true },
   }, (body, ctx) => run(() => setCheckoutTimeTool(serviceDb(), body, todayInBogota(), actorFrom(ctx.http?.authInfo))))
 
   server.registerTool('set_checkin_time', {
     title: 'Cambiar hora de llegada (preparación)',
-    description: 'Registra una ETA (kind=estimate) o una excepción expresamente autorizada (kind=authorization) de llegada del huésped que llega ese día al apartamento, la que usa el equipo para la preparación. Queda en la tarea de preparación conservando su nota, igual que el lápiz de "Preparación hoy". Por defecto hoy.',
+    description: 'Registra una ETA (kind=estimate) o una excepción expresamente autorizada (kind=authorization) de llegada del huésped que llega ese día al apartamento, la que usa el equipo para la preparación. Solo la excepción autorizada queda en la tarea de preparación conservando su nota; la ETA se guarda por separado. Por defecto hoy.',
     inputSchema: timeChange,
     annotations: { ...WRITE, idempotentHint: true },
   }, (body, ctx) => run(() => setCheckinTimeTool(serviceDb(), body, todayInBogota(), actorFrom(ctx.http?.authInfo))))
