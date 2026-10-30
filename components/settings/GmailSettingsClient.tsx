@@ -3,27 +3,25 @@
 import { useState, useTransition } from 'react'
 import { Mail, CheckCircle, AlertCircle, RefreshCw, ExternalLink } from 'lucide-react'
 import { syncGmail } from '@/actions/gmail'
-import { formatDate } from '@/lib/utils'
+import { useRouter } from 'next/navigation'
+import type { SyncResult } from '@/lib/gmail-reconciliation/types'
+import type { GmailStatus } from '@/lib/gmail-reconciliation/status'
+import { GmailReconciliation } from './GmailReconciliation'
 
-interface Props {
-  connected: boolean
-  lastSync?: string
-  lastNewCount?: number
-}
-
-export function GmailSettingsClient({ connected, lastSync, lastNewCount }: Props) {
-  const [isPending, startTransition] = useTransition()
-  const [syncResult, setSyncResult] = useState<{
-    ok: boolean
-    new_count?: number
-    error?: string
-  } | null>(null)
+export function GmailSettingsClient(status: GmailStatus) {
+  const {connected}=status
+  const router=useRouter()
+  const [isPending,startTransition]=useTransition()
+  const [syncResult,setSyncResult]=useState<SyncResult|null>(null)
 
   function handleSync() {
     setSyncResult(null)
     startTransition(async () => {
-      const result = await syncGmail()
-      setSyncResult(result)
+      try {
+        const result = await syncGmail()
+        setSyncResult(result)
+        router.refresh()
+      } catch { setSyncResult({ok:false,state:'failed',error:'Resultado incierto. Actualiza conciliación antes de repetir.'}) }
     })
   }
 
@@ -45,7 +43,7 @@ export function GmailSettingsClient({ connected, lastSync, lastNewCount }: Props
             </p>
             <p className="text-xs text-[var(--text-muted)]">
               {connected
-                ? 'Sincronización activa cada hora'
+                ? 'Conexión registrada; consulta la lectura y los pendientes abajo'
                 : 'Conecta para importar reservas automáticamente'}
             </p>
           </div>
@@ -54,14 +52,9 @@ export function GmailSettingsClient({ connected, lastSync, lastNewCount }: Props
             : <AlertCircle size={18} className="ml-auto" style={{ color: '#dc2626' }} />
           }
         </div>
-
-        {lastSync && (
-          <div className="text-xs text-[var(--text-muted)] border-t border-[var(--border)] pt-3">
-            Última sync: {formatDate(lastSync.slice(0, 10))}
-            {lastNewCount !== undefined && ` · ${lastNewCount} reserva${lastNewCount !== 1 ? 's' : ''} nueva${lastNewCount !== 1 ? 's' : ''}`}
-          </div>
-        )}
       </div>
+
+      <GmailReconciliation status={status} />
 
       {/* Connect / Reconnect button */}
       <a
@@ -96,7 +89,7 @@ export function GmailSettingsClient({ connected, lastSync, lastNewCount }: Props
         >
           {syncResult.ok
             ? syncResult.new_count === 0
-              ? '✓ Todo al día — no hay reservas nuevas'
+              ? 'Lectura del alcance completada; no se encontraron reservas nuevas'
               : `✓ ${syncResult.new_count} reserva${syncResult.new_count !== 1 ? 's' : ''} importada${syncResult.new_count !== 1 ? 's' : ''}`
             : `Error: ${syncResult.error}`
           }

@@ -7,6 +7,7 @@
  * old plaintext and new HTML-only emails.
  */
 
+import type { GmailEvent, GmailPage } from './gmail-reconciliation/types'
 import { parseEmailTimeFacts, type EmailTimes } from './gmail-times'
 
 export interface ParsedReservation {
@@ -185,10 +186,10 @@ export async function getAccessToken(refreshToken: string): Promise<string> {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: params.toString(),
+    signal: AbortSignal.timeout(15_000),
   })
   if (!res.ok) {
-    const err = await res.text()
-    throw new Error(`Token refresh failed: ${err}`)
+    throw new Error(`Gmail no disponible (HTTP ${res.status})`)
   }
   const { access_token } = await res.json() as { access_token: string }
   return access_token
@@ -197,6 +198,10 @@ export async function getAccessToken(refreshToken: string): Promise<string> {
 // ─── Gmail API helpers ────────────────────────────────────────────────────────
 
 interface GmailThread { id: string }
+
+export class GmailCursorExpiredError extends Error {
+  constructor() { super('Gmail requiere reiniciar la paginación del mismo alcance') }
+}
 
 interface GmailMessagePart {
   mimeType: string
@@ -224,9 +229,12 @@ async function gmailSearch(
   if (pageToken) params.set('pageToken', pageToken)
   const res = await fetch(
     `https://gmail.googleapis.com/gmail/v1/users/me/threads?${params}`,
-    { headers: { Authorization: `Bearer ${accessToken}` } }
+    { headers: { Authorization: `Bearer ${accessToken}` }, signal: AbortSignal.timeout(15_000) }
   )
-  if (!res.ok) throw new Error(`Gmail search failed: ${await res.text()}`)
+  if (!res.ok) {
+    if (res.status === 400 && pageToken) throw new GmailCursorExpiredError()
+    throw new Error(`Gmail no disponible (HTTP ${res.status})`)
+  }
   return res.json() as Promise<{ threads: GmailThread[]; nextPageToken?: string }>
 }
 
@@ -275,13 +283,14 @@ export async function getMessagePlaintext(
 ): Promise<string> {
   const res = await fetch(
     `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}?format=full`,
-    { headers: { Authorization: `Bearer ${accessToken}` } }
+    { headers: { Authorization: `Bearer ${accessToken}` }, signal: AbortSignal.timeout(15_000) }
   )
   if (!res.ok) return ''
   return messageToPlaintext(await res.json() as GmailMessage)
 }
 
 export interface EmailMessage {
+  from_airbnb?: boolean
   date_known?: boolean
   id: string
   text: string
@@ -297,11 +306,14 @@ export interface EmailMessage {
 async function getThreadMessages(accessToken: string, threadId: string): Promise<EmailMessage[]> {
   const res = await fetch(
     `https://gmail.googleapis.com/gmail/v1/users/me/threads/${threadId}?format=full`,
-    { headers: { Authorization: `Bearer ${accessToken}` } }
+    { headers: { Authorization: `Bearer ${accessToken}` }, signal: AbortSignal.timeout(15_000) }
   )
-  if (!res.ok) return []
+  if (!res.ok) throw new Error(`Lectura de Gmail incompleta (HTTP ${res.status})`)
   const t = await res.json() as { messages?: GmailMessage[] }
-  return (t.messages ?? []).map(m => ({
+  if (!Array.isArray(t.messages) || t.messages.length===0) throw new Error('Lectura de Gmail incompleta')
+  return t.messages.map(m => ({
+    from_airbnb: /^(?:automated@airbnb\.com|[^<>]*<automated@airbnb\.com>)$/i.test(
+      m.payload?.headers?.find(h => h.name.toLowerCase() === 'from')?.value.trim() ?? ''),
     date_known: Boolean(m.internalDate),
     id: m.id ?? `${threadId}:${m.internalDate ?? 'unknown'}`,
     text: messageToPlaintext(m),
@@ -779,4 +791,54 @@ export async function fetchConfirmationByCode(
     }
   }
   return null
+}
+
+
+/** Una página, acotada por instantes UTC: nunca procesa mensajes viejos que Gmail agrega al mismo hilo. */
+export async function fetchAirbnbEmailPage(
+  accessToken: string, from: string, to: string, cursor: string | null,
+): Promise<GmailPage> {
+  const start = Date.parse(from), end = Date.parse(to)
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end) throw new Error('Alcance de Gmail inválido')
+  const query = `from:automated@airbnb.com after:${Math.floor(start / 1000)} before:${Math.floor(end / 1000)}`
+  const { threads = [], nextPageToken } = await gmailSearch(accessToken, query, cursor ?? undefined)
+  const messages = (await mapWithConcurrency(threads, 10, t => getThreadMessages(accessToken, t.id))).flat()
+  const events: GmailEvent[] = []
+  for (const message of messages) {
+    // La búsqueda devuelve hilos completos, incluidos mensajes de otros remitentes.
+    if (!message.from_airbnb) continue
+    const knownDate = message.date_known && Number.isFinite(message.date.getTime())
+    if (knownDate && (message.date.getTime() < start || message.date.getTime() >= end)) continue
+    const text = message.text
+    const source_at = knownDate ? message.date.toISOString() : null
+    const base = { message_id: message.id, source_at }
+    if (!text.trim()) { events.push({ ...base, kind: 'unparsed', payload: {} }); continue }
+    const relevant = /código de confirmación|confirmation code|actualizó|se actualizó|quiere hacer un cambio|wants to make a change|^subject:.*(?:reservaci[oó]n|reservation|booking|cancelada:)|reservaci[oó]n\s+cancelada|ha\s+cancelado\s+su\s+reserva/im.test(text)
+    if (!relevant) continue
+    if (!knownDate || !text.trim()) { events.push({ ...base, kind: 'unparsed', payload: {} }); continue }
+    const cancelled = /^subject:\s*(?:cancelada:|cancell?ed:)/im.test(text) || /reservaci[oó]n\s+(?:ha\s+sido\s+)?cancelada\b|\bha\s+cancelado\s+su\s+reserva|\b(?:reservation|booking)\s+(?:(?:has\s+been|was|is)\s+)?cancell?ed\b/i.test(text)
+    if (cancelled) {
+      const code = parseCancellationEmail(text)
+      events.push({ ...base, kind: code ? 'cancellation' : 'unparsed', payload: code ? { airbnb_code: code } : {} })
+      continue
+    }
+    const update = parseUpdateEmail(text, message.date)
+    if (update) { events.push({ ...base, kind: 'update', payload: { ...update } }); continue }
+    const change = parseChangeRequestEmail(text, message.date)
+    if (change) {
+      // No se guarda una URL arbitraria: solo el enlace de Airbnb sin parámetros de seguimiento.
+      let alteration_url = ''
+      try { const url = new URL(change.alteration_url); if (url.protocol === 'https:' && /(^|\.)airbnb\.(com|com\.co)$/.test(url.hostname)) alteration_url = url.origin + url.pathname } catch {}
+      events.push({ ...base, kind: 'change_request', payload: { ...change, alteration_url, property_id: resolvePropertyId(change.property_name) } })
+      continue
+    }
+    const confirmation = parseConfirmationEmail(text, message.date)
+    const property_id = resolvePropertyId(text)
+    if (confirmation && property_id) events.push({ ...base, kind: 'confirmation', payload: {
+      ...confirmation, property_id, email_times: { facts: parseEmailTimeFacts(text) },
+    } })
+    else events.push({ ...base, kind: 'unparsed', payload: { ...(confirmation ? { airbnb_code: confirmation.airbnb_code } : {}) } })
+  }
+  events.sort((a,b) => (a.source_at ?? '').localeCompare(b.source_at ?? '') || a.message_id.localeCompare(b.message_id))
+  return { events, next_cursor: nextPageToken ?? null, threads_fetched: threads.length, messages_seen: messages.length }
 }

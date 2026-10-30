@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react'
 import { RefreshCw } from 'lucide-react'
 import { syncGmail } from '@/actions/gmail'
+import { useUserRole } from '@/lib/user-context'
 import { toast } from '@/components/ui/feedback'
 
 type SyncState = 'idle' | 'ok' | 'error'
@@ -14,14 +15,13 @@ function summary(newCount: number, updatedCount: number): string {
   const parts: string[] = []
   if (newCount > 0) parts.push(plural(newCount, 'reserva nueva', 'reservas nuevas'))
   if (updatedCount > 0) {
-    parts.push(newCount > 0
-      ? plural(updatedCount, 'actualizada', 'actualizadas')
-      : plural(updatedCount, 'reserva actualizada', 'reservas actualizadas'))
+    parts.push(plural(updatedCount, 'cambio para revisar', 'cambios para revisar'))
   }
   return parts.length > 0 ? parts.join(' y ') : 'Sin reservas nuevas'
 }
 
 export function GmailSyncButton() {
+  const role=useUserRole()
   const [isPending, startTransition] = useTransition()
   const [newCount, setNewCount]     = useState<number | null>(null)
   const [state, setState]           = useState<SyncState>('idle')
@@ -45,15 +45,17 @@ export function GmailSyncButton() {
           const updated = result.updated_count ?? 0
           setState('ok')
           setNewCount(fresh)
-          toast.success(`Gmail sincronizado: ${summary(fresh, updated)}`)
+          toast.success(`Lectura completa: ${summary(fresh, updated)}`)
         } else {
           fail(result.error ?? 'Error desconocido')
         }
-      } catch (e) {
-        fail(e instanceof Error ? e.message : 'Error de conexión')
+      } catch {
+        fail('Resultado incierto. Revisa conciliación antes de repetir.')
       }
     })
   }
+
+  if(role!=='admin') return null
 
   const bgColor = state === 'error' ? '#ef4444' : '#ff385c'
 
