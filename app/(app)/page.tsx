@@ -1,4 +1,4 @@
-import { todayInBogota, hourInBogota } from '@/lib/gpt-api/dates'
+import { todayInBogota, hourInBogota, addDays } from '@/lib/gpt-api/dates'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentMember } from '@/lib/auth'
@@ -16,7 +16,8 @@ import { KPICard } from '@/components/dashboard/KPICard'
 import { StockAlert } from '@/components/dashboard/StockAlert'
 import { TaskCard } from '@/components/tasks/TaskCard'
 import { CheckoutCard } from '@/components/dashboard/CheckoutCard'
-import { DashboardPrepCard, type PrepTask } from '@/components/dashboard/DashboardPrepCard'
+import { DashboardPrepCard } from '@/components/dashboard/DashboardPrepCard'
+import { preparationArrivals, preparationViews } from '@/lib/gpt-api/preparation'
 import { RefreshButton } from '@/components/dashboard/RefreshButton'
 import { ResolvePurchaseButton } from '@/components/dashboard/ResolvePurchaseButton'
 import { canDo } from '@/lib/permissions'
@@ -45,17 +46,8 @@ export default async function DashboardPage() {
 
   // All dashboard data fetched concurrently (no waterfall)
   const supabase = await createClient()
-  const [prepTasksRaw, kpis, todayTasks, stockAlerts, pendingPurchases, checkOuts, maintenanceAll, acceptedChanges, followups] = await Promise.all([
-    // Prep tasks for today's check-ins — ALL statuses (done tasks show with ✓)
-    supabase
-      .from('tasks')
-      // !inner makes the check_in filter drop non-matching rows server-side;
-      // without it PostgREST returned every prep task ever with a null embed.
-      .select('*, property:properties(name), assignee:team_members(name), reservation:reservations!inner(id, property_id, status, time_version, time_events:reservation_time_events(*), check_in, check_out, notes, guest_name, guests)')
-      .eq('type', 'preparation')
-      .eq('reservation.check_in', todayISO)
-      .eq('reservation.status', 'confirmed')
-      .then(r => { if (r.error) throw new Error(r.error.message); return r.data ?? [] }),
+  const [arrivals, kpis, todayTasks, stockAlerts, pendingPurchases, checkOuts, maintenanceAll, acceptedChanges, followups] = await Promise.all([
+    preparationArrivals(supabase, todayISO),
     getDashboardKPIs(),
     getTasks({ date: todayISO, type: 'other' }),
     getLowStockAlerts(),
@@ -80,8 +72,8 @@ export default async function DashboardPage() {
     .filter(m => m.status !== 'resolved' && m.priority !== 'scheduled')
     .sort((a, b) => (priorityRank[a.priority] ?? 9) - (priorityRank[b.priority] ?? 9))
 
-  // Belt and braces: keep only today's check-ins
-  const prepTasks = prepTasksRaw.filter(t => t.reservation?.check_in === todayISO)
+  const prepArrivals = arrivals.filter(r => r.status === 'confirmed' && r.check_in >= todayISO && r.check_in <= addDays(todayISO, 1))
+  const preparationById = await preparationViews(supabase, prepArrivals, todayISO)
 
   // Other tasks scheduled for today (cleaning shown in its own section)
   const otherTasks = todayTasks.filter((t: Task) => t.type !== 'cleaning' && t.type !== 'preparation' && t.scheduled_for === todayISO)
@@ -225,26 +217,26 @@ export default async function DashboardPage() {
         )}
 
         {/* Tareas de hoy — solo preparación y otras (limpieza va en su propia sección) */}
-        {(prepTasks.length > 0 || otherTasks.length > 0) && (
+        {(prepArrivals.length > 0 || otherTasks.length > 0) && (
         <section>
           <p className="text-xs font-semibold text-[#64748b] uppercase tracking-wide mb-3">
-            ✅ Tareas de hoy ({prepTasks.length + otherTasks.length})
+            ✅ Tareas de hoy ({prepArrivals.length + otherTasks.length})
           </p>
 
           <div className="space-y-4">
 
-              {/* Preparación hoy — compacto: apartamento, huésped, hora check-in editable, nota */}
-              {prepTasks.length > 0 && (
+              {/* Preparación de las llegadas de hoy y mañana: una tarjeta por reserva */}
+              {prepArrivals.length > 0 && (
                 <div>
                   <div className="flex items-center gap-2 mb-2">
                     <span className="text-base">🛏️</span>
                     <span className="text-xs font-semibold text-[#ff385c] uppercase tracking-wide">
-                      Preparación hoy ({prepTasks.length})
+                      Preparación hoy ({prepArrivals.length})
                     </span>
                     <div className="flex-1 h-px bg-[#ffe4e8]" />
                   </div>
                   <div className="space-y-2">
-                    {(prepTasks as PrepTask[]).map(t => <DashboardPrepCard key={t.id} task={t} canEdit={member.role === 'admin'} />)}
+                    {prepArrivals.map(arrival => <DashboardPrepCard key={arrival.id} arrival={arrival} preparation={preparationById[arrival.id]} role={member.role} />)}
                   </div>
                 </div>
               )}

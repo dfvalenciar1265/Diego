@@ -3,6 +3,7 @@
  * y refresca las pantallas afectadas. Las rutas /api/gpt/* y /api/mcp solo traducen el resultado.
  */
 import { writeReservationTime } from '@/lib/reservation-time-writes'
+import { preparationViews, writePreparation, type PreparationWrite } from './preparation'
 import { revalidatePath } from 'next/cache'
 import { guestNameMatches } from '@/lib/gmail-sync'
 import { compareReservations } from './compare'
@@ -185,6 +186,7 @@ export async function turnoversTool(db: Db, query: { date?: string | null }, tod
     .filter((c, i, all) => all.findIndex(x => x.id === c.id) === i)
     .map(c => ({ ...c, amount: Number(c.amount) }))
   const checkoutIds = new Set(checkouts.map(r => r.id))
+  const preparations = await preparationViews(db, checkins, today)
   return done({
     date: date.value,
     checkouts: checkouts.map(r => ({
@@ -197,8 +199,16 @@ export async function turnoversTool(db: Db, query: { date?: string | null }, tod
     checkins: checkins.map(r => ({
       ...checkinSlot(r, nameOf(r.property_id)),
       special_requests: requests.filter(q => q.reservation_id === r.id && q.status !== 'cancelled'),
+      preparation: preparations[r.id],
     })),
   })
+}
+
+export async function setArrivalPreparationTool(db: Db, body: unknown, actor: Actor | null) {
+  if (!actor) return failed(403, 'Se requiere una sesión activa para confirmar la preparación.')
+  const result = await writePreparation(db, body as PreparationWrite, actor)
+  if (result.ok) revalidatePath('/')
+  return result
 }
 
 /**
