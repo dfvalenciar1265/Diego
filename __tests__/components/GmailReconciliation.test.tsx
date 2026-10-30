@@ -28,6 +28,12 @@ describe('estado visible de la importación', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('no se puede certificar')
     expect(screen.queryByText('Pendientes de conciliación: 0')).not.toBeInTheDocument()
   })
+  it('hace visibles las tareas repetidas conservadas para revisión', () => {
+    const value=status()
+    value.latest!.stats.duplicate_task_groups=4
+    render(<GmailReconciliation status={value} />)
+    expect(screen.getByText(/Tareas repetidas: 4 grupos requieren revisión/)).toHaveTextContent('Se conservan sus notas y estados')
+  })
   it('si cambió la versión, conserva la nota y no muestra revisión confirmada', async () => {
     mocks.review.mockResolvedValue({ success: false, error: 'El pendiente cambió. Actualiza.' })
     render(<GmailReconciliation status={status()} />)

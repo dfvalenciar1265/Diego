@@ -46,6 +46,7 @@ export function GmailReconciliation({status}:{status:GmailStatus}) {
       <p>Alcance del intento: {date(run.scope_from)} → {date(run.scope_to)}</p>
       <p>{run.scan_complete?'Se terminó de leer ese alcance.':'Queda correo por leer; la próxima corrida continúa este alcance.'}</p>
       <p>Reservas nuevas: {run.stats.new_count??0} · cambios para revisar: {run.stats.updated_count??0} · cancelaciones aplicadas: {run.stats.cancelled_count??0}</p>
+      {(run.stats.duplicate_task_groups??0)>0?<p role="alert" className="text-amber-800">Tareas repetidas: {run.stats.duplicate_task_groups} grupos requieren revisión. Se conservan sus notas y estados; no se elige ni elimina una tarea automáticamente.</p>:null}
       {run.error_code?<p role="alert" className="text-red-700">El intento registró un error o trabajo incompleto. Los datos anteriores se conservan.</p>:null}
     </div>:null}
     <p className="font-medium">Pendientes de conciliación: {status.pendingCount??'Sin comprobar'}</p>

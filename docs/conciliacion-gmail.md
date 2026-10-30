@@ -29,8 +29,10 @@ aprobación de Diego. La vista previa está autorizada; no se ejecutan sincroniz
 ## Despliegue y recuperación (pendientes de aprobación)
 
 1. Revisar y aprobar primero el PR #19 y su migración; este PR depende de esa base.
-2. Antes de la nueva migración, comprobar que no haya tareas duplicadas por reserva/tipo y que
-   no siga ejecutándose una sincronización de la versión anterior. No borrar datos para forzarla.
+2. Ejecutar `scripts/preflight-gmail.sql` en modo solo lectura y comprobar que no siga ejecutándose
+   una sincronización de la versión anterior. Los duplicados heredados no bloquean la migración:
+   se conservan sus notas, estados, fechas y asignaciones. La guardia por reserva rechaza nuevas
+   copias, también si las crea app/MCP. No elegir ni borrar una tarea antigua para forzar el cambio.
 3. Aplicar solo la nueva migración aprobada. No repetir migraciones ya aplicadas.
 4. Autorizar merge/despliegue. El cron frecuente se activa en producción al desplegar el `vercel.json`.
 5. Comprobar alcance, permisos, última lectura y pendientes. Las pruebas reales de escritura
@@ -69,7 +71,8 @@ perderse o demorarse notificaciones; por eso se conserva la comprobación perió
 - Persistencia: `supabase/migrations/20261030153122_gmail_reconciliation.sql`.
 - Pruebas: `__tests__/lib/gmail-reconciliation.test.ts`, `gmail-access.test.ts`,
   `__tests__/components/GmailReconciliation.test.tsx`, `__tests__/helpers/fake-db.ts`,
-  `scripts/test-gmail-reconciliation.sql` y `scripts/test-gmail-concurrency.sh`.
+  `scripts/test-gmail-before.sql`, `scripts/test-gmail-reconciliation.sql`,
+  `scripts/test-gmail-concurrency.sh` y `scripts/preflight-gmail.sql`.
 - Frecuencia: `vercel.json`, sin ningún bloqueo `git.deploymentEnabled`.
 
 | Comprobación | Resultado real |
@@ -90,6 +93,54 @@ La vista aislada necesitó corregir sus alias de React; no cambió la configurac
 
 No se probaron Gmail real, los RPC por PostgREST/Supabase, el cron en producción, cuotas/latencia
 reales, ni una sesión autenticada de la app contra las tablas nuevas. No se verificó en producción
-si hay tareas duplicadas que bloquearían el índice único: el paso previo al despliegue debe comprobarlo.
+la ejecución del nuevo flujo en producción. La inspección posterior de solo lectura sí encontró
+cuatro grupos de tareas de preparación repetidas (11 tareas, con notas distintas). Se sustituyó, dentro de la migración aún sin aplicar, el
+índice único que habría impedido instalarla por una guardia para nuevas tareas,
+con bloqueo de la reserva y rechazo de snapshots fijos. No se borran ni modifican duplicados para
+instalarla. La pantalla informa esos grupos y la conciliación no se certifica como completa
+mientras sigan presentes. La reparación de tareas tampoco cierra ni elimina esas copias.
 Las dos migraciones nuevas están pendientes: **no se aplicó ninguna en Supabase**. No hubo merge,
 despliegue de producción, sincronización real ni mensajes al equipo o a huéspedes.
+
+
+## Comprobación previa al cierre del PR
+
+- GitHub: PR #19 y #20 abiertos, sin conflictos de integración y sin revisiones pendientes publicadas.
+  Las vistas previas anteriores pasaron; esto no equivale a revisión humana ni a pruebas contra la base nueva.
+- Producción observada: sigue en el commit del PR #18. Las tablas nuevas de horarios y conciliación
+  no existen. No se aplicó ninguna de las dos migraciones desde este trabajo.
+- Se comprobaron solo los nombres y destinos de las seis variables necesarias en Vercel; estaban
+  registradas para producción. No se descifraron, mostraron ni guardaron sus valores, y no se
+  comprobaron su vigencia ni sus permisos efectivos.
+- La base tiene la función de admin y las columnas necesarias. No se encontraron horarios heredados
+  con fechas inválidas. El historial de migraciones no contiene estas versiones; por sí solo ese
+  historial no certifica cómo se aplicaron las migraciones antiguas.
+- Los cuatro grupos repetidos se conservan. No se registró ninguna limpieza, preparación ni
+  cancelación real. No se activó una nueva frecuencia ni se llamó al sincronizador de producción.
+- Archivo reproducible de inspección: `scripts/preflight-gmail.sql`. Abre una transacción de solo
+  lectura y solo devuelve estado de esquema y agregados; no consulta nombres, notas ni credenciales.
+- Regresión nueva en SQL: la migración se instala con limpiezas y preparaciones repetidas previas;
+  mantenimiento/reintentos conservan todas sus columnas; nuevas inserciones y movimientos duplicados
+  se rechazan; dos conexiones de tareas producen un ganador y un rechazo 23505.
+
+Para cerrar el despliegue falta la autorización expresa para aplicar las dos migraciones,
+integrar primero #19 y después #20 en `main` y permitir la sincronización automática cada
+15 minutos con correos reales. La entrada inmediata Gmail/PubSub y Matías siguen fuera de esta
+entrega. La revisión única de consumo está programada para el 6-nov-2026 a las 12:00 m. de Colombia.
+
+
+## Resultados de la corrección compatible con duplicados
+
+| Control final | Resultado observado |
+|---|---|
+| Vitest con integración HTTP/Postgres local | 447 correctas en 43 archivos, sin omisiones |
+| `npx tsc --noEmit -p .` después del build | Correcto, sin errores |
+| `npx eslint` | 0 errores y los mismos 6 avisos previos |
+| Build con URL ficticia y clave `dummy` | Correcto, 28 páginas |
+| `bash scripts/test-migrations.sh` | Correcto, incluye inspección de solo lectura y duplicados previos |
+| Concurrencia SQL de nuevas tareas | Un ganador y un rechazo 23505; aislamiento de snapshot fijo rechazado con 40001 |
+| Diff | Revisado y `git diff --check` correcto |
+
+Solo se consultaron agregados y metadatos en producción. La migración corregida continúa sin
+aplicarse en Supabase. La prueba autenticada y la primera importación real siguen pendientes
+para después de la autorización y del despliegue.

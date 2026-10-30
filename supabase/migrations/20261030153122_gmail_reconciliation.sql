@@ -4,9 +4,29 @@
 -- estas tablas y el historial. No borrar reservas/eventos ni retirar restricciones para forzar la migración.
 BEGIN;
 
--- No se corrigen duplicados existentes silenciosamente: el índice exige revisión previa si los hay.
-CREATE UNIQUE INDEX tasks_one_turnover_per_reservation ON public.tasks (reservation_id, type)
+-- Conservar duplicados heredados y sus notas/estados. La fila de reserva serializa nuevas
+-- tareas de todos los escritores, también app/MCP; no elegir ni borrar una tarea histórica.
+CREATE INDEX tasks_turnover_identity ON public.tasks (reservation_id, type)
   WHERE reservation_id IS NOT NULL AND type IN ('cleaning', 'preparation');
+CREATE FUNCTION public.guard_turnover_task_identity() RETURNS trigger
+ LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
+BEGIN
+ IF NEW.reservation_id IS NULL OR NEW.type NOT IN ('cleaning','preparation') THEN RETURN NEW; END IF;
+ IF TG_OP='UPDATE' AND (NEW.reservation_id,NEW.type) IS NOT DISTINCT FROM (OLD.reservation_id,OLD.type) THEN RETURN NEW; END IF;
+ IF current_setting('transaction_isolation') NOT IN ('read committed','read uncommitted') THEN
+   RAISE EXCEPTION 'Reintenta la tarea con el aislamiento habitual de la app' USING ERRCODE='40001';
+ END IF;
+ -- El definidor permite comprobar también tareas que el escritor no puede leer por RLS;
+ -- no concede permiso de insertar: las políticas de tasks siguen aplicándose al escritor.
+ PERFORM 1 FROM public.reservations WHERE id=NEW.reservation_id FOR UPDATE;
+ IF EXISTS(SELECT 1 FROM public.tasks WHERE reservation_id=NEW.reservation_id AND type=NEW.type AND id<>NEW.id) THEN
+   RAISE EXCEPTION 'La reserva ya tiene una tarea de ese tipo; revisa la existente' USING ERRCODE='23505';
+ END IF;
+ RETURN NEW;
+END $$;
+CREATE TRIGGER guard_turnover_task_identity BEFORE INSERT OR UPDATE OF reservation_id,type ON public.tasks
+ FOR EACH ROW EXECUTE FUNCTION public.guard_turnover_task_identity();
+REVOKE ALL ON FUNCTION public.guard_turnover_task_identity() FROM PUBLIC,anon,authenticated,service_role;
 ALTER TABLE public.reservations ADD COLUMN sync_manual_changed_at timestamptz;
 -- No hay una fecha fiable de los ajustes anteriores. Proteger el estado existente desde este corte,
 -- sin atribuirle un autor ni permitir que una relectura histórica lo sustituya.
@@ -266,12 +286,12 @@ BEGIN
    IF outcome='applied' AND r.id IS NOT NULL AND r.status='confirmed' AND event_kind='confirmation'
       AND r.check_out>=(clock_timestamp() AT TIME ZONE 'America/Bogota')::date THEN
      INSERT INTO public.tasks(property_id,reservation_id,type,scheduled_for,notes)
-      VALUES(r.property_id,r.id,'cleaning',r.check_out,'Limpieza post-estadía — '||r.guest_name)
-      ON CONFLICT(reservation_id,type) WHERE reservation_id IS NOT NULL AND type IN ('cleaning','preparation') DO NOTHING;
+      SELECT r.property_id,r.id,'cleaning',r.check_out,'Limpieza post-estadía — '||r.guest_name
+      WHERE NOT EXISTS(SELECT 1 FROM public.tasks WHERE reservation_id=r.id AND type='cleaning');
      IF r.check_in>=(clock_timestamp() AT TIME ZONE 'America/Bogota')::date THEN
        INSERT INTO public.tasks(property_id,reservation_id,type,scheduled_for,notes)
-        VALUES(r.property_id,r.id,'preparation',greatest(r.check_in-1,(clock_timestamp() AT TIME ZONE 'America/Bogota')::date),'Preparación para '||r.guest_name)
-        ON CONFLICT(reservation_id,type) WHERE reservation_id IS NOT NULL AND type IN ('cleaning','preparation') DO NOTHING;
+        SELECT r.property_id,r.id,'preparation',greatest(r.check_in-1,(clock_timestamp() AT TIME ZONE 'America/Bogota')::date),'Preparación para '||r.guest_name
+        WHERE NOT EXISTS(SELECT 1 FROM public.tasks WHERE reservation_id=r.id AND type='preparation');
      END IF;
    END IF;
  EXCEPTION WHEN OTHERS THEN
@@ -309,33 +329,38 @@ BEGIN
  PERFORM public.gmail_sync_worker(p_id);
  FOR r IN SELECT * FROM public.reservations WHERE status='confirmed' AND check_out>=today ORDER BY id FOR UPDATE LOOP
    INSERT INTO public.tasks(property_id,reservation_id,type,scheduled_for,notes)
-    VALUES(r.property_id,r.id,'cleaning',r.check_out,'Limpieza post-estadía — '||r.guest_name)
-    ON CONFLICT(reservation_id,type) WHERE reservation_id IS NOT NULL AND type IN ('cleaning','preparation') DO NOTHING;
+    SELECT r.property_id,r.id,'cleaning',r.check_out,'Limpieza post-estadía — '||r.guest_name
+    WHERE NOT EXISTS(SELECT 1 FROM public.tasks WHERE reservation_id=r.id AND type='cleaning');
    GET DIAGNOSTICS n=ROW_COUNT; added:=added+n;
    IF r.check_in>=today THEN
      INSERT INTO public.tasks(property_id,reservation_id,type,scheduled_for,notes)
-      VALUES(r.property_id,r.id,'preparation',greatest(today,r.check_in-1),'Preparación para '||r.guest_name)
-      ON CONFLICT(reservation_id,type) WHERE reservation_id IS NOT NULL AND type IN ('cleaning','preparation') DO NOTHING;
+      SELECT r.property_id,r.id,'preparation',greatest(today,r.check_in-1),'Preparación para '||r.guest_name
+      WHERE NOT EXISTS(SELECT 1 FROM public.tasks WHERE reservation_id=r.id AND type='preparation');
      GET DIAGNOSTICS n=ROW_COUNT; added:=added+n;
    END IF;
  END LOOP;
- DELETE FROM public.tasks WHERE type='cleaning' AND status='pending' AND scheduled_for<today;
+ DELETE FROM public.tasks t WHERE type='cleaning' AND status='pending' AND scheduled_for<today
+  AND NOT EXISTS(SELECT 1 FROM public.tasks other WHERE other.reservation_id=t.reservation_id AND other.type=t.type AND other.id<>t.id);
  GET DIAGNOSTICS dropped=ROW_COUNT;
- UPDATE public.tasks SET status='done',completed_at=clock_timestamp() WHERE type<>'preparation'
-   AND status IN ('pending','in_progress') AND scheduled_for<today;
+ UPDATE public.tasks t SET status='done',completed_at=clock_timestamp() WHERE type<>'preparation'
+   AND status IN ('pending','in_progress') AND scheduled_for<today
+   AND (type<>'cleaning' OR NOT EXISTS(SELECT 1 FROM public.tasks other WHERE other.reservation_id=t.reservation_id AND other.type=t.type AND other.id<>t.id));
  GET DIAGNOSTICS closed=ROW_COUNT;
  UPDATE public.gmail_sync_runs SET stats=stats||jsonb_build_object('repaired_tasks',added,'dropped_cleanings',dropped,'completed_tasks',closed) WHERE id=p_id;
 END $$;
 CREATE FUNCTION public.gmail_sync_finish(p_id uuid,p_status text,p_error text DEFAULT NULL)
  RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
-DECLARE r public.gmail_sync_runs; pending int;
+DECLARE r public.gmail_sync_runs; pending int; duplicate_groups int;
 BEGIN
  r:=public.gmail_sync_worker(p_id);
  IF p_status NOT IN ('complete','partial','failed') OR (p_error IS NOT NULL AND p_error NOT IN
   ('gmail_unavailable','not_connected','source_incomplete','database_error','deadline','invalid_cursor')) THEN RAISE invalid_parameter_value; END IF;
  SELECT count(*) INTO pending FROM public.gmail_sync_events WHERE connection_version=r.connection_version AND status IN ('conflict','error');
- IF p_status='complete' AND (NOT r.scan_complete OR pending>0) THEN p_status:='partial'; END IF;
- UPDATE public.gmail_sync_runs SET status=p_status,finished_at=clock_timestamp(),error_code=p_error WHERE id=r.id RETURNING * INTO r;
+ SELECT count(*) INTO duplicate_groups FROM (SELECT reservation_id,type FROM public.tasks
+  WHERE reservation_id IS NOT NULL AND type IN ('cleaning','preparation') GROUP BY reservation_id,type HAVING count(*)>1) d;
+ IF p_status='complete' AND (NOT r.scan_complete OR pending>0 OR duplicate_groups>0) THEN p_status:='partial'; END IF;
+ UPDATE public.gmail_sync_runs SET status=p_status,finished_at=clock_timestamp(),error_code=p_error,
+  stats=stats||jsonb_build_object('duplicate_task_groups',duplicate_groups) WHERE id=r.id RETURNING * INTO r;
  INSERT INTO public.gmail_sync_log(triggered_by,new_count,error) VALUES(r.triggered_by,coalesce((r.stats->>'new_count')::int,0),
    CASE WHEN r.status<>'complete' THEN 'Importación incompleta: revisar conciliación de Gmail' END);
  RETURN to_jsonb(r)||jsonb_build_object('pending_count',pending);

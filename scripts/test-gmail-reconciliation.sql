@@ -3,6 +3,38 @@
 INSERT INTO public.app_settings(key,value) VALUES('gmail_refresh_token','dummy-synthetic-value')
  ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=clock_timestamp();
 SET ROLE service_role;
+DO $$ DECLARE finished jsonb; BEGIN
+ PERFORM public.gmail_sync_begin('00000000-0000-0000-0000-00000000a120','cron');
+ PERFORM public.gmail_sync_checkpoint('00000000-0000-0000-0000-00000000a120',NULL,true,'{}');
+ PERFORM public.gmail_sync_maintenance('00000000-0000-0000-0000-00000000a120');
+ PERFORM public.gmail_sync_maintenance('00000000-0000-0000-0000-00000000a120');
+ finished:=public.gmail_sync_finish('00000000-0000-0000-0000-00000000a120','complete');
+ IF finished->>'status'<>'partial' OR (finished->'stats'->>'duplicate_task_groups')::int<>3 OR (finished->>'pending_count')::int<>0 THEN
+  RAISE EXCEPTION 'FALLA: duplicados heredados invisibles o corrida certificada %',finished;
+ END IF;
+ BEGIN
+  INSERT INTO public.tasks(property_id,reservation_id,type,scheduled_for,notes) VALUES
+   ('00000000-0000-0000-0000-0000000013b3','00000000-0000-0000-0000-00000000a201','cleaning','2032-06-23','No debe duplicarse');
+  RAISE EXCEPTION 'FALLA: nueva copia de tarea heredada';
+ EXCEPTION WHEN unique_violation THEN NULL;END;
+ -- Cambiar una tarea a una identidad ya ocupada también se rechaza y revierte el movimiento.
+ BEGIN
+  UPDATE public.tasks SET reservation_id='00000000-0000-0000-0000-00000000a201'
+    WHERE reservation_id='00000000-0000-0000-0000-00000000a202' AND notes='Nota sintética C';
+  RAISE EXCEPTION 'FALLA: movimiento duplicó una tarea';
+ EXCEPTION WHEN unique_violation THEN NULL;END;
+ -- Se permite editar la tarea existente sin crear otra identidad, incluso si es heredada.
+ UPDATE public.tasks SET notes=notes,reservation_id=reservation_id,type=type WHERE reservation_id='00000000-0000-0000-0000-00000000a201';
+END $$;
+RESET ROLE;
+DO $$ BEGIN
+ IF (SELECT jsonb_agg(to_jsonb(t) ORDER BY id) FROM public.tasks t WHERE id IN (SELECT id FROM public.test_gmail_legacy_snapshot))
+    IS DISTINCT FROM (SELECT jsonb_agg(to_jsonb(t) ORDER BY id) FROM public.test_gmail_legacy_snapshot t) THEN
+  RAISE EXCEPTION 'FALLA: migración o mantenimiento alteró notas/estado/asignación/fechas heredadas';
+ END IF;
+ RAISE NOTICE 'OK: migración con duplicados previos, historial íntegro y revisión visible';
+END $$;
+SET ROLE service_role;
 DO $$
 DECLARE started jsonb; busy jsonb; event jsonb; receipt jsonb; finished jsonb; runid uuid:='00000000-0000-0000-0000-00000000a101'; rid uuid; n int; v int;
 BEGIN
