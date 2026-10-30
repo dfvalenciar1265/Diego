@@ -31,6 +31,10 @@ const airbnbReservation = z.object({
   status: z.enum(['confirmed', 'cancelled']).optional(),
 })
 const timeChange = z.object({
+  kind: z.enum(['estimate', 'authorization']).optional().describe('estimate = ETA comunicada; authorization = excepción aprobada expresamente. Por compatibilidad, si se omite significa authorization.'),
+  expected_version: z.number().int().nonnegative().optional().describe('timing.version de list_turnovers; enviarlo para evitar sobrescribir cambios'),
+  request_key: z.string().optional().describe('Clave estable para reintentar exactamente la misma operación'),
+  reservation_id: z.string().optional().describe('Reserva exacta de timing.reservation_id en list_turnovers'),
   property: z.string().describe('Nombre exacto del apartamento (list_properties)'),
   time: z.string().describe('Hora, por ejemplo 10am, 3:30 pm o 15:30'),
   date: date.optional().describe('Fecha AAAA-MM-DD; por defecto hoy, hasta 30 días adelante'),
@@ -133,7 +137,7 @@ export function registerTools(server: McpServer) {
 
   server.registerTool('list_turnovers', {
     title: 'Salidas y llegadas del día',
-    description: 'Salidas (check-out) y llegadas (check-in) de un día con su hora actual, como "Salidas de hoy" y "Preparación hoy" de la app. Salida: estándar 11:00 (America/Bogota) salvo excepción fijada en la app (time_source=app). Llegada: app, la del correo de Airbnb (reservation) o 15:00 (default). Cada salida trae sus cobros pendientes (pending_charges) y cada llegada sus solicitudes especiales; other_charges_due = cobros que vencen ese día de otras reservas. Por defecto hoy.',
+    description: 'Salidas (check-out) y llegadas (check-in) de un día con su hora actual, como "Salidas de hoy" y "Preparación hoy" de la app. Salida: estándar 11:00 (America/Bogota) salvo excepción fijada en la app (time_source=app). Llegada estándar 15:00 salvo excepción autorizada. timing separa standard, estimate, authorization, platform, history y review; una ETA no autoriza entrada temprana. Cada salida trae sus cobros pendientes (pending_charges) y cada llegada sus solicitudes especiales; other_charges_due = cobros que vencen ese día de otras reservas. Por defecto hoy.',
     inputSchema: z.object({
       date: date.optional().describe('Fecha AAAA-MM-DD; por defecto hoy, hasta 30 días adelante'),
     }),
@@ -142,17 +146,17 @@ export function registerTools(server: McpServer) {
 
   server.registerTool('set_checkout_time', {
     title: 'Cambiar hora de salida',
-    description: 'Cambia la hora de salida (check-out) del huésped que sale ese día del apartamento. Queda en la tarea de limpieza, igual que el lápiz de "Salidas de hoy". Por defecto hoy.',
+    description: 'Registra una ETA (kind=estimate) o una excepción expresamente autorizada (kind=authorization) de salida del huésped que sale ese día del apartamento. Queda en la tarea de limpieza, igual que el lápiz de "Salidas de hoy". Por defecto hoy.',
     inputSchema: timeChange,
     annotations: { ...WRITE, idempotentHint: true },
-  }, (body) => run(() => setCheckoutTimeTool(serviceDb(), body, todayInBogota())))
+  }, (body, ctx) => run(() => setCheckoutTimeTool(serviceDb(), body, todayInBogota(), actorFrom(ctx.http?.authInfo))))
 
   server.registerTool('set_checkin_time', {
     title: 'Cambiar hora de llegada (preparación)',
-    description: 'Cambia la hora de llegada (check-in) del huésped que llega ese día al apartamento, la que usa el equipo para la preparación. Queda en la tarea de preparación conservando su nota, igual que el lápiz de "Preparación hoy". Por defecto hoy.',
+    description: 'Registra una ETA (kind=estimate) o una excepción expresamente autorizada (kind=authorization) de llegada del huésped que llega ese día al apartamento, la que usa el equipo para la preparación. Queda en la tarea de preparación conservando su nota, igual que el lápiz de "Preparación hoy". Por defecto hoy.',
     inputSchema: timeChange,
     annotations: { ...WRITE, idempotentHint: true },
-  }, (body) => run(() => setCheckinTimeTool(serviceDb(), body, todayInBogota())))
+  }, (body, ctx) => run(() => setCheckinTimeTool(serviceDb(), body, todayInBogota(), actorFrom(ctx.http?.authInfo))))
 
   server.registerTool('create_reservation', {
     title: 'Crear reserva',

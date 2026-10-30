@@ -51,10 +51,11 @@ export default async function DashboardPage() {
       .from('tasks')
       // !inner makes the check_in filter drop non-matching rows server-side;
       // without it PostgREST returned every prep task ever with a null embed.
-      .select('*, property:properties(name), assignee:team_members(name), reservation:reservations!inner(check_in, check_out, notes, guest_name, guests)')
+      .select('*, property:properties(name), assignee:team_members(name), reservation:reservations!inner(id, property_id, status, time_version, time_events:reservation_time_events(*), check_in, check_out, notes, guest_name, guests)')
       .eq('type', 'preparation')
       .eq('reservation.check_in', todayISO)
-      .then(r => r.data ?? []),
+      .eq('reservation.status', 'confirmed')
+      .then(r => { if (r.error) throw new Error(r.error.message); return r.data ?? [] }),
     getDashboardKPIs(),
     getTasks({ date: todayISO, type: 'other' }),
     getLowStockAlerts(),
@@ -131,7 +132,7 @@ export default async function DashboardPage() {
             <div className="space-y-2.5">
               {checkOuts.map(co => (
                 <div key={co.id} className="space-y-1.5">
-                  <CheckoutCard co={co} />
+                  <CheckoutCard co={co} canEdit={member.role === 'admin'} />
                   {charges.filter(c => c.reservation_id === co.id).map(c => <ChargeLine key={c.id} charge={c} />)}
                 </div>
               ))}
@@ -243,7 +244,7 @@ export default async function DashboardPage() {
                     <div className="flex-1 h-px bg-[#ffe4e8]" />
                   </div>
                   <div className="space-y-2">
-                    {(prepTasks as PrepTask[]).map(t => <DashboardPrepCard key={t.id} task={t} />)}
+                    {(prepTasks as PrepTask[]).map(t => <DashboardPrepCard key={t.id} task={t} canEdit={member.role === 'admin'} />)}
                   </div>
                 </div>
               )}

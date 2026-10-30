@@ -2,7 +2,7 @@
 import type { Db } from '@/lib/gpt-api/db'
 
 export type Row = Record<string, unknown>
-export function fakeDb(tables: Record<string, Row[]>, opts: { failInsertOnce?: string } = {}) {
+export function fakeDb(tables: Record<string, Row[]>, opts: { failInsertOnce?: string; rpc?: (name: string, args: Record<string, unknown>) => unknown } = {}) {
   let failNext = opts.failInsertOnce
   function from(table: string) {
     const filters: ((r: Row) => boolean)[] = []
@@ -12,6 +12,7 @@ export function fakeDb(tables: Record<string, Row[]>, opts: { failInsertOnce?: s
     const q = {
       select: () => q, order: () => q, limit: () => q,
       eq: (k: string, v: unknown) => { filters.push(r => r[k] === v); return q },
+      is: (k: string, v: unknown) => { filters.push(r => r[k] === v); return q },
       neq: (k: string, v: unknown) => { filters.push(r => r[k] !== v); return q },
       in: (k: string, v: unknown[]) => { filters.push(r => v.includes(r[k])); return q },
       lte: (k: string, v: string) => { filters.push(r => String(r[k]) <= v); return q },
@@ -45,6 +46,6 @@ export function fakeDb(tables: Record<string, Row[]>, opts: { failInsertOnce?: s
     }
     return q
   }
-  return { from } as unknown as Db
+  return { from, rpc: (name: string, args: Record<string, unknown>) => Promise.resolve(opts.rpc?.(name, args) ?? { data: null, error: null }) } as unknown as Db
 }
 

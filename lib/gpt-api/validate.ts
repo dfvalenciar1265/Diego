@@ -66,6 +66,10 @@ export interface MaintenancePatch {
 
 /** Cambio de hora de salida o de llegada de un apartamento en un día. */
 export interface TimeChangeInput {
+  kind?: 'estimate' | 'authorization'
+  expected_version?: number
+  request_key?: string
+  reservation_id?: string
   property: string
   time: string          // "HH:MM"
   date: string          // YYYY-MM-DD
@@ -238,7 +242,16 @@ export function parseTimeChange(body: unknown, today: string): Parsed<TimeChange
   if (!date.ok) return date
   const guest = text(body.guest_name, 'guest_name', LIMITS.name, false)
   if (!guest.ok) return guest
-  return ok({ property: property.value, time, date: date.value, guest_name: guest.value || null })
+  if (body.kind !== undefined && body.kind !== 'estimate' && body.kind !== 'authorization') return fail('kind debe ser estimate o authorization.')
+  if (body.expected_version !== undefined && (!Number.isInteger(body.expected_version) || Number(body.expected_version) < 0)) return fail('expected_version debe ser un entero no negativo.')
+  if (body.request_key !== undefined && (typeof body.request_key !== 'string' || !body.request_key.trim() || body.request_key.length > 200)) return fail('request_key debe tener de 1 a 200 caracteres.')
+  if (body.reservation_id !== undefined && (typeof body.reservation_id !== 'string' || !isUuid(body.reservation_id))) return fail('reservation_id debe ser un UUID.')
+  return ok({ property: property.value, time, date: date.value, guest_name: guest.value || null,
+    ...(body.kind === undefined ? {} : { kind: body.kind }),
+    ...(body.expected_version === undefined ? {} : { expected_version: body.expected_version as number }),
+    ...(body.request_key === undefined ? {} : { request_key: body.request_key as string }),
+    ...(body.reservation_id === undefined ? {} : { reservation_id: body.reservation_id as string }),
+  })
 }
 
 const RESERVATION_CODE = /^[A-Z0-9]{8,12}$/

@@ -2,6 +2,7 @@
  * Lo que hace cada herramienta del API del GPT y del MCP, sin HTTP: valida, consulta o escribe,
  * y refresca las pantallas afectadas. Las rutas /api/gpt/* y /api/mcp solo traducen el resultado.
  */
+import { writeReservationTime } from '@/lib/reservation-time-writes'
 import { revalidatePath } from 'next/cache'
 import { guestNameMatches } from '@/lib/gmail-sync'
 import { compareReservations } from './compare'
@@ -20,7 +21,7 @@ import {
 } from './reservation-writes'
 import { applyDiffNotes, listReservations, loadForCompare } from './reservations'
 import {
-  checkinSlot, checkoutSlot, reservationsTurningOver, setTaskNotes, withCheckinTime, withCheckoutTime,
+  checkinSlot, checkoutSlot, reservationsTurningOver, turnoverReservationById,
 } from './turnovers'
 import {
   isUuid, parseCompareBody, parseMaintenanceFilter, parseMaintenancePatch, parseNewMaintenance, parseRange,
@@ -204,7 +205,8 @@ export async function turnoversTool(db: Db, query: { date?: string | null }, tod
  * Cambia la hora de salida (tarea de limpieza) o de llegada (tarea de preparación) de la reserva
  * que sale o llega ese día en el apartamento, igual que los lápices de la portada.
  */
-async function changeTurnoverTime(db: Db, kind: 'checkout' | 'checkin', body: unknown, today: string) {
+async function changeTurnoverTime(db: Db, kind: 'checkout' | 'checkin', body: unknown, today: string, actor: Actor | null) {
+  if (!actor) return failed(403, 'Falta la identidad del administrador conectado.')
   const input = parseTimeChange(body, today)
   if (!input.ok) return failed(400, input.error)
   const property = resolveProperty(input.value.property, await listProperties(db))
@@ -213,6 +215,7 @@ async function changeTurnoverTime(db: Db, kind: 'checkout' | 'checkin', body: un
   const word = kind === 'checkout' ? 'salida' : 'llegada'
 
   let matches = await reservationsTurningOver(db, kind, date, property.id)
+  if (input.value.reservation_id) matches = matches.filter(r => r.id === input.value.reservation_id)
   if (guest) matches = matches.filter(r => guestNameMatches(r.guest_name, guest) || guestNameMatches(guest, r.guest_name))
   if (matches.length === 0) {
     return failed(404, `${property.name} no tiene ${word}${guest ? ` de ${guest}` : ''} el ${shortDate(date)}.`)
@@ -222,31 +225,29 @@ async function changeTurnoverTime(db: Db, kind: 'checkout' | 'checkin', body: un
   }
   const reservation = matches[0]
 
-  if (kind === 'checkout') {
-    const slot = checkoutSlot(reservation, date, property.name)
-    if (!slot.cleaning_task_id) {
-      return failed(409, `La salida de ${slot.guest_name} en ${property.name} no tiene tarea de limpieza el ${shortDate(date)}; corre la sincronización de Gmail para repararla.`)
-    }
-    await setTaskNotes(db, slot.cleaning_task_id, withCheckoutTime(time))
-    refreshTurnovers()
-    return done({ date, ...slot, previous_time: slot.time, time, time_source: 'app' })
+  const slot = kind === 'checkout' ? checkoutSlot(reservation, date, property.name) : checkinSlot(reservation, property.name)
+  if ((input.value.kind ?? 'authorization') === 'authorization'
+    && !(kind === 'checkout' ? checkoutSlot(reservation, date, property.name).cleaning_task_id : checkinSlot(reservation, property.name).preparation_task_id)) {
+    return failed(409, 'Falta la tarea de limpieza o preparación de esta estancia; sincroniza para repararla.')
   }
-
-  const slot = checkinSlot(reservation, property.name)
-  if (!slot.preparation_task_id) {
-    return failed(409, `La llegada de ${slot.guest_name} a ${property.name} no tiene tarea de preparación; corre la sincronización de Gmail para repararla.`)
-  }
-  const task = reservation.tasks?.find(t => t.id === slot.preparation_task_id)
-  await setTaskNotes(db, slot.preparation_task_id, withCheckinTime(task?.notes ?? null, time))
+  const result = await writeReservationTime(db, {
+    reservation_id: reservation.id, direction: kind, kind: input.value.kind ?? 'authorization', time,
+    expected_version: input.value.expected_version ?? slot.timing.version,
+    request_key: input.value.request_key ?? crypto.randomUUID(),
+    stay_check_in: reservation.check_in, stay_check_out: reservation.check_out,
+  }, actor)
+  const current = await turnoverReservationById(db, reservation.id)
+  const next = current ? (kind === 'checkout' ? checkoutSlot(current, current.check_out, property.name) : checkinSlot(current, property.name)) : null
+  if (!result.ok) return { ...result, current: next?.timing }
   refreshTurnovers()
-  return done({ date, ...slot, previous_time: slot.time, time, time_source: 'app' })
+  return done({ date, ...next, previous_time: slot.time })
 }
 
-export const setCheckoutTimeTool = (db: Db, body: unknown, today: string) =>
-  changeTurnoverTime(db, 'checkout', body, today)
+export const setCheckoutTimeTool = (db: Db, body: unknown, today: string, actor: Actor | null = null) =>
+  changeTurnoverTime(db, 'checkout', body, today, actor)
 
-export const setCheckinTimeTool = (db: Db, body: unknown, today: string) =>
-  changeTurnoverTime(db, 'checkin', body, today)
+export const setCheckinTimeTool = (db: Db, body: unknown, today: string, actor: Actor | null = null) =>
+  changeTurnoverTime(db, 'checkin', body, today, actor)
 
 function refreshReservations() {
   revalidatePath('/calendar')
