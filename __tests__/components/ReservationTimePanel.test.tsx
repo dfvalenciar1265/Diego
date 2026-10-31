@@ -26,16 +26,13 @@ describe('presentación y edición de horarios', () => {
     expect(mocks.save).not.toHaveBeenCalled()
     expect(exit()).toHaveTextContent('11:00 a. m.')
   })
-  it('muestra una sola hora operativa y deja los datos vacíos en detalles cerrados', () => {
-    render(<ReservationTimePanel timing={resolveReservationTiming(r, 'checkin')} stay={r} />)
+  it.each([false, true])('muestra una sola hora operativa sin fuentes ni historial (edición %s)', canEdit => {
+    render(<ReservationTimePanel timing={resolveReservationTiming(r, 'checkin')} stay={r} canEdit={canEdit} />)
     expect(entry()).toHaveTextContent('3:00 p. m.')
     expect(screen.queryByText(/Avisó llegada:/)).not.toBeInTheDocument()
-    expect(screen.getByText('Horario habitual: 15:00')).not.toBeVisible()
-    expect(screen.getByText('Hora avisada por el huésped: Sin comunicar')).not.toBeVisible()
-    expect(screen.getByText('Fuente e historial del horario').closest('details')).not.toHaveAttribute('open')
-    fireEvent.click(screen.getByText('Fuente e historial del horario'))
-    expect(screen.getByText('Horario habitual: 15:00')).toBeVisible()
-    expect(screen.getByText('Horario especial autorizado: Ninguno')).toBeVisible()
+    expect(screen.queryByText(/Fuente e historial/)).not.toBeInTheDocument()
+    expect(screen.queryByText('Horario habitual: 15:00')).not.toBeInTheDocument()
+    expect(screen.queryByText('Hora avisada por el huésped: Sin comunicar')).not.toBeInTheDocument()
   })
 
   it('distingue la hora avisada de la entrada permitida y mantiene el aviso visible para personal', () => {
@@ -45,20 +42,16 @@ describe('presentación y edición de horarios', () => {
     expect(screen.getByText(/Avisó que llega antes/)).toBeVisible()
     expect(screen.queryByText('Ver o ajustar horario')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Guardar hora avisada', hidden: true })).not.toBeInTheDocument()
-    fireEvent.click(screen.getByText('Fuente e historial del horario'))
-    expect(screen.getByText(/29\/10\/26/)).toBeVisible() // 03:30 UTC aún es el 29 en Colombia.
-    expect(screen.getByText('Horario especial autorizado: Ninguno')).toBeVisible()
+    expect(screen.queryByText(/Fuente e historial/)).not.toBeInTheDocument()
   })
 
-  it('conserva la falta de procedencia de una nota estándar en detalles, sin alarma operativa', () => {
+  it('una nota estándar no agrega detalles ni alarma operativa', () => {
     const legacy = resolveReservationTiming(r, 'checkin', { id: 'task-synthetic', notes: '15:00|' })
     render(<ReservationTimePanel timing={legacy} stay={r} />)
     expect(entry()).toHaveTextContent('3:00 p. m.')
     expect(screen.queryByText(/confirmar con administración/)).not.toBeInTheDocument()
-    expect(screen.getByText(/Excepción heredada:/)).not.toBeVisible()
-    fireEvent.click(screen.getByText('Fuente e historial del horario'))
-    expect(screen.getByText(/Excepción heredada:/)).toBeVisible()
-    expect(screen.getByText('Horario especial autorizado: 15:00')).toBeVisible()
+    expect(screen.queryByText(/Excepción heredada:/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Fuente e historial/)).not.toBeInTheDocument()
   })
 
   it('mantiene visible la revisión de una excepción heredada que sí cambia la hora', () => {
@@ -79,7 +72,7 @@ describe('presentación y edición de horarios', () => {
     expect(entry()).toHaveTextContent('3:00 p. m.')
     expect(screen.getByText(/Avisó llegada:/)).toHaveTextContent('4:00 p. m.')
     expect(screen.getByText(/La hora avisada del correo contradice el ajuste manual/)).toBeVisible()
-    expect(screen.getByText(/Excepción heredada:/)).not.toBeVisible()
+    expect(screen.queryByText(/Excepción heredada:/)).not.toBeInTheDocument()
   })
 
   it('las horas de una estancia modificada quedan en revisión y no sustituyen el estándar', () => {

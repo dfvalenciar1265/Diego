@@ -3,21 +3,12 @@ import { useId, useRef, useState, useTransition, type ReactNode } from 'react'
 import { Pencil } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { saveReservationTime } from '@/actions/reservation-times'
-import type { ReservationTiming, TimeFact } from '@/lib/reservation-times'
+import type { ReservationTiming } from '@/lib/reservation-times'
 
-const sourceLabels: Record<string, string> = { app: 'AirAdmin', mcp: 'Asistente', gmail: 'Correo', legacy: 'Nota heredada', legacy_reservation_notes: 'Reserva heredada', operation_policy: 'Política operativa' }
-const kindLabels = { estimate: 'Hora avisada', authorization: 'Autorización', platform: 'Horario de Airbnb' }
 function clockLabel(time: string) {
   const [hour, minute] = time.split(':').map(Number)
   return `${hour % 12 || 12}:${String(minute).padStart(2, '0')} ${hour < 12 ? 'a. m.' : 'p. m.'}`
 }
-function provenance(fact: TimeFact) {
-  const date = fact.observed_at ? new Intl.DateTimeFormat('es-CO', {
-    timeZone: 'America/Bogota', dateStyle: 'short', timeStyle: 'short',
-  }).format(new Date(fact.observed_at)) : 'Fecha original desconocida'
-  return `${sourceLabels[fact.source] ?? fact.source} · ${fact.author} · ${date} · reserva ${fact.reservation_id} · ${fact.service_date}`
-}
-
 export function ReservationTimePanel({ timing, stay, canEdit = false, heading }: {
   timing: ReservationTiming
   stay: { check_in: string; check_out: string }
@@ -36,7 +27,7 @@ export function ReservationTimePanel({ timing, stay, canEdit = false, heading }:
   const isArrival = timing.direction === 'checkin'
   const specialTime = timing.authorization && timing.authorization.time !== timing.standard.time
   // Una nota antigua que repite el estándar no cambia la instrucción de trabajo.
-  // La falta de autor/fecha se conserva en los detalles; los demás avisos siguen visibles.
+  // La procedencia sigue almacenada; los avisos operativos importantes permanecen visibles.
   const routineLegacy = timing.authorization?.source === 'legacy' && !specialTime
   const visibleReview = timing.review.filter(text => !(routineLegacy
     && text === 'Excepción heredada: autor y fecha originales desconocidos.'))
@@ -112,29 +103,6 @@ export function ReservationTimePanel({ timing, stay, canEdit = false, heading }:
       {specialTime ? <p className="font-medium text-[#0f172a]">Horario especial autorizado</p> : null}
       {timing.estimate ? <p>{isArrival ? 'Avisó llegada:' : 'Avisó salida:'} <strong>{clockLabel(timing.estimate.time)}</strong></p> : null}
       {visibleReview.map(text => <p key={text} className="rounded bg-amber-50 px-2 py-1 text-amber-900">⚠ {reviewLabel(text)}</p>)}
-      <details>
-        <summary className="min-h-11 cursor-pointer py-3">Fuente e historial del horario</summary>
-        <div className="space-y-2 border-t border-[#e2e8f0] pt-2">
-          <p>Horas de Colombia.</p>
-          {[
-            { label: 'Horario habitual', fact: timing.standard, empty: '' },
-            { label: 'Hora avisada por el huésped', fact: timing.estimate, empty: 'Sin comunicar' },
-            { label: 'Horario especial autorizado', fact: timing.authorization, empty: 'Ninguno' },
-            { label: 'Horario del correo de Airbnb', fact: timing.platform, empty: 'Sin registrar' },
-          ].map(({ label, fact, empty }) => <div key={label}>
-            <p className="font-medium text-[#0f172a]">{label}: {fact?.time ?? empty}</p>
-            {fact ? <p className="break-words">{provenance(fact)}</p> : null}
-          </div>)}
-          {timing.review.map(text => <p key={text} className="text-amber-900">{text}</p>)}
-          {timing.history.length > 0 ? <details>
-            <summary className="min-h-11 cursor-pointer py-3">Fuente e historial ({timing.history.length})</summary>
-            {timing.history.map(event => <p key={event.id} className="mt-1 break-words">
-              #{event.version} · {kindLabels[event.kind]} · {event.time ?? 'Retirado'} · {sourceLabels[event.source]} · {event.author} · {event.observed_at ?? 'Fecha original desconocida'}
-              {event.invalidated_at ? ' · Requiere nueva confirmación' : ''}
-            </p>)}
-          </details> : null}
-        </div>
-      </details>
       {message ? <p role="status">{message} <button className="underline" onClick={() => router.refresh()}>Actualizar horarios</button></p> : null}
     </div>
   )
