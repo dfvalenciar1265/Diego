@@ -2,7 +2,8 @@ import { todayInBogota, hourInBogota, addDays } from '@/lib/gpt-api/dates'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentMember } from '@/lib/auth'
-import { getDashboardKPIs, getTodayCheckOuts } from '@/actions/dashboard'
+import { getTodayCheckOuts } from '@/actions/dashboard'
+import { getTeamMembers } from '@/actions/team'
 import { getTasks } from '@/actions/tasks'
 import { getMaintenance } from '@/actions/maintenance'
 import { getAcceptedChanges } from '@/actions/reservations'
@@ -11,7 +12,6 @@ import { ChargeLine, RequestLine } from '@/components/dashboard/FollowupItems'
 import { PendingChangeCard } from '@/components/dashboard/PendingChangeCard'
 import { getLowStockAlerts } from '@/actions/supplies'
 import { getPurchaseRequests } from '@/actions/purchases'
-import Link from 'next/link'
 import { KPICard } from '@/components/dashboard/KPICard'
 import { StockAlert } from '@/components/dashboard/StockAlert'
 import { TaskCard } from '@/components/tasks/TaskCard'
@@ -21,11 +21,12 @@ import { preparationArrivals, preparationViews } from '@/lib/gpt-api/preparation
 import { RefreshButton } from '@/components/dashboard/RefreshButton'
 import { ResolvePurchaseButton } from '@/components/dashboard/ResolvePurchaseButton'
 import { canDo } from '@/lib/permissions'
+import { canOperateCheckoutCleaning } from '@/lib/checkout-cleaning'
+import { dashboardSummary } from '@/lib/dashboard-summary'
+import { PendingMaintenance, type OpenMaintenance } from '@/components/dashboard/PendingMaintenance'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
-import type { PurchaseRequest, Task, MaintenanceIssue } from '@/lib/types'
-
-type OpenMaintenance = MaintenanceIssue & { property?: { name: string } | null }
+import type { PurchaseRequest, Task } from '@/lib/types'
 
 export default async function DashboardPage() {
   // Cached per request — no duplicate auth round-trip with the layout
@@ -46,16 +47,16 @@ export default async function DashboardPage() {
 
   // All dashboard data fetched concurrently (no waterfall)
   const supabase = await createClient()
-  const [arrivals, kpis, todayTasks, stockAlerts, pendingPurchases, checkOuts, maintenanceAll, acceptedChanges, followups] = await Promise.all([
+  const [arrivals, todayTasks, stockAlerts, pendingPurchases, checkOuts, maintenanceAll, acceptedChanges, followups, people] = await Promise.all([
     preparationArrivals(supabase, todayISO),
-    getDashboardKPIs(),
     getTasks({ date: todayISO, type: 'other' }),
     getLowStockAlerts(),
     getPurchaseRequests('pending'),
-    getTodayCheckOuts(),
+    getTodayCheckOuts(todayISO),
     getMaintenance(),
     getAcceptedChanges(),
     getTodayFollowups(),
+    member.role === 'admin' || member.role === 'anfitrion' ? getTeamMembers() : Promise.resolve([]),
   ])
 
   // Cobros adicionales: los de quien sale hoy van con su salida; el resto (vencidos u otros) aparte.
@@ -77,6 +78,8 @@ export default async function DashboardPage() {
 
   // Other tasks scheduled for today (cleaning shown in its own section)
   const otherTasks = todayTasks.filter((t: Task) => t.type !== 'cleaning' && t.type !== 'preparation' && t.scheduled_for === todayISO)
+  const kpis = dashboardSummary(todayISO, prepArrivals, checkOuts, preparationById, otherTasks)
+  const cleaners = people.filter(p => canOperateCheckoutCleaning(p.role)).map(p => ({ id: p.id, name: p.name }))
 
   return (
     <div className="pb-4">
@@ -103,13 +106,15 @@ export default async function DashboardPage() {
 
       {/* KPIs — hoy, grid 3 columnas iguales */}
       <div className="grid grid-cols-3 gap-2 md:gap-4 px-4 pt-4">
-        <KPICard label="Check-ins"  value={kpis.checkInsToday}
+        <KPICard label="Llegadas"  value={kpis.arrivalsToday}
                  color="#ff385c" subtitle="hoy" icon="🏠" />
-        <KPICard label="Check-outs" value={kpis.checkOutsToday}
+        <KPICard label="Salidas" value={kpis.departuresToday}
                  color="#22c55e" subtitle="hoy" icon="🚪" />
-        <KPICard label="Tareas"     value={kpis.pendingTasks}
-                 color="#f97316" subtitle="hoy" icon="✅" />
+        <KPICard label="Pendientes" value={kpis.pendingWork}
+                 color="#f97316" subtitle="para hoy" icon="✅" />
       </div>
+      <p className="px-4 pt-2 text-[11px] text-[#64748b]">Pendientes: limpiezas de hoy, preparación de llegadas de hoy y mañana, y otras tareas sin terminar.
+        {kpis.unchecked ? ' Incluye trabajos que requieren comprobar sus datos.' : ''}</p>
 
       {/* Phone: stacked. lg+: two balanced columns, same reading order (CSS columns) */}
       <div className="px-4 pt-4 space-y-4 lg:space-y-0 lg:columns-2 lg:gap-4 [&>*]:break-inside-avoid lg:[&>*]:mb-4">
@@ -124,7 +129,7 @@ export default async function DashboardPage() {
             <div className="space-y-2.5">
               {checkOuts.map(co => (
                 <div key={co.id} className="space-y-1.5">
-                  <CheckoutCard co={co} canEdit={member.role === 'admin'} />
+                  <CheckoutCard co={co} role={member.role} memberId={member.id} people={cleaners} />
                   {charges.filter(c => c.reservation_id === co.id).map(c => <ChargeLine key={c.id} charge={c} />)}
                 </div>
               ))}
@@ -171,25 +176,7 @@ export default async function DashboardPage() {
         )}
 
         {/* Mantenimiento pendiente — urgentes arriba, con enlace a la pantalla completa */}
-        {openMaintenance.length > 0 && (
-          <section className="bg-white border border-[#e2e8f0] rounded-xl p-4
-                              shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-xs font-semibold text-[#64748b] uppercase tracking-wide">
-                🔧 Mantenimiento pendiente ({openMaintenance.length})
-              </p>
-              <Link href="/maintenance" className="text-xs font-semibold text-[#6366f1] shrink-0 min-h-11 -my-3 flex items-center">
-                Ver todo →
-              </Link>
-            </div>
-            <div className="space-y-1.5">
-              {openMaintenance.slice(0, 5).map(m => <MaintenanceAlertItem key={m.id} issue={m} />)}
-            </div>
-            {openMaintenance.length > 5 && (
-              <p className="text-[11px] text-[#64748b] mt-2">+{openMaintenance.length - 5} más</p>
-            )}
-          </section>
-        )}
+        <PendingMaintenance issues={openMaintenance} />
 
         {/* Alertas de stock */}
         {stockAlerts.length > 0 && (
@@ -219,10 +206,6 @@ export default async function DashboardPage() {
         {/* Tareas de hoy — solo preparación y otras (limpieza va en su propia sección) */}
         {(prepArrivals.length > 0 || otherTasks.length > 0) && (
         <section>
-          <p className="text-xs font-semibold text-[#64748b] uppercase tracking-wide mb-3">
-            ✅ Tareas de hoy ({prepArrivals.length + otherTasks.length})
-          </p>
-
           <div className="space-y-4">
 
               {/* Preparación de las llegadas de hoy y mañana: una tarjeta por reserva */}
@@ -231,7 +214,7 @@ export default async function DashboardPage() {
                   <div className="flex items-center gap-2 mb-2">
                     <span className="text-base">🛏️</span>
                     <span className="text-xs font-semibold text-[#ff385c] uppercase tracking-wide">
-                      Preparación hoy ({prepArrivals.length})
+                      Preparación · hoy y mañana ({prepArrivals.length})
                     </span>
                     <div className="flex-1 h-px bg-[#ffe4e8]" />
                   </div>
@@ -247,7 +230,7 @@ export default async function DashboardPage() {
                   <div className="flex items-center gap-2 mb-2">
                     <span className="text-base">📋</span>
                     <span className="text-xs font-semibold text-[#64748b] uppercase tracking-wide">
-                      Otras ({otherTasks.length})
+                      Otras tareas de hoy ({otherTasks.length})
                     </span>
                     <div className="flex-1 h-px bg-[#e2e8f0]" />
                   </div>
@@ -261,22 +244,6 @@ export default async function DashboardPage() {
         </section>
         )}
 
-      </div>
-    </div>
-  )
-}
-
-function MaintenanceAlertItem({ issue }: { issue: OpenMaintenance }) {
-  const color = issue.priority === 'urgent' ? '#ef4444' : issue.priority === 'scheduled' ? '#6366f1' : '#f97316'
-  const label = issue.priority === 'urgent' ? 'Urgente' : issue.priority === 'scheduled' ? 'Programado' : 'Normal'
-  return (
-    <div className="flex items-center gap-2.5 py-1">
-      <span className="w-2 h-2 rounded-full shrink-0" style={{ background: color }} />
-      <div className="flex-1 min-w-0">
-        <p className="text-xs font-medium text-[#0f172a] truncate">{issue.title}</p>
-        <p className="text-[11px] text-[#64748b] truncate">
-          {issue.property?.name ?? '—'} · {label}{issue.status === 'in_progress' ? ' · en curso' : ''}
-        </p>
       </div>
     </div>
   )

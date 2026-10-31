@@ -45,7 +45,7 @@ export function ArrivalPreparationPanel({ reservation, preparation: view, role }
   }
   return <div className="mt-2 space-y-2 border-t border-[#e2e8f0] pt-2 text-xs">
     {view.issues.length > 0 ? <div className="rounded-lg border border-amber-200 bg-amber-50 p-2">
-      <p className="font-semibold text-amber-900">⚠ Incidencias de este apartamento ({view.issues.length})</p>
+      <p className="font-semibold text-amber-900">⚠ Incidencias en este apartamento ({view.issues.length})</p>
       <ul className="mt-1 space-y-1 text-amber-950">{view.issues.map(issue => <li key={issue.id}>
         {issue.priority === 'urgent' ? <strong>Urgente · </strong> : null}{issue.title}
       </li>)}</ul>
@@ -54,9 +54,6 @@ export function ArrivalPreparationPanel({ reservation, preparation: view, role }
     {view.requests.length > 0 ? <ul className="space-y-1 text-[#475569]">{view.requests.map(q => <li key={q.id}>
       {q.status === 'ready' && !q.review_reason ? '✓' : '⚠'} {q.description} · {q.status === 'ready' && !q.review_reason ? 'lista' : 'pendiente o por revisar'}
     </li>)}</ul> : null}
-    <p className={`font-semibold ${ready ? 'text-green-700' : 'text-[#0f172a]'}`}>
-      {ready ? '✓ Preparación confirmada' : 'Preparación de esta llegada'}
-    </p>
     {view.error ? <p role="alert" className="text-amber-900">{view.error}</p> : null}
     {view.state?.review_reason ? <p className="rounded bg-amber-50 p-2 text-amber-900">{view.state.review_reason}</p> : null}
     <ol className="divide-y divide-[#f1f5f9]">{PREPARATION_STEPS.map(step => {

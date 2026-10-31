@@ -39,8 +39,8 @@ export function DashboardPrepCard({ arrival: r, preparation, role }: {
     })
   }
   return <div className="rounded-xl border bg-white px-3 py-2.5 shadow-sm">
-    <ReservationTimePanel key={timing.version} timing={timing} stay={r} canEdit={role === 'admin'} heading={heading} />
-    <ArrivalPreparationPanel key={preparation.state?.version ?? 0} reservation={r} preparation={preparation} role={role} />
+    <ReservationTimePanel key={`timing:${timing.version}`} timing={timing} stay={r} canEdit={role === 'admin'} heading={heading} />
+    <ArrivalPreparationPanel key={`preparation:${preparation.state?.version ?? 0}`} reservation={r} preparation={preparation} role={role} />
     {task ? <label className="mt-1 block text-xs">Nota para el equipo
       <textarea rows={1} value={note} disabled={pending} onChange={e => setNote(e.target.value)} onBlur={saveNote}
         placeholder="Indicaciones para esta llegada" className="mt-1 min-h-11 w-full rounded border p-2" />

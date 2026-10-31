@@ -1,0 +1,27 @@
+# Inicio: horarios, limpieza e indicadores
+
+Pedido de Diego, 31-oct-2026. Cambios propuestos para revisión en PR; no publicados en producción.
+
+Criterios de aceptación:
+
+- La hora destacada de entrada/salida es el punto de edición para administración, con un lápiz y un área de toque de al menos 44 px. Se elimina «Ver o ajustar horario». La edición exige guardar expresamente; cerrar no escribe nada. El resto del equipo mantiene lectura. Hora avisada, hora permitida, fuentes, historial y contradicciones siguen separados; una ETA no autoriza una excepción.
+- Salidas de hoy permite iniciar la tarea de limpieza existente y terminarla desde la misma tarjeta. Administración/anfitrión eligen quién limpia; limpieza inicia sobre sí misma y solo opera sobre su asignación. Se conservan responsable y estado. Terminar esta tarea no certifica las tres etapas de otra llegada.
+- El servidor comprueba sesión activa, rol, persona activa, reserva confirmada, apartamento, fechas y día de salida en America/Bogota. No se crea ni se escoge una copia cuando falta una tarea única. Una escritura condicional por estado/asignación evita sobrescribir un inicio simultáneo; los reintentos no duplican tareas ni cambian la fecha de una finalización ya guardada. Un error de red o conflicto no pinta un estado completado.
+- Mantenimiento es una lista plegable, cerrada inicialmente, con cantidad visible y aviso de urgentes incluso cerrada. Al abrir muestra los pendientes y vínculo a Mantenimiento; no resuelve ni cambia incidencias.
+- Preparación conserva las tres etapas, solicitudes e «Incidencias en este apartamento». Se elimina el título repetido «Preparación de esta llegada». La sección aclara que incluye llegadas de hoy y mañana; cada tarjeta conserva fecha, huéspedes y hora.
+- Los indicadores usan las mismas filas que las tarjetas. Llegadas y salidas cuentan reservas confirmadas del día colombiano. Pendientes suma una limpieza por salida de hoy aún no terminada, una preparación por llegada de hoy/mañana aún no comprobada como lista y otras tareas de hoy sin terminar. No cuenta tres veces las etapas ni varias veces una tarea duplicada. Las tareas ausentes/datos no comprobados siguen pendientes, con aviso. No incluye compras, cobros o incidencias en ese número; su alcance está escrito debajo de los indicadores.
+- La página deja de usar la consulta antigua que contaba solo tareas de tipo other y consultaba ingresos mensuales innecesariamente. Se conservan contratos MCP y las acciones anteriores.
+
+Sin migraciones ni cambios de tablas, RLS, precios, Gmail o disponibilidad. La consulta de responsables se serializa a cliente solo con id/nombre; la tarea de salida se transmite con campos explícitos, sin costos.
+
+Despliegue pendiente: revisar la vista previa, aprobar merge y producción, integrar y comprobar Inicio con sesión real. No aplicar migraciones para esta entrega. Recuperación: volver al código anterior; las tareas conservan su esquema y estados compatibles.
+
+Verificación realizada el 31-oct-2026:
+
+- Vitest: 520 correctas y 1 integración PostgreSQL/HTTP opcional omitida, 52 archivos correctos/1 omitido. Cobertura nueva con fake-db: duplicados, reintentos, dos inicios simultáneos, permisos, cancelaciones, fechas/apartamento y medianoche de Bogotá; interfaz de horarios, limpieza, mantenimiento e indicadores.
+- Tipos: npx tsc --noEmit -p . correcto. Un intento solapado con el build encontró archivos temporales ausentes; se repitió después del build. Se corrigió además una opción de consulta inválida en la prueba nueva. Resultado final: salida 0, sin errores.
+- Lint: 0 errores, únicamente los 6 avisos anteriores de __tests__/lib/types.test.ts. Build con variables ficticias correcto, 30 páginas.
+- scripts/test-migrations.sh: correcto en PostgreSQL local temporal, incluyendo SQL y concurrencia/regresiones de horarios, Gmail y preparación. Primer intento sin acceso al socket local; la ejecución local autorizada terminó en 0. No hubo migración nueva ni aplicación en Supabase.
+- La consulta nueva de salidas se verificó contra PostgREST real, solo lectura: 2 reservas de salida, 2 tareas de limpieza y ninguna tarea de fecha/apartamento incorrectos. No se imprimieron claves ni datos personales.
+- Navegador integrado con la página/componentes reales y lecturas/acciones simuladas, solo datos sintéticos: 1120, 393 y 320 px; sin desbordamiento horizontal. Se probó iniciar con responsable, terminar, reducción del indicador, edición mediante la propia hora y selector, mantenimiento plegable/urgentes y vistas por roles. Se detectó y corrigió una colisión previa de claves entre el panel de horarios y el de preparación; el refresco final no registró errores de navegador.
+- No se probó teléfono físico, ni la nueva escritura con sesiones reales del equipo, ni la operación de producción modificada. Los cambios siguen sujetos a revisión del PR y autorización de merge/producción. Ninguna reserva, tarea, horario o confirmación real se modificó para probar. Las fases siguientes de huéspedes e inventario y los pendientes operativos anteriores no se tocaron.

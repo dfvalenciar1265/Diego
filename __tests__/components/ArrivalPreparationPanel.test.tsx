@@ -76,7 +76,8 @@ describe('tres etapas en la llegada', () => {
     render(<ArrivalPreparationPanel reservation={r} preparation={preparationView({ state, blockers: [], history: [{
       id: 'event-synthetic', version: 3, action: 'ready:confirmed', reason: null, author: 'Admin Sintético', source: 'app', at: stamp,
     }] })} role="admin" />)
-    expect(screen.getByText('✓ Preparación confirmada')).toBeVisible()
+    expect(screen.getByText('✓ Listo para recibir')).toBeVisible()
+    expect(screen.queryByText('Preparación de esta llegada')).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Reabrir Limpieza terminada' }))
     expect(screen.getByRole('button', { name: 'Confirmar reapertura' })).toBeDisabled()
     fireEvent.change(screen.getByLabelText('Motivo para reabrir: Limpieza terminada'), { target: { value: 'Se ensució de nuevo Sintético' } })

@@ -15,6 +15,16 @@ afterEach(cleanup)
 beforeEach(() => vi.clearAllMocks())
 
 describe('preparación compacta para el equipo', () => {
+  it('refrescar con versiones iguales de horario y preparación no duplica los controles', () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const { rerender } = render(<DashboardPrepCard arrival={arrival} preparation={view} role="admin" />)
+      rerender(<DashboardPrepCard arrival={{ ...arrival, time_version: 1 }} preparation={{ ...view, state: null }} role="admin" />)
+      expect(screen.getAllByRole('button', { name: /Editar hora de entrada/ })).toHaveLength(1)
+      expect(screen.getAllByRole('button', { name: 'Confirmar limpieza' })).toHaveLength(1)
+      expect(consoleError).not.toHaveBeenCalled()
+    } finally { consoleError.mockRestore() }
+  })
   it('muestra llegada legible y conserva la nota; editarla no autoriza una hora', async () => {
     mocks.notes.mockResolvedValue({ success: true })
     render(<DashboardPrepCard arrival={arrival} preparation={view} role="cleaning" />)

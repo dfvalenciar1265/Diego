@@ -14,14 +14,26 @@ const entry = () => screen.getByText('Entrada desde las').parentElement!
 const exit = () => screen.getByText('Salida hasta las').parentElement!
 
 describe('presentación y edición de horarios', () => {
+  it('la propia hora abre la edición y cerrar no guarda ningún cambio', () => {
+    render(<ReservationTimePanel timing={resolveReservationTiming(r, 'checkout')} stay={r} canEdit />)
+    const button = screen.getByRole('button', { name: /Editar hora de salida: 11:00 a. m./ })
+    expect(button).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByText('Ver o ajustar horario')).not.toBeInTheDocument()
+    fireEvent.click(button)
+    expect(screen.getByLabelText('Hora permitida por administración')).toHaveValue('11:00')
+    fireEvent.change(screen.getByLabelText('Hora permitida por administración'), { target: { value: '12:30' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Cerrar' }))
+    expect(mocks.save).not.toHaveBeenCalled()
+    expect(exit()).toHaveTextContent('11:00 a. m.')
+  })
   it('muestra una sola hora operativa y deja los datos vacíos en detalles cerrados', () => {
     render(<ReservationTimePanel timing={resolveReservationTiming(r, 'checkin')} stay={r} />)
     expect(entry()).toHaveTextContent('3:00 p. m.')
     expect(screen.queryByText(/Avisó llegada:/)).not.toBeInTheDocument()
     expect(screen.getByText('Horario habitual: 15:00')).not.toBeVisible()
     expect(screen.getByText('Hora avisada por el huésped: Sin comunicar')).not.toBeVisible()
-    expect(screen.queryByText(/Fuente e historial/)).not.toBeInTheDocument()
-    fireEvent.click(screen.getByText('Ver detalles del horario'))
+    expect(screen.getByText('Fuente e historial del horario').closest('details')).not.toHaveAttribute('open')
+    fireEvent.click(screen.getByText('Fuente e historial del horario'))
     expect(screen.getByText('Horario habitual: 15:00')).toBeVisible()
     expect(screen.getByText('Horario especial autorizado: Ninguno')).toBeVisible()
   })
@@ -33,7 +45,7 @@ describe('presentación y edición de horarios', () => {
     expect(screen.getByText(/Avisó que llega antes/)).toBeVisible()
     expect(screen.queryByText('Ver o ajustar horario')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Guardar hora avisada', hidden: true })).not.toBeInTheDocument()
-    fireEvent.click(screen.getByText('Ver detalles del horario'))
+    fireEvent.click(screen.getByText('Fuente e historial del horario'))
     expect(screen.getByText(/29\/10\/26/)).toBeVisible() // 03:30 UTC aún es el 29 en Colombia.
     expect(screen.getByText('Horario especial autorizado: Ninguno')).toBeVisible()
   })
@@ -44,7 +56,7 @@ describe('presentación y edición de horarios', () => {
     expect(entry()).toHaveTextContent('3:00 p. m.')
     expect(screen.queryByText(/confirmar con administración/)).not.toBeInTheDocument()
     expect(screen.getByText(/Excepción heredada:/)).not.toBeVisible()
-    fireEvent.click(screen.getByText('Ver detalles del horario'))
+    fireEvent.click(screen.getByText('Fuente e historial del horario'))
     expect(screen.getByText(/Excepción heredada:/)).toBeVisible()
     expect(screen.getByText('Horario especial autorizado: 15:00')).toBeVisible()
   })
@@ -99,7 +111,8 @@ describe('presentación y edición de horarios', () => {
   it('guardar la hora avisada manda kind=estimate y espera la confirmación del servidor', async () => {
     mocks.save.mockResolvedValue({ success: true })
     render(<ReservationTimePanel timing={timing} stay={r} canEdit />)
-    fireEvent.click(screen.getByText('Ver o ajustar horario'))
+    fireEvent.click(screen.getByRole('button', { name: /Editar hora de entrada/ }))
+    fireEvent.click(screen.getByText('Hora avisada por el huésped'))
     fireEvent.change(screen.getByLabelText('Hora que avisó el huésped'), { target: { value: '10:00' } })
     fireEvent.click(screen.getByRole('button', { name: 'Guardar hora avisada' }))
     await waitFor(() => expect(mocks.save).toHaveBeenCalledWith(expect.objectContaining({
@@ -112,12 +125,12 @@ describe('presentación y edición de horarios', () => {
   it('un error conserva la clave para el reintento y muestra el conflicto', async () => {
     mocks.save.mockResolvedValue({ success: false, error: 'El horario cambió. Actualiza.' })
     render(<ReservationTimePanel timing={timing} stay={r} canEdit />)
-    fireEvent.click(screen.getByText('Ver o ajustar horario'))
+    fireEvent.click(screen.getByRole('button', { name: /Editar hora de entrada/ }))
     fireEvent.change(screen.getByLabelText('Hora permitida por administración'), { target: { value: '13:00' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Autorizar horario especial' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar hora permitida' }))
     await screen.findByText(/El horario cambió/)
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Autorizar horario especial' })).toBeEnabled())
-    fireEvent.click(screen.getByRole('button', { name: 'Autorizar horario especial' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Guardar hora permitida' })).toBeEnabled())
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar hora permitida' }))
     await waitFor(() => expect(mocks.save).toHaveBeenCalledTimes(2))
     expect(mocks.save.mock.calls[0][0].request_key).toBe(mocks.save.mock.calls[1][0].request_key)
     expect(mocks.save.mock.calls[0][0]).toMatchObject({ kind: 'authorization', expected_version: 1 })
