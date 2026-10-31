@@ -1,6 +1,7 @@
 'use client'
 import { useState,useTransition } from 'react'
 import { useRouter } from 'next/navigation'
+import { gmailNotice } from '@/lib/gmail-reconciliation/presentation'
 import { reviewGmailIssue } from '@/actions/gmail'
 import { GMAIL_REASON_LABELS,type GmailStatus } from '@/lib/gmail-reconciliation/status'
 import type { GmailIssue } from '@/lib/gmail-reconciliation/types'
@@ -35,10 +36,11 @@ function Issue({issue}:{issue:GmailIssue}) {
 export function GmailReconciliation({status}:{status:GmailStatus}) {
   if(!status.available)return <div role="alert" className="rounded-xl border border-amber-300 p-4 text-sm">Conciliación no disponible. Se requiere completar la configuración del servidor; no se puede certificar la importación.</div>
   const run=status.latest
+  const notice=run?gmailNotice({ok:run.status==='complete',state:run.status==='running'?'busy':run.status==='interrupted'?'failed':run.status,scan_complete:run.scan_complete,error_code:run.error_code,pending_count:status.pendingCount??undefined,duplicate_task_groups:run.stats.duplicate_task_groups}):null
   return <section className="rounded-2xl border bg-[var(--card)] p-4 space-y-3 text-sm">
     <h2 className="font-semibold">Conciliación de Gmail</h2>
     <p>Programación: cada {status.intervalMinutes} minutos · horas de Colombia</p>
-    <p>Último intento: {date(run?.started_at)} · {run?states[run.status]:'Sin intentos'}</p>
+    <p>Último intento: {date(run?.started_at)} · {run?run.status==='partial'?(run.scan_complete&&!run.error_code?'Lectura completa, con revisiones pendientes':notice?.label):states[run.status]:'Sin intentos'}</p>
     {status.interrupted?<p role="alert" className="text-red-700">La última corrida dejó de responder. La siguiente recuperará la lectura pendiente.</p>:null}
     <p>Última lectura completa: {date(status.lastRead?.scope_to)}</p>
     {status.delayed?<p role="alert" className="text-amber-800">Demora: no hay una lectura completa reciente. Esto no significa cancelación.</p>:null}
@@ -47,9 +49,10 @@ export function GmailReconciliation({status}:{status:GmailStatus}) {
       <p>{run.scan_complete?'Se terminó de leer ese alcance.':'Queda correo por leer; la próxima corrida continúa este alcance.'}</p>
       <p>Reservas nuevas: {run.stats.new_count??0} · cambios para revisar: {run.stats.updated_count??0} · cancelaciones aplicadas: {run.stats.cancelled_count??0}</p>
       {(run.stats.duplicate_task_groups??0)>0?<p role="alert" className="text-amber-800">Tareas repetidas: {run.stats.duplicate_task_groups} grupos requieren revisión. Se conservan sus notas y estados; no se elige ni elimina una tarea automáticamente.</p>:null}
-      {run.error_code?<p role="alert" className="text-red-700">El intento registró un error o trabajo incompleto. Los datos anteriores se conservan.</p>:null}
+      {notice&&run.status!=='complete'&&run.status!=='running'?<p role="alert" className={notice.tone==='error'?'text-red-700':'text-amber-800'}>{notice.message}</p>:null}
     </div>:null}
     <p className="font-medium">Pendientes de conciliación: {status.pendingCount??'Sin comprobar'}</p>
+    <p className="text-xs text-[var(--text-muted)]">Son correos por revisar, no un conteo de reservas faltantes. Una revisión histórica puede aumentar esta lista sin traer reservas nuevas.</p>
     <p className="text-xs text-[var(--text-muted)]">Conectar Gmail o encontrar cero reservas nuevas no certifica que todo esté al día. Las cancelaciones requieren un correo explícito con código.</p>
     <ul className="space-y-2">{status.issues.map(issue=><Issue key={`${issue.id}:${issue.version}`} issue={issue}/>)}</ul>
     {status.pendingCount!==null&&status.pendingCount>status.issues.length?<p>Se muestran los 30 pendientes más recientes. Los demás se conservan para revisión.</p>:null}

@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import type { Db } from '@/lib/gpt-api/db'
 import { fetchAirbnbEmailPage, getAccessToken, GmailCursorExpiredError } from '@/lib/gmail-sync'
 import type { GmailEvent, GmailPage, GmailRun, SyncResult } from './types'
+import { gmailNotice } from './presentation'
 
 export function gmailSyncDb() {
   return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
@@ -20,15 +21,17 @@ interface Dependencies {
   now?: () => number
   id?: () => string
 }
-const publicResult = (run: GmailRun): SyncResult => ({
+const publicResult = (run: GmailRun): SyncResult => {
+  const result: SyncResult = {
   ok: run.status === 'complete', state: run.status === 'complete' ? 'complete' : run.status === 'partial' ? 'partial' : 'failed',
   run_id: run.id, new_count: run.stats.new_count ?? 0, updated_count: run.stats.updated_count ?? 0,
   cancelled_count: run.stats.cancelled_count ?? 0, pending_count: run.pending_count ?? 0,
+  error_code: run.error_code, duplicate_task_groups: run.stats.duplicate_task_groups ?? 0,
   scan_complete: run.scan_complete, scope_from: run.scope_from, scope_to: run.scope_to,
-  ...(run.status === 'complete' ? {} : { error: run.status === 'partial'
-    ? 'La lectura o aplicación está incompleta. Revisa el alcance y los pendientes de conciliación.'
-    : 'No se completó la importación. Se conservan los datos anteriores y el punto de continuación.' }),
-})
+  }
+  if (!result.ok) result.error = gmailNotice(result).message
+  return result
+}
 
 export async function runGmailSync(
   origin: { via: 'cron' | 'manual'; actorId?: string; days?: number }, deps: Dependencies,
@@ -40,7 +43,7 @@ export async function runGmailSync(
   let run: GmailRun
   try {
     const { data, error } = await db.rpc('gmail_sync_begin', {
-      p_id: id, p_trigger: origin.via, p_days: origin.days ?? 365, p_actor: origin.actorId ?? null,
+      p_id: id, p_trigger: origin.via, p_days: origin.days ?? null, p_actor: origin.actorId ?? null,
     })
     if (error || !data?.run) return { ok: false, state: 'unavailable', error: 'Conciliación de Gmail no disponible. Revisa la migración y la configuración.' }
     if (data.busy) return { ok: false, state: 'busy', run_id: data.run.id, error: 'Ya hay una importación en curso. Consulta su estado antes de repetir.' }

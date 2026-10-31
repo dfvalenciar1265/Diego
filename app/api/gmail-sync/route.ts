@@ -16,8 +16,8 @@ async function handle(req: NextRequest) {
     actorId = member.id
   }
   const raw = req.nextUrl.searchParams.get('days')
-  const days = raw === null ? 365 : Number(raw)
-  if (!Number.isInteger(days) || days < 1 || days > 1825) return NextResponse.json({ error: 'days debe ser un entero de 1 a 1825' }, { status: 400 })
+  const days = raw === null ? undefined : Number(raw)
+  if (days !== undefined && (!Number.isInteger(days) || days < 1 || days > 1825)) return NextResponse.json({ error: 'days debe ser un entero de 1 a 1825' }, { status: 400 })
   const result = await runGmailSync({ via: cron ? 'cron' : 'manual', actorId, days }, { db: gmailSyncDb() })
   for (const path of ['/', '/calendar', '/cleaning', '/tasks', '/settings/gmail']) revalidatePath(path)
   return NextResponse.json(result, { status: result.state === 'complete' ? 200 : result.state === 'partial' ? 207 : result.state === 'busy' ? 409 : 503 })

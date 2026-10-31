@@ -31,7 +31,7 @@ describe('cron y acciones de conciliación con permiso de admin activo', () => {
   it('el cron válido registra origen cron y una importación parcial responde 207', async () => {
     mocks.run.mockResolvedValue({ ok: false, state: 'partial' })
     expect((await GET(request('GET', 'Bearer dummy-synthetic-cron'))).status).toBe(207)
-    expect(mocks.run).toHaveBeenCalledWith({ via: 'cron', actorId: undefined, days: 365 }, expect.anything())
+    expect(mocks.run).toHaveBeenCalledWith({ via: 'cron', actorId: undefined, days: undefined }, expect.anything())
   })
   it.each([null, { id: 'synthetic-cleaner', role: 'cleaning' }, { id: 'synthetic-host', role: 'anfitrion' }])('deniega la importación y consulta manual a %j', async member => {
     mocks.member.mockResolvedValue(member)
