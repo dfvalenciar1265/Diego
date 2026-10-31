@@ -4,6 +4,7 @@ import { format, startOfMonth, endOfMonth } from 'date-fns'
 import type { DashboardKPIs, OccupancyData } from '@/lib/types'
 import { getOccupiedDaysInWeek } from '@/lib/utils'
 import { resolveReservationTiming, type ReservationTiming, type TimeEvent } from '@/lib/reservation-times'
+import type { CheckoutCleaningTask } from '@/lib/checkout-cleaning'
 
 export interface TodayCheckOut {
   timing: ReservationTiming
@@ -15,6 +16,8 @@ export interface TodayCheckOut {
   property_name: string
   guests: number | null
   cleaning_task_id: string | null  // where the editable check-out time is stored
+  property_id: string
+  cleaning: { task: CheckoutCleaningTask | null; review: string | null }
 }
 
 /**
@@ -52,20 +55,19 @@ function to24hInput(parts: { h: number; m: number } | null): string {
   return `${String(parts.h).padStart(2, '0')}:${String(parts.m).padStart(2, '0')}`
 }
 
-export async function getTodayCheckOuts(): Promise<TodayCheckOut[]> {
+export async function getTodayCheckOuts(today = todayInBogota()): Promise<TodayCheckOut[]> {
   const supabase = await createClient()
-  const today = todayInBogota()
 
   const { data, error } = await supabase
     .from('reservations')
-    .select(`id, property_id, check_in, check_out, status, time_version, time_events:reservation_time_events(*), guest_name, notes, guests, property:properties(name), tasks(id, notes, type, scheduled_for)`)
+    .select(`id, property_id, check_in, check_out, status, time_version, time_events:reservation_time_events(*), guest_name, notes, guests, property:properties(name), tasks(id, property_id, reservation_id, notes, type, scheduled_for, status, assigned_to, completed_at, assignee:team_members(name))`)
     .eq('check_out', today)
     .eq('status', 'confirmed')
     .order('guest_name')
   if (error) throw new Error(error.message)
   if (!data) return []
 
-  type CheckoutTaskRow = { id: string; type: string; scheduled_for: string; notes: string | null }
+  type CheckoutTaskRow = CheckoutCleaningTask & { type: string; notes: string | null; assignee: { name: string } | { name: string }[] | null }
   type CheckoutRow = {
     property_id: string; check_in: string; check_out: string; status: string; time_version?: number; time_events: TimeEvent[]
     id: string
@@ -78,14 +80,15 @@ export async function getTodayCheckOuts(): Promise<TodayCheckOut[]> {
 
   return (data as CheckoutRow[]).map(r => {
     // The editable check-out time lives on today's cleaning task ("HH:MM|...").
-    const cleaningTask = r.tasks?.find(
-      t => t.type === 'cleaning' && t.scheduled_for === today
-    )
+    const cleaningTasks = r.tasks?.filter(t => t.type === 'cleaning') ?? []
+    const cleaningTask = cleaningTasks.length === 1 && cleaningTasks[0].scheduled_for === today
+      && cleaningTasks[0].property_id === r.property_id ? cleaningTasks[0] : undefined
     const timing = resolveReservationTiming(r, 'checkout', cleaningTask)
     const parts = parseTimeParts(timing.effective_time)
     const prop = Array.isArray(r.property) ? r.property[0] : r.property
     return {
       id: r.id,
+      property_id: r.property_id,
       timing,
       stay: { check_in: r.check_in, check_out: r.check_out },
       guest_name: r.guest_name ?? '—',
@@ -94,6 +97,15 @@ export async function getTodayCheckOuts(): Promise<TodayCheckOut[]> {
       property_name: prop?.name ?? '—',
       guests: r.guests ?? null,
       cleaning_task_id: cleaningTask?.id ?? null,
+      cleaning: {
+        task: cleaningTask ? {
+          id: cleaningTask.id, property_id: r.property_id, reservation_id: r.id, scheduled_for: cleaningTask.scheduled_for,
+          status: cleaningTask.status, assigned_to: cleaningTask.assigned_to, completed_at: cleaningTask.completed_at,
+          assignee_name: (Array.isArray(cleaningTask.assignee) ? cleaningTask.assignee[0] : cleaningTask.assignee)?.name ?? null,
+        } : null,
+        review: cleaningTask ? null : cleaningTasks.length > 1 ? 'Hay varias tareas de limpieza. Revísalas antes de iniciar; ninguna se eligió ni borró.'
+          : cleaningTasks.length ? 'La tarea de limpieza corresponde a otra fecha o apartamento.' : 'Falta la tarea de limpieza. Revisa en Limpieza.',
+      },
     }
   })
 }
