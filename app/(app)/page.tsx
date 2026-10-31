@@ -78,7 +78,7 @@ export default async function DashboardPage() {
 
   // Other tasks scheduled for today (cleaning shown in its own section)
   const otherTasks = todayTasks.filter((t: Task) => t.type !== 'cleaning' && t.type !== 'preparation' && t.scheduled_for === todayISO)
-  const kpis = dashboardSummary(todayISO, prepArrivals, checkOuts, preparationById, otherTasks)
+  const kpis = dashboardSummary(todayISO, prepArrivals, checkOuts, otherTasks)
   const cleaners = people.filter(p => canOperateCheckoutCleaning(p.role)).map(p => ({ id: p.id, name: p.name }))
 
   return (
@@ -113,7 +113,7 @@ export default async function DashboardPage() {
         <KPICard label="Pendientes" value={kpis.pendingWork}
                  color="#f97316" subtitle="para hoy" icon="✅" />
       </div>
-      <p className="px-4 pt-2 text-[11px] text-[#64748b]">Pendientes: limpiezas de hoy, preparación de llegadas de hoy y mañana, y otras tareas sin terminar.
+      <p className="px-4 pt-2 text-[11px] text-[#64748b]">Pendientes: limpiezas de hoy y otras tareas de hoy sin terminar.
         {kpis.unchecked ? ' Incluye trabajos que requieren comprobar sus datos.' : ''}</p>
 
       {/* Phone: stacked. lg+: two balanced columns, same reading order (CSS columns) */}
