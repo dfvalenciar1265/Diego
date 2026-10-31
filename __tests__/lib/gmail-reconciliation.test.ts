@@ -92,6 +92,14 @@ describe('corrida compartida, recuperación y resultados verificables', () => {
     expect(h.rpc.mock.calls.map(c => c[0])).toEqual(['gmail_sync_begin', 'gmail_sync_checkpoint', 'gmail_sync_maintenance', 'gmail_sync_finish'])
     expect(JSON.stringify(result)).not.toMatch(/dummy|next_page_cursor|connection_version/)
   })
+  it('el botón normal pide un alcance incremental; solo days explícito pide historial', async () => {
+    const h = harness()
+    await runGmailSync({ via: 'manual', actorId: 'synthetic-admin' }, { ...h, page: async () => page() })
+    expect(h.rpc).toHaveBeenCalledWith('gmail_sync_begin', expect.objectContaining({ p_trigger: 'manual', p_days: null }))
+    const historical = harness()
+    await runGmailSync({ via: 'manual', actorId: 'synthetic-admin', days: 365 }, { ...historical, page: async () => page() })
+    expect(historical.rpc).toHaveBeenCalledWith('gmail_sync_begin', expect.objectContaining({ p_days: 365 }))
+  })
   it('limita las páginas y conserva el cursor de continuación sin marcar todo al día', async () => {
     const h = harness(); let index = 0
     const result = await runGmailSync({ via: 'cron' }, { ...h, page: async () => page(`next-${++index}`) })

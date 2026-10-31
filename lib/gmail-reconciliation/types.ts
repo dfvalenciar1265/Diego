@@ -37,6 +37,8 @@ export interface SyncResult {
   cancelled_count?: number
   pending_count?: number
   scan_complete?: boolean
+  error_code?: string | null
+  duplicate_task_groups?: number
   scope_from?: string
   scope_to?: string
   connected?: boolean

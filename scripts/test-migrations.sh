@@ -163,10 +163,12 @@ SQL
 bash scripts/test-reservation-times-concurrency.sh "$DB"
 "${PSQL[@]}" -f scripts/test-gmail-before.sql
 "${PSQL[@]}" -f supabase/migrations/20261030153122_gmail_reconciliation.sql
+"${PSQL[@]}" -f supabase/migrations/20261031120552_gmail_sync_continuation.sql
 "${PSQL[@]}" -f scripts/test-gmail-reconciliation.sql
 bash scripts/test-gmail-concurrency.sh "$DB"
 "${PSQL[@]}" -f scripts/preflight-gmail.sql
 "${PSQL[@]}" -f supabase/migrations/20261030204811_arrival_preparation.sql
 "${PSQL[@]}" -f scripts/test-arrival-preparation.sql
 bash scripts/test-arrival-preparation-concurrency.sh "$DB"
+"${PSQL[@]}" -f scripts/test-gmail-continuation.sql
 echo "Migraciones base + cobros/solicitudes + horarios + conciliación Gmail + preparación: todas las comprobaciones pasaron."

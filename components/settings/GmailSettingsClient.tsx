@@ -7,12 +7,14 @@ import { useRouter } from 'next/navigation'
 import type { SyncResult } from '@/lib/gmail-reconciliation/types'
 import type { GmailStatus } from '@/lib/gmail-reconciliation/status'
 import { GmailReconciliation } from './GmailReconciliation'
+import { gmailNotice } from '@/lib/gmail-reconciliation/presentation'
 
 export function GmailSettingsClient(status: GmailStatus) {
   const {connected}=status
   const router=useRouter()
   const [isPending,startTransition]=useTransition()
   const [syncResult,setSyncResult]=useState<SyncResult|null>(null)
+  const notice=syncResult?gmailNotice(syncResult):null
 
   function handleSync() {
     setSyncResult(null)
@@ -79,20 +81,16 @@ export function GmailSettingsClient(status: GmailStatus) {
       )}
 
       {/* Sync result */}
-      {syncResult && (
+      {notice && (
         <div
+          role="status"
           className="rounded-xl p-3 text-sm"
           style={{
-            background: syncResult.ok ? '#dcfce7' : '#fef2f2',
-            color: syncResult.ok ? '#15803d' : '#dc2626',
+            background: notice.tone === 'success' ? '#dcfce7' : notice.tone === 'warning' ? '#fffbeb' : '#fef2f2',
+            color: notice.tone === 'success' ? '#15803d' : notice.tone === 'warning' ? '#92400e' : '#dc2626',
           }}
         >
-          {syncResult.ok
-            ? syncResult.new_count === 0
-              ? 'Lectura del alcance completada; no se encontraron reservas nuevas'
-              : `✓ ${syncResult.new_count} reserva${syncResult.new_count !== 1 ? 's' : ''} importada${syncResult.new_count !== 1 ? 's' : ''}`
-            : `Error: ${syncResult.error}`
-          }
+          {notice.message}
         </div>
       )}
 
