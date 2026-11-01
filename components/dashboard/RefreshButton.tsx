@@ -1,10 +1,40 @@
 'use client'
 import { useRouter } from 'next/navigation'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { dashboardDay } from '@/lib/dashboard-day'
 
-export function RefreshButton() {
+export function RefreshButton({ dayKey }: { dayKey?: string }) {
   const router = useRouter()
   const [spinning, setSpinning] = useState(false)
+
+  useEffect(() => {
+    if (!dayKey) return
+    let timer: ReturnType<typeof setTimeout>
+    let lastRefresh = 0
+    function checkDay() {
+      clearTimeout(timer)
+      const now = new Date()
+      const current = dashboardDay(now)
+      const changed = current.key !== dayKey
+      const editing = document.activeElement?.matches('input,textarea,select,[contenteditable="true"]')
+        || document.querySelector('textarea:disabled,select:disabled,[data-home-edit-error="true"]')
+      if (changed && !editing && document.visibilityState !== 'hidden' && now.getTime() - lastRefresh > 1000) {
+        lastRefresh = now.getTime()
+        router.refresh()
+      }
+      timer = setTimeout(checkDay, changed && editing ? 1000 : Math.max(100, current.nextChangeAt - now.getTime() + 50))
+    }
+    checkDay()
+    window.addEventListener('focus', checkDay)
+    window.addEventListener('online', checkDay)
+    document.addEventListener('visibilitychange', checkDay)
+    return () => {
+      clearTimeout(timer)
+      window.removeEventListener('focus', checkDay)
+      window.removeEventListener('online', checkDay)
+      document.removeEventListener('visibilitychange', checkDay)
+    }
+  }, [dayKey, router])
 
   function handleRefresh() {
     setSpinning(true)

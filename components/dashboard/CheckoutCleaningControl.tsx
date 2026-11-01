@@ -8,8 +8,8 @@ import type { TodayCheckOut } from '@/actions/dashboard'
 import type { UserRole } from '@/lib/types'
 
 export interface CleaningPerson { id: string; name: string }
-export function CheckoutCleaningControl({ checkout: co, role, memberId, people }: {
-  checkout: TodayCheckOut; role: UserRole; memberId: string; people: CleaningPerson[]
+export function CheckoutCleaningControl({ checkout: co, role, memberId, people, planning = false }: {
+  checkout: TodayCheckOut; role: UserRole; memberId: string; people: CleaningPerson[]; planning?: boolean
 }) {
   const task = co.cleaning.task
   const [choosing, setChoosing] = useState(false)
@@ -18,9 +18,9 @@ export function CheckoutCleaningControl({ checkout: co, role, memberId, people }
   const [pending, startTransition] = useTransition()
   const router = useRouter()
   const manager = role === 'admin' || role === 'anfitrion'
-  const permitted = canOperateCheckoutCleaning(role) && (manager || !task?.assigned_to || task.assigned_to === memberId)
+  const permitted = !planning && canOperateCheckoutCleaning(role) && (manager || !task?.assigned_to || task.assigned_to === memberId)
   function advance(action: 'start' | 'finish', assignedTo: string) {
-    if (!task) return
+    if (!task || !permitted) return
     setMessage('')
     startTransition(async () => {
       try {
@@ -53,7 +53,7 @@ export function CheckoutCleaningControl({ checkout: co, role, memberId, people }
         onClick={() => task.assigned_to && advance('finish', task.assigned_to)}
         className="min-h-11 rounded-lg bg-[#15803d] px-3 font-semibold text-white disabled:opacity-50">Terminar limpieza</button> : null}
     </div>
-    {choosing ? <form className="mt-2 flex flex-wrap items-end gap-2" onSubmit={e => { e.preventDefault(); if (assignee) advance('start', assignee) }}>
+    {choosing && permitted ? <form className="mt-2 flex flex-wrap items-end gap-2" onSubmit={e => { e.preventDefault(); if (assignee) advance('start', assignee) }}>
       <label className="w-full min-w-0 sm:w-auto sm:flex-1">¿Quién va a limpiar?
         <select value={assignee} disabled={pending} onChange={e => setAssignee(e.target.value)}
           className="mt-1 block min-h-11 w-full min-w-0 rounded border bg-white p-2">
@@ -64,7 +64,8 @@ export function CheckoutCleaningControl({ checkout: co, role, memberId, people }
       <button disabled={pending || !assignee} className="min-h-11 rounded-lg bg-[#6366f1] px-3 font-semibold text-white disabled:opacity-50">Confirmar inicio</button>
       <button type="button" disabled={pending} onClick={() => setChoosing(false)} className="min-h-11 px-1 underline">Cancelar</button>
     </form> : null}
-    {!permitted && task.status !== 'done' ? <p className="mt-1 text-[#64748b]">La persona asignada o administración actualiza esta limpieza.</p> : null}
+    {planning ? <p className="mt-1 text-[#64748b]">La limpieza se inicia el día de la salida.</p>
+      : !permitted && task.status !== 'done' ? <p className="mt-1 text-[#64748b]">La persona asignada o administración actualiza esta limpieza.</p> : null}
     {message ? <p role="status" className="mt-1 text-[#475569]">{message} <button onClick={() => router.refresh()} className="min-h-11 underline">Actualizar</button></p> : null}
     {task.status === 'done' ? <p className="mt-1 text-[#64748b]">La próxima llegada conserva su revisión y confirmación de listo.</p> : null}
   </div>

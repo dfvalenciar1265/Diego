@@ -9,6 +9,15 @@ const people = [{ id: cleanerId, name: 'Ana Sintética' }]
 afterEach(cleanup)
 beforeEach(() => vi.clearAllMocks())
 describe('limpieza fácil en una salida', () => {
+  it.each(['pending', 'in_progress'] as const)('el plan de mañana muestra responsable sin permitir %s antes de salir', status => {
+    const co = checkout()
+    Object.assign(co.cleaning.task!, { status, assigned_to: cleanerId, assignee_name: 'Ana Sintética' })
+    render(<CheckoutCleaningControl checkout={co} role="admin" memberId={adminId} people={people} planning />)
+    expect(screen.getByText('A cargo de Ana Sintética')).toBeVisible()
+    expect(screen.getByText('La limpieza se inicia el día de la salida.')).toBeVisible()
+    expect(screen.queryByRole('button', { name: /Iniciar limpieza|Terminar limpieza/ })).not.toBeInTheDocument()
+    expect(mocks.save).not.toHaveBeenCalled()
+  })
   it('administración elige quién limpia; no atribuye el trabajo a quien pulsa el botón', async () => {
     mocks.save.mockResolvedValue({ success: true })
     render(<CheckoutCleaningControl checkout={checkout()} role="admin" memberId={adminId} people={people} />)
