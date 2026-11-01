@@ -38,7 +38,7 @@ export function DashboardPrepCard({ arrival: r, preparation, role }: {
       } catch { setError('No se guardó la nota. Revisa tu conexión.') }
     })
   }
-  return <div className="rounded-xl border bg-white px-3 py-2.5 shadow-sm">
+  return <div data-home-edit-error={Boolean(error)} className="rounded-xl border bg-white px-3 py-2.5 shadow-sm">
     <ReservationTimePanel key={`timing:${timing.version}`} timing={timing} stay={r} canEdit={role === 'admin'} heading={heading} />
     <ArrivalIssues preparation={preparation} />
     {task ? <label className="mt-1 block text-xs">Nota para el equipo

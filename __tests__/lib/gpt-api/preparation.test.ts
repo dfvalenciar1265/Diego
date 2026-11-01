@@ -51,6 +51,14 @@ describe('lectura segura de preparación', () => {
     expect(JSON.stringify(view)).not.toMatch(/cost|amount|99000|50000/)
   })
 
+  it('Inicio puede pedir un único día sin cambiar la ventana existente del MCP', async () => {
+    const tomorrow = preparationArrival({ id: 'tomorrow-synthetic', check_in: '2027-02-11', tasks: [] })
+    const db = fakeDb({ reservations: [{ ...arrival }, { ...tomorrow }, { ...tomorrow, id: 'cancelled-synthetic', status: 'cancelled' }] })
+    expect((await preparationArrivals(db, arrival.check_in, arrival.check_in)).map(r => r.id)).toEqual([arrival.id])
+    expect((await preparationArrivals(db, tomorrow.check_in, tomorrow.check_in)).map(r => r.id)).toEqual([tomorrow.id])
+    expect((await preparationArrivals(db, arrival.check_in)).map(r => r.id)).toEqual([arrival.id, tomorrow.id])
+  })
+
   it.each(['arrival_preparations', 'arrival_preparation_history', 'maintenance', 'special_requests'])('una lectura fallida de %s bloquea confirmar', async table => {
     const db = fakeDb({}, { failSelectOnce: table })
     const view = (await preparationViews(db, [arrival], arrival.check_in))[arrival.id]

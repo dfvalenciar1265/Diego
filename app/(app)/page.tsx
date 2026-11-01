@@ -1,4 +1,5 @@
-import { todayInBogota, hourInBogota, addDays } from '@/lib/gpt-api/dates'
+import { hourInBogota } from '@/lib/gpt-api/dates'
+import { dashboardDay } from '@/lib/dashboard-day'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentMember } from '@/lib/auth'
@@ -40,19 +41,22 @@ export default async function DashboardPage() {
 
   const now      = new Date()
   // The server runs in UTC: "today" and the greeting must follow Colombia's clock
-  const todayISO = todayInBogota(now)
+  const planning = dashboardDay(now)
+  const todayISO = planning.today
+  const selectedDay = planning.date
   const today    = format(new Date(todayISO + 'T12:00:00'), "EEEE d 'de' MMMM", { locale: es })
+  const planningDate = format(new Date(selectedDay + 'T12:00:00'), "EEEE d 'de' MMMM", { locale: es })
   const hour     = hourInBogota(now)
   const greeting = hour < 12 ? 'Buenos días' : hour < 19 ? 'Buenas tardes' : 'Buenas noches'
 
   // All dashboard data fetched concurrently (no waterfall)
   const supabase = await createClient()
   const [arrivals, todayTasks, stockAlerts, pendingPurchases, checkOuts, maintenanceAll, acceptedChanges, followups, people] = await Promise.all([
-    preparationArrivals(supabase, todayISO),
-    getTasks({ date: todayISO, type: 'other' }),
+    preparationArrivals(supabase, selectedDay, selectedDay),
+    getTasks({ date: selectedDay, type: 'other' }),
     getLowStockAlerts(),
     getPurchaseRequests('pending'),
-    getTodayCheckOuts(todayISO),
+    getTodayCheckOuts(selectedDay),
     getMaintenance(),
     getAcceptedChanges(),
     getTodayFollowups(),
@@ -73,12 +77,12 @@ export default async function DashboardPage() {
     .filter(m => m.status !== 'resolved' && m.priority !== 'scheduled')
     .sort((a, b) => (priorityRank[a.priority] ?? 9) - (priorityRank[b.priority] ?? 9))
 
-  const prepArrivals = arrivals.filter(r => r.status === 'confirmed' && r.check_in >= todayISO && r.check_in <= addDays(todayISO, 1))
+  const prepArrivals = arrivals.filter(r => r.status === 'confirmed' && r.check_in === selectedDay)
   const preparationById = await preparationViews(supabase, prepArrivals, todayISO)
 
   // Other tasks scheduled for today (cleaning shown in its own section)
-  const otherTasks = todayTasks.filter((t: Task) => t.type !== 'cleaning' && t.type !== 'preparation' && t.scheduled_for === todayISO)
-  const kpis = dashboardSummary(todayISO, prepArrivals, checkOuts, otherTasks)
+  const otherTasks = todayTasks.filter((t: Task) => t.type !== 'cleaning' && t.type !== 'preparation' && t.scheduled_for === selectedDay)
+  const kpis = dashboardSummary(selectedDay, prepArrivals, checkOuts, otherTasks)
   const cleaners = people.filter(p => canOperateCheckoutCleaning(p.role)).map(p => ({ id: p.id, name: p.name }))
 
   return (
@@ -94,7 +98,7 @@ export default async function DashboardPage() {
             <p className="text-xs md:text-sm text-[#64748b] first-letter:uppercase md:mt-0.5">{today}</p>
           </div>
           <div className="flex items-center gap-1 md:gap-2 shrink-0">
-            <RefreshButton />
+            <RefreshButton dayKey={planning.key} />
             <div className="w-9 h-9 md:w-10 md:h-10 rounded-full flex items-center justify-center font-bold text-white text-sm"
                  style={{ background: 'linear-gradient(135deg, #ff385c, #ff6b6b)' }}
                  aria-hidden="true">
@@ -104,16 +108,21 @@ export default async function DashboardPage() {
         </div>
       </header>
 
-      {/* KPIs — hoy, grid 3 columnas iguales */}
+      {planning.tomorrow ? <div role="status" className="mx-4 mt-4 rounded-xl border border-indigo-200 bg-indigo-50 p-3 text-sm text-indigo-950">
+        <p className="font-semibold first-letter:uppercase">Plan para mañana · {planningDate}</p>
+        <p className="mt-1 text-xs">Desde las 7:00 p. m., Inicio muestra las llegadas, salidas y tareas del día siguiente para organizar al equipo. Las tareas de hoy siguen en Limpieza y Tareas.</p>
+      </div> : null}
+
+      {/* Indicadores del día mostrado, en tres columnas iguales. */}
       <div className="grid grid-cols-3 gap-2 md:gap-4 px-4 pt-4">
         <KPICard label="Llegadas"  value={kpis.arrivalsToday}
-                 color="#ff385c" subtitle="hoy" icon="🏠" />
+                 color="#ff385c" subtitle={planning.label} icon="🏠" />
         <KPICard label="Salidas" value={kpis.departuresToday}
-                 color="#22c55e" subtitle="hoy" icon="🚪" />
+                 color="#22c55e" subtitle={planning.label} icon="🚪" />
         <KPICard label="Pendientes" value={kpis.pendingWork}
-                 color="#f97316" subtitle="para hoy" icon="✅" />
+                 color="#f97316" subtitle={`para ${planning.label}`} icon="✅" />
       </div>
-      <p className="px-4 pt-2 text-[11px] text-[#64748b]">Pendientes: limpiezas de hoy y otras tareas de hoy sin terminar.
+      <p className="px-4 pt-2 text-[11px] text-[#64748b]">Pendientes: limpiezas y otras tareas de {planning.label} sin terminar.
         {kpis.unchecked ? ' Incluye trabajos que requieren comprobar sus datos.' : ''}</p>
 
       {/* Phone: stacked. lg+: two balanced columns, same reading order (CSS columns) */}
@@ -124,12 +133,12 @@ export default async function DashboardPage() {
           <section className="bg-white border border-[#e2e8f0] rounded-xl p-4
                               shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
             <p className="text-xs font-semibold text-[#64748b] uppercase tracking-wide mb-3">
-              🚪 Salidas de hoy
+              🚪 Salidas de {planning.label}
             </p>
             <div className="space-y-2.5">
               {checkOuts.map(co => (
                 <div key={co.id} className="space-y-1.5">
-                  <CheckoutCard co={co} role={member.role} memberId={member.id} people={cleaners} />
+                  <CheckoutCard co={co} role={member.role} memberId={member.id} people={cleaners} planning={planning.tomorrow} />
                   {charges.filter(c => c.reservation_id === co.id).map(c => <ChargeLine key={c.id} charge={c} />)}
                 </div>
               ))}
@@ -203,18 +212,18 @@ export default async function DashboardPage() {
           </section>
         )}
 
-        {/* Tareas de hoy — solo preparación y otras (limpieza va en su propia sección) */}
+        {/* Preparación y otras tareas del día mostrado; limpieza va con las salidas. */}
         {(prepArrivals.length > 0 || otherTasks.length > 0) && (
         <section>
           <div className="space-y-4">
 
-              {/* Preparación de las llegadas de hoy y mañana: una tarjeta por reserva */}
+              {/* Solo las llegadas del día mostrado: una tarjeta por reserva. */}
               {prepArrivals.length > 0 && (
                 <div>
                   <div className="flex items-center gap-2 mb-2">
                     <span className="text-base">🛏️</span>
                     <span className="text-xs font-semibold text-[#ff385c] uppercase tracking-wide">
-                      Preparación · hoy y mañana ({prepArrivals.length})
+                      Preparación de {planning.label} ({prepArrivals.length})
                     </span>
                     <div className="flex-1 h-px bg-[#ffe4e8]" />
                   </div>
@@ -230,7 +239,7 @@ export default async function DashboardPage() {
                   <div className="flex items-center gap-2 mb-2">
                     <span className="text-base">📋</span>
                     <span className="text-xs font-semibold text-[#64748b] uppercase tracking-wide">
-                      Otras tareas de hoy ({otherTasks.length})
+                      Otras tareas de {planning.label} ({otherTasks.length})
                     </span>
                     <div className="flex-1 h-px bg-[#e2e8f0]" />
                   </div>

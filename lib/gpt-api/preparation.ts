@@ -45,11 +45,12 @@ export async function preparationViews(db: Db, reservations: PreparationReservat
   } catch { return Object.fromEntries(reservations.map(r => [r.id, unavailable(r)])) }
 }
 
-/** Una tarjeta por reserva: las tareas duplicadas se conservan como evidencia, sin elegir una copia. */
-export async function preparationArrivals(db: Db, today = todayInBogota()): Promise<PreparationArrival[]> {
+/** Una tarjeta por reserva. Ventana de hoy/mañana por defecto; Inicio pide un solo día con through.
+ * Las tareas duplicadas se conservan como evidencia, sin elegir una copia. */
+export async function preparationArrivals(db: Db, today = todayInBogota(), through = addDays(today, 1)): Promise<PreparationArrival[]> {
   const { data, error } = await db.from('reservations')
     .select('id, property_id, airbnb_code, guest_name, guests, check_in, check_out, notes, status, time_version, time_events:reservation_time_events(*), property:properties(name), tasks(id, property_id, type, scheduled_for, notes, status, building_notified_at)')
-    .eq('status', 'confirmed').gte('check_in', today).lte('check_in', addDays(today, 1)).order('check_in').order('guest_name')
+    .eq('status', 'confirmed').gte('check_in', today).lte('check_in', through).order('check_in').order('guest_name')
   if (error) throw new Error('No se pudieron consultar las llegadas para preparar.')
   return (data ?? []) as unknown as PreparationArrival[]
 }
