@@ -171,4 +171,6 @@ bash scripts/test-gmail-concurrency.sh "$DB"
 "${PSQL[@]}" -f scripts/test-arrival-preparation.sql
 bash scripts/test-arrival-preparation-concurrency.sh "$DB"
 "${PSQL[@]}" -f scripts/test-gmail-continuation.sql
+"${PSQL[@]}" -f supabase/migrations/20261101231300_casa_blue_airadmin_calendar.sql
+"${PSQL[@]}" -f scripts/test-casa-blue-airadmin.sql
 echo "Migraciones base + cobros/solicitudes + horarios + conciliación Gmail + preparación: todas las comprobaciones pasaron."

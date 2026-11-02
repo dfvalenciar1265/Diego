@@ -15,6 +15,8 @@ import { loadSnapshot, type ReadDb } from './source'
 export const SOURCE_TIMEOUT_MS = 3_500
 
 export interface HandlerDeps {
+  /** Otra fuente explícita, con las mismas validaciones, límites, CORS y respuesta pública. */
+  load?: typeof loadSnapshot
   /** null cuando faltan las variables de entorno de Supabase. */
   db: () => ReadDb | null
   now: () => Date
@@ -46,7 +48,7 @@ export async function handleAvailability(req: Request, deps: HandlerDeps): Promi
     snapshot = { kind: 'problem', status: 'unconfigured', reason: 'faltan variables de Supabase' }
   } else {
     try {
-      snapshot = await withTimeout(SOURCE_TIMEOUT_MS, signal => loadSnapshot(db, parsed.query, signal))
+      snapshot = await withTimeout(SOURCE_TIMEOUT_MS, signal => (deps.load ?? loadSnapshot)(db, parsed.query, signal))
     } catch (err) {
       snapshot = { kind: 'problem', status: 'unavailable', reason: err instanceof Error ? err.message : 'error' }
     }

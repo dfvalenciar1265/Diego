@@ -24,6 +24,9 @@ export interface Coverage {
 }
 
 export interface PublicAvailability {
+  /** Solo la lectura directa de AirAdmin agrega estos campos; el contrato iCal se conserva. */
+  source?: 'airadmin'
+  calendarReadAt?: string | null
   query: AvailabilityQuery
   queriedAt: string
   lastSyncedAt: string | null
@@ -81,8 +84,8 @@ export interface UnitSnapshot {
 }
 
 export type SourceSnapshot =
-  | { kind: 'problem'; status: 'unconfigured' | 'unavailable' | 'incomplete'; reason: string }
-  | { kind: 'data'; lastSyncedAt: string | null; coverage: Coverage | null; units: UnitSnapshot[] }
+  | { kind: 'problem'; status: 'unconfigured' | 'unavailable' | 'incomplete'; reason: string; source?: 'airadmin' }
+  | { kind: 'data'; lastSyncedAt: string | null; coverage: Coverage | null; units: UnitSnapshot[]; source?: 'airadmin'; calendarReadAt?: string | null }
 
 /** Límites que hoy exige el sitio (no son una frecuencia comprobada de AirAdmin). */
 export const MAX_SYNC_AGE_SECONDS = 900
@@ -110,12 +113,13 @@ function sourceStatusFor(
   query: AvailabilityQuery,
   now: Date,
 ): SourceStatus {
-  if (!snapshot.lastSyncedAt || !snapshot.coverage) return 'incomplete'
-  const synced = Date.parse(snapshot.lastSyncedAt)
+  const asOf = snapshot.source === 'airadmin' ? snapshot.calendarReadAt : snapshot.lastSyncedAt
+  if (!asOf || !snapshot.coverage) return 'incomplete'
+  const synced = Date.parse(asOf)
   if (Number.isNaN(synced)) return 'incomplete'
   const ageSeconds = (now.getTime() - synced) / 1000
   if (ageSeconds < -MAX_SYNC_FUTURE_SECONDS) return 'unavailable'   // reloj de la fuente adelantado: no es confiable
-  if (ageSeconds > MAX_SYNC_AGE_SECONDS) return 'stale'
+  if (ageSeconds > (snapshot.source === 'airadmin' ? 120 : MAX_SYNC_AGE_SECONDS)) return 'stale'
   const { from, to } = snapshot.coverage
   if (from > query.arrival || to < query.departure) return 'incomplete'
   return 'ready'
@@ -200,7 +204,14 @@ export function evaluateUnit(unit: UnitSnapshot, query: AvailabilityQuery, cover
 
 /** Respuesta pública completa: siempre los ocho apartamentos del catálogo, una vez y en orden. */
 export function computeAvailability(query: AvailabilityQuery, snapshot: SourceSnapshot, now: Date): PublicAvailability {
-  const base = { query: { ...query }, queriedAt: isoInstant(now) }
+  const base = {
+    query: { ...query }, queriedAt: isoInstant(now),
+    ...(snapshot.source === 'airadmin' ? {
+      source: 'airadmin' as const,
+      calendarReadAt: snapshot.kind === 'data' && snapshot.calendarReadAt && Number.isFinite(Date.parse(snapshot.calendarReadAt))
+        ? isoInstant(new Date(snapshot.calendarReadAt)) : null,
+    } : {}),
+  }
   const allUnknown = () => CASA_BLUE_CATALOG.map(u => ({ slug: u.slug, status: 'unknown' as UnitStatus }))
 
   if (snapshot.kind === 'problem') {

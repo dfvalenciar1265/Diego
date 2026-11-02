@@ -8,6 +8,7 @@ import http from 'node:http'
 import { CASA_BLUE_CATALOG } from '@/lib/public-availability/catalog'
 import { handleAvailability } from '@/lib/public-availability/handler'
 import { RateLimiter } from '@/lib/public-availability/http'
+import { loadAirAdminSnapshot } from '@/lib/public-availability/airadmin-source'
 
 const exec = promisify(execFile)
 const enabled = process.env.CASA_BLUE_LOCAL_POSTGRES_TEST === '1'
@@ -40,9 +41,9 @@ describe.skipIf(!enabled)('API HTTP con PostgreSQL real local', () => {
         ARRAY[${CASA_BLUE_CATALOG.map(c => `'${c.propertyId}'`).join(',')}]::uuid[],
         '[{"property_id":"${palmetto}","uid":"http-sintetico","start":"2026-11-12","end":"2026-11-15","kind":"reserved"}]'::jsonb);`)
       const db = { rpc(fn: string, args: Record<string, unknown>) {
-        if (fn !== 'read_casa_blue_availability') throw new Error('Only the read function is allowed')
+        if (!['read_casa_blue_availability', 'read_casa_blue_airadmin_availability'].includes(fn)) throw new Error('Solo se admiten las funciones de lectura')
         for (const value of Object.values(args)) if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new Error('Invalid test date')
-        return sql(`SELECT public.read_casa_blue_availability('${args.p_arrival}'::date,'${args.p_departure}'::date);`)
+        return sql(`SELECT public.${fn}('${args.p_arrival}'::date,'${args.p_departure}'::date);`)
           .then(text => ({data: JSON.parse(text), error: null}))
       } }
       const limiter = new RateLimiter()
@@ -50,13 +51,14 @@ describe.skipIf(!enabled)('API HTTP con PostgreSQL real local', () => {
         const out = await handleAvailability(new Request('http://localhost'+req.url, {headers: {origin: 'http://localhost:4321'}}), {
           db: () => db, now: () => new Date(), limiter,
           env: {NODE_ENV: 'development', CASA_BLUE_CORS_DEV_ORIGINS: 'http://localhost:4321'},
+          ...(req.url?.includes('/airadmin-availability') ? { load: loadAirAdminSnapshot } : {}),
         })
         res.writeHead(out.status, Object.fromEntries(out.headers));res.end(await out.text())
       })
       await new Promise<void>(resolve => server!.listen(0, '127.0.0.1', resolve))
       const port = (server.address() as {port: number}).port
-      const get = async (arrival: string, departure: string) => {
-        const res = await fetch(`http://127.0.0.1:${port}/api/public/casa-blue/availability?arrival=${arrival}&departure=${departure}`)
+      const get = async (arrival: string, departure: string, path = 'availability') => {
+        const res = await fetch(`http://127.0.0.1:${port}/api/public/casa-blue/${path}?arrival=${arrival}&departure=${departure}`)
         expect(res.status).toBe(200)
         expect(res.headers.get('cache-control')).toBe('no-store')
         expect(res.headers.get('access-control-allow-origin')).toBe('http://localhost:4321')
@@ -73,6 +75,23 @@ describe.skipIf(!enabled)('API HTTP con PostgreSQL real local', () => {
       expect(free.apartments.every((a: {status: string}) => a.status === 'available')).toBe(true)
       const acceptance = await exec(process.execPath, ['scripts/check-casa-blue-availability.mjs', '2026-11-10', '2026-11-13', `http://127.0.0.1:${port}/api/public/casa-blue/availability`])
       expect(JSON.parse(acceptance.stdout)).toMatchObject({status:'ready',available:7,occupied:1,apartments:8})
+      // Consulta HTTP -> lector AirAdmin -> PostgreSQL local; guarda/cancela solo datos sintéticos.
+      const day = (n: number) => new Date(Date.now() + n * 86400000).toISOString().slice(0,10)
+      const arrival = day(40), departure = day(43)
+      // Aislar esta unidad de las reservas sintéticas creadas por las suites SQL anteriores.
+      await sql(`UPDATE public.reservations SET status='cancelled' WHERE property_id='${palmetto}';
+        INSERT INTO public.reservations(property_id,source,guest_name,check_in,check_out,status)
+        VALUES('${palmetto}','airbnb','Maestro HTTP Sintético','${arrival}','${departure}','confirmed'),
+        ('${palmetto}','direct','Segundo HTTP Sintético','${arrival}','${departure}','confirmed');`)
+      const busy = await get(arrival, departure, 'airadmin-availability')
+      expect(busy).toMatchObject({ source:'airadmin', sourceStatus:'ready', lastSyncedAt:null, calendarReadAt: expect.any(String) })
+      expect(busy.apartments.find((a: {slug: string}) => a.slug === 'palmetto-1001').status).toBe('occupied')
+      await sql("UPDATE public.reservations SET status='cancelled' WHERE guest_name='Maestro HTTP Sintético';")
+      const stillBusy = await get(arrival, departure, 'airadmin-availability')
+      expect(stillBusy.apartments.find((a: {slug: string}) => a.slug === 'palmetto-1001').status).toBe('occupied')
+      await sql("UPDATE public.reservations SET status='cancelled' WHERE guest_name='Segundo HTTP Sintético';")
+      const cancelled = await get(arrival, departure, 'airadmin-availability')
+      expect(cancelled.apartments.find((a: {slug: string}) => a.slug === 'palmetto-1001').status).toBe('available')
     } finally {
       if (server) await new Promise<void>(resolve => server!.close(() => resolve()))
       if (local) await exec('dropdb', ['--if-exists', database], {env})
