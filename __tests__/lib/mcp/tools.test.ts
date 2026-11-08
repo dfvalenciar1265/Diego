@@ -34,6 +34,7 @@ describe('registerTools', () => {
 
   it('exposes the six GPT actions, the turnover times, reservations and their charges / requests', () => {
     expect(calls.map(c => c.name)).toEqual([
+      'list_building_notices', 'preview_building_notice', 'verify_building_recipient', 'prepare_building_notice', 'record_building_notice',
       'list_properties', 'list_maintenance', 'create_maintenance',
       'update_maintenance', 'list_reservations', 'compare_reservations',
       'list_turnovers', 'set_arrival_preparation', 'set_checkout_time', 'set_checkin_time',
@@ -44,7 +45,7 @@ describe('registerTools', () => {
 
   it('marks only the reading tools as read-only', () => {
     const readOnly = calls.filter(c => c.config.annotations?.readOnlyHint).map(c => c.name)
-    expect(readOnly).toEqual(['list_properties', 'list_maintenance', 'list_reservations', 'list_turnovers', 'list_followups'])
+    expect(readOnly).toEqual(['list_building_notices', 'preview_building_notice', 'list_properties', 'list_maintenance', 'list_reservations', 'list_turnovers', 'list_followups'])
   })
 
   it('marks only cancelling a reservation as destructive', () => {

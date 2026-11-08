@@ -53,9 +53,6 @@ export function DashboardPrepCard({ arrival: r, preparation, role }: {
       </details> : null}
     </div>}
     {error ? <p role="alert" className="text-xs text-red-700">{error}</p> : null}
-    {task ? <NotifyBuildingButton taskId={task.id} notifiedAt={task.building_notified_at ?? null} data={{
-      apartment: r.property?.name ?? '—', guestName: r.guest_name || '—', checkIn: r.check_in,
-      checkOut: r.check_out, guests: r.guests,
-    }} /> : null}
+    <NotifyBuildingButton reservationId={r.id} />
   </div>
 }

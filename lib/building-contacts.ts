@@ -33,10 +33,10 @@ export interface GuestNotification {
 }
 
 const longDate  = (iso: string) => format(parseISO(iso), "d 'de' MMMM 'de' yyyy", { locale: es })
-const shortDate = (iso: string) => format(parseISO(iso), 'd MMM', { locale: es })
 const nightsBetween = (ci: string, co: string) => Math.max(0, differenceInDays(parseISO(co), parseISO(ci)))
 
-/** Builds both message variants (WhatsApp short + formal email) from a reservation. */
+/** Plantilla 1 de avisos. Conservar esta versión: un cambio de texto debe crear otra
+ * versión de plantilla/snapshot para no reinterpretar los avisos ya registrados. */
 export function buildGuestNotification(d: GuestNotifyData): GuestNotification {
   const nights = nightsBetween(d.checkIn, d.checkOut)
   const guestsCount = `${d.guests ?? '—'}`
@@ -48,7 +48,7 @@ export function buildGuestNotification(d: GuestNotifyData): GuestNotification {
 
 Huésped: ${d.guestName}
 Huéspedes: ${guestsCount}
-Fechas: ${shortDate(d.checkIn)} a ${shortDate(d.checkOut)} (${nights} noches)
+Fechas: ${longDate(d.checkIn)} a ${longDate(d.checkOut)} (${nights} noches)
 
 Autorizado por Casa Blue. ¡Gracias!`
 
