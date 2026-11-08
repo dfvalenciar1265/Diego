@@ -35,7 +35,8 @@ for f in supabase/migrations/00{1,2}_*.sql; do "${PSQL[@]}" -f "$f"; done
 # Existing app columns added outside the checked-in baseline migrations.
 "${PSQL[@]}" -c "ALTER TABLE public.properties ADD COLUMN active boolean NOT NULL DEFAULT true;
   ALTER TABLE public.reservations ADD COLUMN pending_change jsonb;
-  ALTER TABLE public.reservations ADD COLUMN guests smallint;"
+  ALTER TABLE public.reservations ADD COLUMN guests smallint;
+  ALTER TABLE public.tasks ADD COLUMN building_notified_at timestamptz;"
 # Stub local: no necesita acceso desde la API. No dejarlo expuesto al auditar la base de prueba.
 "${PSQL[@]}" -c "CREATE TABLE public.expenses (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), property_id uuid, date date);
   ALTER TABLE public.expenses ENABLE ROW LEVEL SECURITY;"
@@ -173,4 +174,7 @@ bash scripts/test-arrival-preparation-concurrency.sh "$DB"
 "${PSQL[@]}" -f scripts/test-gmail-continuation.sql
 "${PSQL[@]}" -f supabase/migrations/20261101231300_casa_blue_airadmin_calendar.sql
 "${PSQL[@]}" -f scripts/test-casa-blue-airadmin.sql
+"${PSQL[@]}" -f supabase/migrations/20261108150541_building_notices.sql
+"${PSQL[@]}" -f scripts/test-building-notices.sql
+bash scripts/test-building-notices-concurrency.sh "$DB"
 echo "Migraciones base + cobros/solicitudes + horarios + conciliación Gmail + preparación: todas las comprobaciones pasaron."

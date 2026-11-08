@@ -191,22 +191,18 @@ export async function setTaskPhoto(
 
 /** Updates the notes field of a task (used for check-in time annotation). */
 /**
- * Marks (or un-marks) that the building was notified of this guest's arrival.
- * Set when the admin opens the WhatsApp/email message from the prep card, so the
- * home shows at a glance which arrivals have already been announced.
+ * Compatibilidad con clientes anteriores. La marca histórica se conserva y ya no
+ * se utiliza como confirmación de envío al abrir un borrador.
  */
 export async function setBuildingNotified(
-  taskId: string,
-  notified: boolean
+  _taskId: string,
+  _notified: boolean
 ): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createClient()
-  const { error } = await supabase
-    .from('tasks')
-    .update({ building_notified_at: notified ? new Date().toISOString() : null })
-    .eq('id', taskId)
-  if (error) return { success: false, error: error.message }
-  revalidatePath('/')
-  return { success: true }
+  void _taskId
+  void _notified
+  const member = await getCurrentMember()
+  if (!member || member.role !== 'admin') return { success: false, error: 'Se requiere un administrador activo.' }
+  return { success: false, error: 'Actualiza Inicio y registra el resultado del aviso con su evidencia.' }
 }
 
 export async function updateTaskNotes(

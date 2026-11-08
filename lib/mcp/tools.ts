@@ -14,7 +14,9 @@ import {
   cancelReservationTool, createReservationTool, updateReservationTool, type ServiceResult,
   listFollowupsTool, createChargeTool, updateChargeTool, createSpecialRequestTool, updateSpecialRequestTool,
   setArrivalPreparationTool,
+  listBuildingNoticesTool, previewBuildingNoticeTool, writeBuildingNoticeTool,
 } from '@/lib/gpt-api/service'
+import { verifyBuildingRecipientSchema, prepareBuildingNoticeSchema, recordBuildingNoticeSchema } from '@/lib/gpt-api/building-notices'
 import type { Actor } from '@/lib/gpt-api/followups'
 import { memberFromAuth } from './auth'
 
@@ -73,6 +75,37 @@ async function run(fn: () => Promise<ServiceResult>): Promise<CallToolResult> {
 }
 
 export function registerTools(server: McpServer) {
+  server.registerTool('list_building_notices', {
+    title: 'Avisos de llegada al edificio',
+    description: 'Consulta por fecha Colombia (por defecto hoy), reserva o apartamento usando UUID de list_properties/list_reservations. Devuelve contactos candidatos y verificados, estados, versiones, marcas históricas y evidencia. Solo administradores. No envía mensajes.',
+    inputSchema: z.object({ date: date.optional(), reservation_id: z.string().optional(), property_id: z.string().optional() }),
+    annotations: READ,
+  }, (query, ctx) => run(() => listBuildingNoticesTool(serviceDb(), query, actorFrom(ctx.http?.authInfo))))
+
+  server.registerTool('preview_building_notice', {
+    title: 'Previsualizar aviso al edificio',
+    description: 'Genera el texto mínimo y el snapshot actual para una reserva y destinatario exactos, sin persistir ni enviar. Explica los bloqueos. Copia ese snapshot al preparar.',
+    inputSchema: z.object({ reservation_id: z.string(), recipient_id: z.string() }), annotations: READ,
+  }, (query, ctx) => run(() => previewBuildingNoticeTool(serviceDb(), query, actorFrom(ctx.http?.authInfo))))
+
+  server.registerTool('verify_building_recipient', {
+    title: 'Registrar verificación de destinatario',
+    description: 'Registra que el administrador comprobó expresamente el destinatario candidato del edificio. Requiere evidencia de cómo lo verificó. No elige contactos automáticamente ni envía mensajes.',
+    inputSchema: verifyBuildingRecipientSchema, annotations: { ...WRITE, idempotentHint: true },
+  }, (input, ctx) => run(() => writeBuildingNoticeTool(serviceDb(), 'verify_recipient', input, actorFrom(ctx.http?.authInfo))))
+
+  server.registerTool('prepare_building_notice', {
+    title: 'Guardar borrador del aviso',
+    description: 'Guarda un borrador con destinatario verificado y el snapshot de preview_building_notice. Deduplica por reserva/destinatario/contenido. No envía. Si ya existe envío o resultado incierto, muestra su estado sin reenviar. Revisa avisos anteriores antes de crear otra versión.',
+    inputSchema: prepareBuildingNoticeSchema, annotations: { ...WRITE, idempotentHint: true },
+  }, (input, ctx) => run(() => writeBuildingNoticeTool(serviceDb(), 'prepare', input, actorFrom(ctx.http?.authInfo))))
+
+  server.registerTool('record_building_notice', {
+    title: 'Registrar resultado del aviso',
+    description: 'Tras la comprobación humana, registra resultado incierto, envío, entrega o recepción con fecha real, evidencia, versión esperada y clave de reintento estable. Envío exige operator_confirmation/message_reference; entrega delivery_receipt; recepción recipient_acknowledgment. reviewed revisa una marca invalidada y conserva su estado. No manda mensajes.',
+    inputSchema: recordBuildingNoticeSchema, annotations: { ...WRITE, idempotentHint: true },
+  }, (input, ctx) => run(() => writeBuildingNoticeTool(serviceDb(), 'record', input, actorFrom(ctx.http?.authInfo))))
+
   server.registerTool('list_properties', {
     title: 'Apartamentos',
     description: 'Lista los apartamentos activos con su nombre exacto en la app. Úsalo para traducir cualquier nombre antes de crear pendientes o comparar reservas.',

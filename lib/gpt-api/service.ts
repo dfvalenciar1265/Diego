@@ -3,6 +3,7 @@
  * y refresca las pantallas afectadas. Las rutas /api/gpt/* y /api/mcp solo traducen el resultado.
  */
 import { writeReservationTime } from '@/lib/reservation-time-writes'
+export { listBuildingNoticesTool, previewBuildingNoticeTool, writeBuildingNoticeTool } from './building-notices'
 import { preparationViews, writePreparation, type PreparationWrite } from './preparation'
 import { revalidatePath } from 'next/cache'
 import { guestNameMatches } from '@/lib/gmail-sync'

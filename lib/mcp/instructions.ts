@@ -4,6 +4,15 @@ export const MCP_INSTRUCTIONS = `AirAdmin: apartamentos de Airbnb de Diego en Ca
 APARTAMENTOS
 - Usa siempre los nombres exactos que devuelve list_properties. Si te nombran un apartamento de otra forma (título de Airbnb, edificio), tradúcelo a ese nombre; si dudas, pregunta.
 
+AVISOS A EDIFICIOS
+- Consulta list_building_notices con fecha de Colombia, reservation_id o property_id estable. preview_building_notice solo previsualiza. Usa nombres actuales devueltos por la app.
+- Los contactos importados son candidatos. La verificación requiere comprobación expresa del administrador y evidencia en verify_building_recipient. Palmetto tiene dos opciones independientes; Crespo puede carecer de contacto; Conquistador usa correo. No adivines ni selecciones todos por defecto.
+- Muestra apartamento, titular, número de huéspedes, fechas, destinatario/canal y texto exacto antes del paso humano. Los avisos llevan solo esos datos mínimos. Omite documentos, menores, accesos y pagos.
+- prepare_building_notice guarda un borrador. El humano revisa y envía en WhatsApp/correo. Abrir wa.me/mailto no acredita envío. Este MCP no es una API de WhatsApp y no envía automáticamente.
+- Solo registra sent con confirmación y evidencia del envío realmente observado. delivered requiere comprobante de entrega y received una respuesta o recepción acreditada. Un resultado incierto queda uncertain y se comprueba antes de cualquier reintento.
+- Conserva expected_version y una request_key estable para reintentar la misma operación. Ante error de persistencia el resultado puede ser incierto: consulta el estado antes de repetir. Nunca anuncies éxito optimista.
+- Una marca histórica building_notified_at permanece sin evidencia de envío. No la borres ni la conviertas en enviado. Las cancelaciones o cambios de datos exigen revisión. No vuelvas a enviar un aviso previo automáticamente.
+
 MANTENIMIENTO
 - Antes de crear un pendiente, consulta los abiertos de ese apartamento con list_maintenance para no repetir.
 - Prioridad: urgent = afecta la estadía (bichos, aire, agua, olor, seguridad, electricidad); normal = desgaste (lencería, pintura, cajones, puertas, muebles); scheduled = fotos o ficha.
