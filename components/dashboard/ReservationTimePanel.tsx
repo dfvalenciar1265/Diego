@@ -100,8 +100,9 @@ export function ReservationTimePanel({ timing, stay, canEdit = false, heading }:
           <p>Guardar la hora avisada no cambia la hora permitida.</p>
         </details>
       </div> : null}
-      {specialTime ? <p className="font-medium text-[#0f172a]">Horario especial autorizado</p> : null}
-      {timing.estimate ? <p>{isArrival ? 'Avisó llegada:' : 'Avisó salida:'} <strong>{clockLabel(timing.estimate.time)}</strong></p> : null}
+      {specialTime ? <p className="font-medium text-[#0f172a]">Horario especial autorizado</p> : <p>Horario habitual · no es una hora avisada por el huésped</p>}
+      {timing.estimate ? <p>{isArrival ? 'Avisó llegada:' : 'Avisó salida:'} <strong>{clockLabel(timing.estimate.time)}</strong> · estimada, no cambia la hora permitida</p>
+        : <p className="text-amber-800">{isArrival ? 'Llegada al apartamento' : 'Salida del apartamento'}: hora del huésped pendiente</p>}
       {visibleReview.map(text => <p key={text} className="rounded bg-amber-50 px-2 py-1 text-amber-900">⚠ {reviewLabel(text)}</p>)}
       {message ? <p role="status">{message} <button className="underline" onClick={() => router.refresh()}>Actualizar horarios</button></p> : null}
     </div>

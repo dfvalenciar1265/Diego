@@ -32,7 +32,8 @@ describe('presentación y edición de horarios', () => {
     expect(screen.queryByText(/Avisó llegada:/)).not.toBeInTheDocument()
     expect(screen.queryByText(/Fuente e historial/)).not.toBeInTheDocument()
     expect(screen.queryByText('Horario habitual: 15:00')).not.toBeInTheDocument()
-    expect(screen.queryByText('Hora avisada por el huésped: Sin comunicar')).not.toBeInTheDocument()
+    expect(screen.getByText('Llegada al apartamento: hora del huésped pendiente')).toBeVisible()
+    expect(screen.getByText('Horario habitual · no es una hora avisada por el huésped')).toBeVisible()
   })
 
   it('distingue la hora avisada de la entrada permitida y mantiene el aviso visible para personal', () => {

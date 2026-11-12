@@ -1,0 +1,26 @@
+BEGIN;
+CREATE FUNCTION pg_temp.temp_assert(ok boolean) RETURNS void LANGUAGE plpgsql AS $$ BEGIN IF ok IS NOT TRUE THEN RAISE EXCEPTION 'FALLA aviso temporal'; END IF; END $$;
+INSERT INTO auth.users(id) VALUES('00000000-0000-0000-0000-00000000ab01'),('00000000-0000-0000-0000-00000000ab02');
+INSERT INTO public.team_members(id,name,email,role,active) VALUES('00000000-0000-0000-0000-00000000ab01','Admin Sintético','temp-admin@example.test','admin',true),('00000000-0000-0000-0000-00000000ab02','Limpieza Sintética','temp-clean@example.test','cleaning',true);
+INSERT INTO public.properties(id,name,capacity) VALUES('00000000-0000-0000-0000-00000000ab11','Aviso Temporal Sintético',4);
+SET LOCAL ROLE authenticated;
+SET LOCAL request.jwt.claim.sub='00000000-0000-0000-0000-00000000ab01';
+CREATE TEMP TABLE temp_payload AS SELECT '{"property_id":"00000000-0000-0000-0000-00000000ab11","title":"Piscina Sintética","message":"Cierre Sintético","expires_on":"2026-10-20","locations":["Manual ES","Manual EN"],"status":"open"}'::jsonb AS input;
+SELECT pg_temp.temp_assert((public.save_temporary_notice((SELECT input FROM temp_payload),'create',0)->>'ok')::boolean);
+SELECT pg_temp.temp_assert((public.save_temporary_notice((SELECT input FROM temp_payload),'create',0)->>'replayed')::boolean);
+SELECT pg_temp.temp_assert((SELECT count(*)=1 FROM public.temporary_notices));
+SELECT pg_temp.temp_assert((public.save_temporary_notice((SELECT input||'{"title":"Otro Sintético"}' FROM temp_payload),'create',0)->>'ok')='false');
+SELECT pg_temp.temp_assert((public.save_temporary_notice((SELECT input||jsonb_build_object('id',(SELECT id FROM public.temporary_notices)) FROM temp_payload),'stale',0)->>'ok')='false');
+DO $$ BEGIN
+ BEGIN PERFORM public.save_temporary_notice((SELECT input||jsonb_build_object('id',(SELECT id FROM public.temporary_notices),'status','retired') FROM temp_payload),'no-proof',1); RAISE EXCEPTION 'FALLA sin evidencia'; EXCEPTION WHEN check_violation THEN NULL; END;
+ BEGIN DELETE FROM public.temporary_notices; RAISE EXCEPTION 'FALLA borrar'; EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+SELECT pg_temp.temp_assert((public.save_temporary_notice((SELECT input||jsonb_build_object('id',(SELECT id FROM public.temporary_notices),'status','retired','evidence','Retirado y comprobado en los dos manuales sintéticos') FROM temp_payload),'retire',1)->>'ok')::boolean);
+SELECT pg_temp.temp_assert((SELECT count(*)=2 FROM public.temporary_notice_history));
+SET LOCAL request.jwt.claim.sub='00000000-0000-0000-0000-00000000ab02';
+SELECT pg_temp.temp_assert((SELECT count(*)=1 FROM public.temporary_notices));
+DO $$ BEGIN BEGIN PERFORM public.save_temporary_notice((SELECT input FROM temp_payload),'clean-write',0); RAISE EXCEPTION 'FALLA permisos'; EXCEPTION WHEN insufficient_privilege THEN NULL; END; END $$;
+RESET ROLE;
+SET LOCAL ROLE anon;
+DO $$ BEGIN BEGIN PERFORM count(*) FROM public.temporary_notices; RAISE EXCEPTION 'FALLA anon'; EXCEPTION WHEN insufficient_privilege THEN NULL; END; END $$;
+ROLLBACK;

@@ -56,6 +56,7 @@ export function ArrivalPreparationPanel({ reservation, preparation: view, role }
     </li>)}</ul> : null}
     {view.error ? <p role="alert" className="text-amber-900">{view.error}</p> : null}
     {view.state?.review_reason ? <p className="rounded bg-amber-50 p-2 text-amber-900">{view.state.review_reason}</p> : null}
+    <Link href={`/inspections?reservation=${reservation.id}`} className="inline-flex min-h-11 items-center font-medium underline">Checklist de revisión y fotos privadas</Link>
     <ol className="divide-y divide-[#f1f5f9]">{PREPARATION_STEPS.map(step => {
       const fact = preparationConfirmation(view.state, step)
       const confirmed = view.available && Boolean(fact.at) && (step !== 'ready' || ready)

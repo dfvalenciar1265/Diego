@@ -177,4 +177,11 @@ bash scripts/test-arrival-preparation-concurrency.sh "$DB"
 "${PSQL[@]}" -f supabase/migrations/20261108150541_building_notices.sql
 "${PSQL[@]}" -f scripts/test-building-notices.sql
 bash scripts/test-building-notices-concurrency.sh "$DB"
+"${PSQL[@]}" -f supabase/migrations/20261112020000_temporary_notices.sql
+"${PSQL[@]}" -f scripts/test-temporary-notices.sql
+"${PSQL[@]}" -f supabase/migrations/20261112022000_direct_message_drafts.sql
+"${PSQL[@]}" -f scripts/test-direct-message-drafts.sql
+"${PSQL[@]}" -f scripts/test-inspection-storage-before.sql
+"${PSQL[@]}" -f supabase/migrations/20261112023000_arrival_inspections.sql
+"${PSQL[@]}" -f scripts/test-arrival-inspection.sql
 echo "Migraciones base + cobros/solicitudes + horarios + conciliación Gmail + preparación: todas las comprobaciones pasaron."
