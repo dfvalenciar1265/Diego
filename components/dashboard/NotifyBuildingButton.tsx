@@ -1,4 +1,5 @@
 'use client'
+import { Settings2 } from 'lucide-react'
 import { HistoricalBuildingNoticeForm } from './HistoricalBuildingNoticeForm'
 import { useEffect, useRef, useState, useTransition } from 'react'
 import { useUserRole } from '@/lib/user-context'
@@ -114,18 +115,22 @@ function BuildingNoticeControl({ reservationId }: { reservationId: string }) {
         Marca anterior del {dateLabel(mark.at)}. Sin evidencia de envío asociada.</p>)}
       {view?.blockers.map(reason => <p key={reason} className="text-amber-900">{reason}</p>)}
       {view && !view.recipients.length ? <p>Falta configurar y verificar un destinatario de este apartamento.</p> : null}
-      {view && !error && !pending ? <div className="space-y-2">
-        {view.recipients.filter(contact => contact.verified_at).map(contact => {
+      {view && !error && !pending ? <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
+        {view.recipients.map(contact => {
           const draft = directBuildingDraftLink(view, contact)
-          return <div key={contact.id} className="break-words">
-            {draft ? <a href={draft} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center rounded border px-3 text-indigo-700">
-              {contact.channel === 'email' ? 'Correo' : 'WhatsApp'} · {contact.address}
-            </a> : <p className="text-slate-600">{contact.channel === 'email' ? 'Correo' : 'WhatsApp'} · {contact.address}: sin enlace de reenvío; revisa el estado registrado.</p>}
+          const label = contact.channel === 'email' ? 'Correo' : 'WhatsApp'
+          const content = <><span className="font-semibold">{label}</span><span className="min-w-0 break-all text-xs">{contact.address}</span></>
+          return <div key={contact.id} className="min-w-0">
+            {draft ? <a href={draft} target="_blank" rel="noopener noreferrer" aria-label={`${label} · ${contact.address}`}
+              className="flex min-h-16 w-full min-w-0 flex-col justify-center gap-1 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-left text-indigo-800 focus-visible:outline-2 focus-visible:outline-indigo-600">
+              {content}
+            </a> : <button type="button" disabled aria-label={`${label} ${contact.address} ${contact.verified_at ? 'Sin reenvío disponible' : 'Pendiente de verificar'}`} className="flex min-h-16 w-full min-w-0 flex-col justify-center gap-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-left text-slate-500">
+              {content}<span className="text-xs">{contact.verified_at ? 'Sin reenvío disponible' : 'Pendiente de verificar'}</span>
+            </button>}
           </div>
         })}
-        <p>Abre el borrador; no se envía automáticamente.</p>
       </div> : null}
-      <details><summary className="min-h-11 cursor-pointer py-3">Registrar resultado o revisar destinatarios</summary>
+      <details><summary aria-label="Gestionar aviso" title="Gestionar aviso" className="flex min-h-11 w-11 cursor-pointer list-none items-center justify-center rounded-lg border text-slate-600 focus-visible:outline-2"><Settings2 size={18} aria-hidden="true" /></summary>
       {view?.recipients.length ? <label className="block">Destinatario del edificio
         <select value={recipientId} disabled={pending} className="mt-1 min-h-11 w-full rounded border p-2"
           onChange={e => { setRecipientId(e.target.value); setEvidence(''); setReview(''); setConfirmed(false); setRequestKey(crypto.randomUUID()) }}>
