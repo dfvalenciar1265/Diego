@@ -3,7 +3,7 @@ import { HistoricalBuildingNoticeForm } from './HistoricalBuildingNoticeForm'
 import { useEffect, useRef, useState, useTransition } from 'react'
 import { useUserRole } from '@/lib/user-context'
 import { getBuildingNotices, manageBuildingNotice } from '@/actions/building-notices'
-import { currentBuildingObservation, bogotaDateTimeLocal, noticeDraftLink, noticeMessage, noticeSnapshot, sameSnapshot, NOTICE_LABELS,
+import { currentBuildingObservation, bogotaDateTimeLocal, directBuildingDraftLink, noticeMessage, noticeSnapshot, sameSnapshot, NOTICE_LABELS,
   type BuildingNoticeView, type NoticeAction } from '@/lib/building-notices'
 
 const dateLabel = (iso: string) => new Intl.DateTimeFormat('es-CO', {
@@ -60,7 +60,6 @@ function BuildingNoticeControl({ reservationId }: { reservationId: string }) {
   const currentNotice = view?.notices.find(n => n.recipient_id === recipientId && snapshot && sameSnapshot(n.snapshot, snapshot))
   const notice = currentNotice ?? view?.notices.find(n => n.recipient_id === recipientId)
   const message = snapshot && !view?.blockers.length ? noticeMessage(snapshot) : null
-  const link = !error && !pending && view && recipient && notice ? noticeDraftLink(view, recipient, notice) : null
 
   async function load() {
     const sequence = ++readSequence.current
@@ -115,6 +114,18 @@ function BuildingNoticeControl({ reservationId }: { reservationId: string }) {
         Marca anterior del {dateLabel(mark.at)}. Sin evidencia de envío asociada.</p>)}
       {view?.blockers.map(reason => <p key={reason} className="text-amber-900">{reason}</p>)}
       {view && !view.recipients.length ? <p>Falta configurar y verificar un destinatario de este apartamento.</p> : null}
+      {view && !error && !pending ? <div className="space-y-2">
+        {view.recipients.filter(contact => contact.verified_at).map(contact => {
+          const draft = directBuildingDraftLink(view, contact)
+          return <div key={contact.id} className="break-words">
+            {draft ? <a href={draft} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center rounded border px-3 text-indigo-700">
+              {contact.channel === 'email' ? 'Correo' : 'WhatsApp'} · {contact.address}
+            </a> : <p className="text-slate-600">{contact.channel === 'email' ? 'Correo' : 'WhatsApp'} · {contact.address}: sin enlace de reenvío; revisa el estado registrado.</p>}
+          </div>
+        })}
+        <p>Abre el borrador; no se envía automáticamente.</p>
+      </div> : null}
+      <details><summary className="min-h-11 cursor-pointer py-3">Registrar resultado o revisar destinatarios</summary>
       {view?.recipients.length ? <label className="block">Destinatario del edificio
         <select value={recipientId} disabled={pending} className="mt-1 min-h-11 w-full rounded border p-2"
           onChange={e => { setRecipientId(e.target.value); setEvidence(''); setReview(''); setConfirmed(false); setRequestKey(crypto.randomUUID()) }}>
@@ -146,11 +157,6 @@ function BuildingNoticeControl({ reservationId }: { reservationId: string }) {
           </label> : null}
           {!observation && !currentNotice ? <button type="button" onClick={() => save('prepare')} disabled={pending || view.blockers.length > 0}
             className="min-h-11 rounded border px-3 disabled:opacity-50">Preparar borrador</button> : null}
-          {link ? <div className="space-y-1">
-            <a href={link} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center rounded border px-3 text-indigo-700">
-              Abrir borrador en {recipient.channel === 'email' ? 'correo' : 'WhatsApp'}</a>
-            <p>Revísalo y envíalo en esa aplicación. Después registra aquí lo que comprobaste.</p>
-          </div> : null}
           {!observation && notice ? <fieldset disabled={pending || view.blockers.length > 0} className="space-y-2 rounded border p-2">
             <legend>Registrar resultado</legend>
             <label className="block">Resultado comprobado
@@ -177,6 +183,7 @@ function BuildingNoticeControl({ reservationId }: { reservationId: string }) {
           {snapshot && !view.blockers.length ? <HistoricalBuildingNoticeForm key={`${recipient.id}:${recipient.version}`} reservationId={reservationId} snapshot={snapshot} reload={load} /> : null}
         </>}
       </> : null}
+      </details>
       {pending ? <p role="status">Consultando o guardando…</p> : null}
       {error ? <p role="alert" className="text-red-700">{error}</p> : null}
     </div> : null}

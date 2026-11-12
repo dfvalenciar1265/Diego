@@ -31,7 +31,8 @@ describe('preparación compacta para el equipo', () => {
       requests: [{ id: 'synthetic-crib', reservation_id: arrival.id, description: 'Cuna Sintética', status: 'notified', review_reason: null }],
     })} role={role} />)
     for (const text of ['Limpieza terminada', 'Revisión de funcionamiento', 'Listo para recibir',
-      'Quién confirmó e historial reciente', 'Falta confirmar la limpieza para esta llegada.']) {
+      'Quién confirmó e historial reciente', 'Falta confirmar la limpieza para esta llegada.',
+      'Preparación pendiente', 'Próximo paso:', 'Equipo que puede resolver:', 'Revisar checklist', 'Ver preparación y responsables']) {
       expect(screen.queryByText(text, { exact: false })).not.toBeInTheDocument()
     }
     expect(screen.queryByRole('button', { name: /Confirmar (limpieza|revisión|listo)/ })).not.toBeInTheDocument()
