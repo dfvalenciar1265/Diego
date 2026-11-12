@@ -60,3 +60,7 @@ precommit-scan-*.md
 /playwright-report/
 /blob-report/
 /playwright/.cache/
+
+# Estado local Supabase y cache Python de herramientas de prueba
+/supabase/.temp/
+**/__pycache__/

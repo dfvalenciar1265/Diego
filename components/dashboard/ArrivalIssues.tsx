@@ -9,6 +9,7 @@ export function ArrivalIssues({ preparation: view }: { preparation: Pick<Prepara
       <p className="font-semibold text-amber-900">⚠ Incidencias en este apartamento ({view.issues.length})</p>
       <ul className="mt-1 space-y-1 text-amber-950">{view.issues.map(issue => <li key={issue.id}>
         {issue.priority === 'urgent' ? <strong>Urgente · </strong> : null}{issue.title}
+        {issue.preventive_links?.map(link => <p key={link.parent_id} className="mt-1 text-amber-900">Preventivo asociado: {link.title}{link.pending_verification ? ' · Reporte pendiente de comprobar' : ' · Vínculo revisado manualmente'}. No modifica su programación.</p>)}
       </li>)}</ul>
       <Link href="/maintenance" className="inline-flex min-h-11 items-center font-medium underline">Ver en Mantenimiento</Link>
     </div> : null}

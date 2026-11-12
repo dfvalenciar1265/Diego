@@ -1,9 +1,11 @@
 'use client'
 import { useState, useTransition } from 'react'
+import Link from 'next/link'
 import { updateTaskNotes } from '@/actions/tasks'
 import { NotifyBuildingButton } from './NotifyBuildingButton'
 import { ReservationTimePanel } from './ReservationTimePanel'
 import { ArrivalIssues } from './ArrivalIssues'
+import { PreparationSummary } from './PreparationSummary'
 import { annotationNote, resolveReservationTiming } from '@/lib/reservation-times'
 import { addDays } from '@/lib/gpt-api/dates'
 import type { PreparationArrival, PreparationView } from '@/lib/preparation'
@@ -40,6 +42,8 @@ export function DashboardPrepCard({ arrival: r, preparation, role }: {
   }
   return <div data-home-edit-error={Boolean(error)} className="rounded-xl border bg-white px-3 py-2.5 shadow-sm">
     <ReservationTimePanel key={`timing:${timing.version}`} timing={timing} stay={r} canEdit={role === 'admin'} heading={heading} />
+    <PreparationSummary preparation={preparation} />
+    <Link href={`/inspections?reservation=${r.id}`} className="inline-flex min-h-11 items-center text-xs font-semibold underline">Revisar checklist</Link>
     <ArrivalIssues preparation={preparation} />
     {task ? <label className="mt-1 block text-xs">Nota para el equipo
       <textarea rows={1} value={note} disabled={pending} onChange={e => setNote(e.target.value)} onBlur={saveNote}

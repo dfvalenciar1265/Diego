@@ -8,7 +8,7 @@ function tables(): Record<string, Row[]> {
   const view = buildingView()
   return { team_members: [{ id: ids.admin, role: 'admin', active: true }], reservations: [{ ...view.reservation, notes: 'Nota privada Sintética' }],
     properties: [{ id: ids.property, name: view.property, active: true }], building_recipients: [{ ...buildingRecipient() }],
-    building_notices: [], building_notice_history: [], tasks: [] }
+    building_notices: [], building_notice_observations: [], building_notice_history: [], tasks: [] }
 }
 beforeEach(() => vi.useRealTimers())
 describe('avisos a edificios, lecturas y contratos', () => {

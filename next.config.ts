@@ -12,6 +12,8 @@ const withPWA = withPWAInit({
   },
 })
 
-const nextConfig: NextConfig = {}
+const nextConfig: NextConfig = {
+  experimental: { serverActions: { bodySizeLimit: '6mb' } },
+}
 
 export default withPWA(nextConfig)

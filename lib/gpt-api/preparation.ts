@@ -21,10 +21,18 @@ export async function preparationViews(db: Db, reservations: PreparationReservat
       db.from('special_requests').select('id, reservation_id, description, status, review_reason').in('reservation_id', ids).neq('status', 'cancelled'),
       db.from('arrival_preparation_history').select('id, reservation_id, version, action, reason, author, source, at').in('reservation_id', ids).order('version', { ascending: false }).limit(1000),
     ])
+    const correctiveIds = (issues.data ?? []).map(i => i.id)
+    if (correctiveIds.length > 500) return Object.fromEntries(reservations.map(r => [r.id, unavailable(r)]))
+    const preventiveReviews = correctiveIds.length
+      ? await db.rpc('list_preventive_links', { p_corrective_ids: correctiveIds })
+      : { data: [], error: null }
+    if ((preventiveReviews.data?.length ?? 0) > 1000) return Object.fromEntries(reservations.map(r => [r.id, unavailable(r)]))
     return Object.fromEntries(reservations.map(r => {
       // DTO explícito: no serializar objetos de mantenimiento/solicitudes con costos u otros campos.
       const ownIssues: PreparationIssue[] = (issues.data ?? []).filter(i => i.property_id === r.property_id)
-        .map(i => ({ id: i.id, property_id: i.property_id, title: i.title, priority: i.priority, status: i.status }))
+        .map(i => ({ id: i.id, property_id: i.property_id, title: i.title, priority: i.priority, status: i.status,
+          preventive_links: (preventiveReviews.data ?? []).filter((link: { corrective_id: string; property_id: string }) => link.corrective_id === i.id && link.property_id === i.property_id)
+            .map((link: { parent_id: string; parent_title: string; pending_verification: boolean }) => ({ parent_id: link.parent_id, title: link.parent_title, pending_verification: link.pending_verification })) }))
         .sort((a, b) => Number(b.priority === 'urgent') - Number(a.priority === 'urgent'))
       const ownRequests: PreparationRequest[] = (requests.data ?? []).filter(q => q.reservation_id === r.id)
         .map(q => ({ id: q.id, reservation_id: q.reservation_id, description: q.description, status: q.status, review_reason: q.review_reason }))
@@ -34,7 +42,7 @@ export async function preparationViews(db: Db, reservations: PreparationReservat
         cleaned_at: null, cleaned_by: null, cleaned_name: null, checked_at: null, checked_by: null, checked_name: null,
         ready_at: null, ready_by: null, ready_name: null, review_reason: 'La preparación corresponde a otra estancia; vuelve a confirmar.',
       } : {}) } : null
-      const failed = Boolean(states.error || issues.error || requests.error || history.error)
+      const failed = Boolean(states.error || issues.error || requests.error || history.error || preventiveReviews.error)
       return [r.id, { available: !failed, can_confirm: !failed && r.status === 'confirmed' && today >= addDays(r.check_in, -1) && today <= r.check_in,
         error: failed ? unavailable(r).error : null, state,
         issues: ownIssues, requests: ownRequests,

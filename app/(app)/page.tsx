@@ -1,3 +1,6 @@
+import Link from 'next/link'
+import { getTemporaryNotices } from '@/actions/temporary-notices'
+import { noticeNeedsReview } from '@/lib/temporary-notices'
 import { hourInBogota } from '@/lib/gpt-api/dates'
 import { dashboardDay } from '@/lib/dashboard-day'
 import { redirect } from 'next/navigation'
@@ -79,6 +82,8 @@ export default async function DashboardPage() {
 
   const prepArrivals = arrivals.filter(r => r.status === 'confirmed' && r.check_in === selectedDay)
   const preparationById = await preparationViews(supabase, prepArrivals, todayISO)
+  const temporary = await getTemporaryNotices()
+  const expiredNotices = temporary.data.filter(n => noticeNeedsReview(n, todayISO))
 
   // Other tasks scheduled for today (cleaning shown in its own section)
   const otherTasks = todayTasks.filter((t: Task) => t.type !== 'cleaning' && t.type !== 'preparation' && t.scheduled_for === selectedDay)
@@ -112,6 +117,12 @@ export default async function DashboardPage() {
         <p className="font-semibold first-letter:uppercase">Plan para mañana · {planningDate}</p>
         <p className="mt-1 text-xs">Desde las 7:00 p. m., Inicio muestra las llegadas, salidas y tareas del día siguiente para organizar al equipo. Las tareas de hoy siguen en Limpieza y Tareas.</p>
       </div> : null}
+
+      <nav aria-label="Herramientas de operación" className="flex flex-wrap gap-3 px-4 pt-4 text-sm">
+        <Link href="/temporary-notices" className="underline">Avisos temporales{expiredNotices.length ? ` (${expiredNotices.length} por revisar)` : ''}</Link>
+        {member.role === 'admin' && <Link href="/direct-messages" className="underline">Mensajes de reservas directas</Link>}
+      </nav>
+      {temporary.error ? <p role="status" className="px-4 pt-2 text-xs text-amber-800">Avisos temporales pendientes de comprobar.</p> : expiredNotices.length > 0 ? <div role="status" className="mx-4 mt-3 p-3 border border-amber-300 rounded-xl bg-amber-50"><strong>Hay {expiredNotices.length} avisos vencidos</strong><p className="text-sm">Revisa todas las ubicaciones antes de confirmar su retiro. No se han cambiado anuncios ni mensajes.</p></div> : null}
 
       {/* Indicadores del día mostrado, en tres columnas iguales. */}
       <div className="grid grid-cols-3 gap-2 md:gap-4 px-4 pt-4">

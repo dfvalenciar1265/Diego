@@ -1,0 +1,12 @@
+import { describe,it,expect } from 'vitest'
+import { inspectionCurrent,inspectionProgress,inspectionWindow,inspectionPhotoExtension,canInspect,type InspectionState,type InspectionWrite } from '@/lib/inspection'
+import { validateInspection } from '@/lib/gpt-api/inspection'
+const stay={id:'00000000-0000-0000-0000-00000000ac21',property_id:'00000000-0000-0000-0000-00000000ac11',check_in:'2026-11-12',check_out:'2026-11-14',status:'confirmed'}
+const input:InspectionWrite={reservation_id:stay.id,property_id:stay.property_id,stay_check_in:stay.check_in,stay_check_out:stay.check_out,item:'air',result:'checked',note:'',expected_version:0,request_key:'request'}
+const state:InspectionState={reservation_id:stay.id,property_id:stay.property_id,stay_check_in:stay.check_in,stay_check_out:stay.check_out,version:1,invalidated_at:null,checks:{air:{result:'issue',note:'Falla sintética',actor_id:'actor',author:'Limpieza',at:'2026-11-12T10:00:00Z',photo_path:null,maintenance_id:'issue'}}}
+describe('checklist de llegada',()=>{
+ it('solo muestra revisión vigente y nunca infiere completado',()=>{expect(inspectionProgress(null,stay)).toEqual({checked:0,problems:0,total:5});expect(inspectionProgress(state,stay)).toEqual({checked:1,problems:1,total:5});expect(inspectionCurrent({...state,invalidated_at:'today'},stay)).toBe(false);expect(inspectionCurrent(state,{...stay,status:'cancelled'})).toBe(false);expect(inspectionCurrent(state,{...stay,check_in:'2026-11-13'})).toBe(false)})
+ it('limita revisión a víspera y llegada',()=>{expect(inspectionWindow(stay,'2026-11-10')).toBe(false);expect(inspectionWindow(stay,'2026-11-11')).toBe(true);expect(inspectionWindow(stay,'2026-11-12')).toBe(true);expect(inspectionWindow(stay,'2026-11-13')).toBe(false)})
+ it('exige explicación de problema y NA, versión y ruta privada',()=>{expect(validateInspection(input)).toBe(true);expect(validateInspection({...input,result:'issue'})).toBe(false);expect(validateInspection({...input,result:'not_applicable',note:'No hay este elemento'})).toBe(true);expect(validateInspection({...input,expected_version:-1})).toBe(false);expect(validateInspection({...input,photo_path:'https://public/photo.jpg'})).toBe(false)})
+ it('reconoce bytes, no extensión declarada',()=>{expect(inspectionPhotoExtension(new Uint8Array([255,216,255]))).toBe('jpg');expect(inspectionPhotoExtension(new TextEncoder().encode('<svg>'))).toBeNull();expect(inspectionPhotoExtension(new Uint8Array())).toBeNull();expect(canInspect('cleaning')).toBe(true)})
+})

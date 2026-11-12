@@ -12,7 +12,9 @@ export interface PreparationState {
   ready_at: string | null; ready_by: string | null; ready_name: string | null
   review_reason: string | null; updated_at: string
 }
-export interface PreparationIssue { id: string; property_id: string; title: string; priority: string; status: string }
+export interface PreparationIssue { id: string; property_id: string; title: string; priority: string; status: string
+  preventive_links?: { parent_id: string; title: string; pending_verification: boolean }[]
+}
 export interface PreparationRequest { id: string; reservation_id: string; description: string; status: string; review_reason: string | null }
 export interface PreparationHistory { id: string; version: number; action: string; reason: string | null; author: string; source: string; at: string }
 export interface PreparationView {
