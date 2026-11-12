@@ -181,6 +181,8 @@ bash scripts/test-building-notices-concurrency.sh "$DB"
 "${PSQL[@]}" -f scripts/test-temporary-notices.sql
 "${PSQL[@]}" -f supabase/migrations/20261112022000_direct_message_drafts.sql
 "${PSQL[@]}" -f scripts/test-direct-message-drafts.sql
+"${PSQL[@]}" -f supabase/migrations/20261112022543_historical_building_observations.sql
+"${PSQL[@]}" -f scripts/test-historical-building-observations.sql
 "${PSQL[@]}" -f scripts/test-inspection-storage-before.sql
 "${PSQL[@]}" -f supabase/migrations/20261112023000_arrival_inspections.sql
 "${PSQL[@]}" -f scripts/test-arrival-inspection.sql

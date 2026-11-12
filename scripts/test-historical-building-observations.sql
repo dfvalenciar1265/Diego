@@ -1,0 +1,47 @@
+-- Solo fixtures sintéticos y transacción revertida, compatible con runner local.
+BEGIN;
+CREATE FUNCTION pg_temp.historical_assert(ok boolean,msg text) RETURNS void LANGUAGE plpgsql AS $$BEGIN IF ok IS NOT TRUE THEN RAISE EXCEPTION 'FALLA: %',msg;END IF;END $$;
+INSERT INTO auth.users(id) VALUES('00000000-0000-4000-8000-00000000ab01'),('00000000-0000-4000-8000-00000000ab02');
+INSERT INTO public.team_members(id,name,email,role,active) VALUES
+('00000000-0000-4000-8000-00000000ab01','Histórico Admin Sintético','history-admin@example.test','admin',true),
+('00000000-0000-4000-8000-00000000ab02','Histórico Limpieza Sintética','history-cleaning@example.test','cleaning',true);
+INSERT INTO public.properties(id,name,capacity) VALUES('00000000-0000-4000-8000-00000000ab10','Histórico Apartamento Sintético',4);
+INSERT INTO public.reservations(id,property_id,source,guest_name,guests,check_in,check_out,status) VALUES('00000000-0000-4000-8000-00000000ab20','00000000-0000-4000-8000-00000000ab10','direct','Titular Sintético',2,current_date,current_date+2,'confirmed');
+INSERT INTO public.building_recipients(id,property_id,channel,address) VALUES('00000000-0000-4000-8000-00000000ab30','00000000-0000-4000-8000-00000000ab10','email','synthetic-history@example.test');
+CREATE TEMP TABLE historical_input AS SELECT jsonb_build_object('reservation_id',r.id,'recipient_id',c.id,'snapshot',airadmin_building.snapshot(r,c,p.name),'expected_version',0,'request_key','historical-1','status','delivered','occurred_at',clock_timestamp()-interval '1 day','reference','synthetic-delivery-1','evidence','Constancia sintética de entrega de ayer','confirmed',true) value FROM public.reservations r JOIN public.properties p ON p.id=r.property_id CROSS JOIN public.building_recipients c WHERE r.id='00000000-0000-4000-8000-00000000ab20' AND c.id='00000000-0000-4000-8000-00000000ab30';
+GRANT SELECT ON historical_input TO authenticated;
+SET LOCAL ROLE authenticated;
+SET LOCAL request.jwt.claim.sub='00000000-0000-4000-8000-00000000ab01';
+SELECT pg_temp.historical_assert((public.record_historical_building_notice((SELECT value FROM historical_input))->>'ok')='false','candidato no promovido');
+SELECT pg_temp.historical_assert((SELECT verified_at IS NULL FROM public.building_recipients WHERE id='00000000-0000-4000-8000-00000000ab30'),'contacto sigue pendiente');
+SELECT pg_temp.historical_assert((public.manage_building_notice('verify_recipient','{"recipient_id":"00000000-0000-4000-8000-00000000ab30","expected_version":0,"request_key":"historical-verify","evidence":"Verificación separada y sintética del contacto"}')->>'ok')='true','verificación expresa separada');
+RESET ROLE;
+UPDATE historical_input SET value=jsonb_set(value,'{snapshot,recipient_version}','1');
+SET LOCAL ROLE authenticated;
+SET LOCAL request.jwt.claim.sub='00000000-0000-4000-8000-00000000ab01';
+SELECT pg_temp.historical_assert((public.record_historical_building_notice((SELECT value FROM historical_input))->>'ok')='true','entrega histórica registrada sin inventar envío');
+SELECT pg_temp.historical_assert((SELECT count(*)=0 FROM public.building_notices WHERE reservation_id='00000000-0000-4000-8000-00000000ab20'),'no crea prepared ni sent');
+SELECT pg_temp.historical_assert((SELECT status='delivered' AND occurred_at<recorded_at-interval '23 hour' AND actor_id=auth.uid() AND version=1 FROM public.building_notice_observations WHERE reservation_id='00000000-0000-4000-8000-00000000ab20'),'tiempos/actor reales separados');
+SELECT pg_temp.historical_assert((public.record_historical_building_notice((SELECT value FROM historical_input))->>'replayed')='true','reintento idempotente');
+SELECT pg_temp.historical_assert((public.record_historical_building_notice((SELECT value||'{"request_key":"same-ref"}' FROM historical_input))->>'ok')='true','misma referencia otra clave no duplica');
+SELECT pg_temp.historical_assert((SELECT count(*)=1 FROM public.building_notice_observations WHERE reservation_id='00000000-0000-4000-8000-00000000ab20'),'una observación');
+SELECT pg_temp.historical_assert((public.record_historical_building_notice((SELECT value||'{"evidence":"Evidencia cambiada sintética"}' FROM historical_input))->>'conflict')='true','misma requestkey payload distinto rechazado');
+SELECT pg_temp.historical_assert((public.record_historical_building_notice((SELECT value||'{"request_key":"different-ref-data","status":"sent"}' FROM historical_input))->>'conflict')='true','misma referencia distinto hecho rechazado');
+SELECT pg_temp.historical_assert((public.manage_building_notice('prepare',(SELECT jsonb_build_object('reservation_id',value->'reservation_id','recipient_id',value->'recipient_id','snapshot',value->'snapshot','request_key','no-resend') FROM historical_input))->>'ok')='false','bloquea preparación duplicada');
+DO $$BEGIN BEGIN UPDATE public.building_notice_observations SET evidence='Cambio no autorizado';RAISE EXCEPTION 'FALLA: DML directo';EXCEPTION WHEN insufficient_privilege THEN NULL;END;END$$;
+SET LOCAL request.jwt.claim.sub='00000000-0000-4000-8000-00000000ab02';
+SELECT pg_temp.historical_assert((SELECT count(*)=0 FROM public.building_notice_observations),'RLS limpieza');
+DO $$BEGIN BEGIN PERFORM public.record_historical_building_notice((SELECT value FROM historical_input));RAISE EXCEPTION 'FALLA: limpieza registra';EXCEPTION WHEN insufficient_privilege THEN NULL;END;END$$;
+RESET ROLE;
+UPDATE public.reservations SET guests=3 WHERE id='00000000-0000-4000-8000-00000000ab20';
+UPDATE public.reservations SET guests=2 WHERE id='00000000-0000-4000-8000-00000000ab20';
+SELECT pg_temp.historical_assert((SELECT invalidated_at IS NOT NULL AND version=2 AND status='delivered' AND snapshot->>'guests'='2' FROM public.building_notice_observations WHERE reservation_id='00000000-0000-4000-8000-00000000ab20'),'invalidación permanente sin borrar evidencia');
+SELECT pg_temp.historical_assert((SELECT count(*)=1 FROM public.building_notice_history WHERE reservation_id='00000000-0000-4000-8000-00000000ab20' AND action='historical_delivered'),'historial común sin duplicado');
+SET LOCAL ROLE authenticated;
+SET LOCAL request.jwt.claim.sub='00000000-0000-4000-8000-00000000ab01';
+SELECT pg_temp.historical_assert((public.record_historical_building_notice((SELECT value FROM historical_input))->>'conflict')='true','replay tras invalidación no promete vigencia');
+SELECT pg_temp.historical_assert((public.manage_building_notice('prepare',(SELECT jsonb_build_object('reservation_id',value->'reservation_id','recipient_id',value->'recipient_id','snapshot',value->'snapshot','request_key','normal-prepare') FROM historical_input))->>'ok')='true','flujo normal prepare compatible');
+SELECT pg_temp.historical_assert((public.manage_building_notice('record',(SELECT jsonb_build_object('notice_id',id,'expected_version',version,'request_key','old-retrospective','action','sent','occurred_at',clock_timestamp()-interval '1 day','confirmed',true,'evidence','Referencia sintética histórica','evidence_kind','operator_confirmation') FROM public.building_notices WHERE reservation_id='00000000-0000-4000-8000-00000000ab20'))->>'ok')='false','flujo preparado no falsifica tiempo histórico');
+SELECT pg_temp.historical_assert((public.manage_building_notice('record',(SELECT jsonb_build_object('notice_id',id,'expected_version',version,'request_key','normal-sent','action','sent','occurred_at',clock_timestamp(),'confirmed',true,'evidence','Referencia sintética de envío','evidence_kind','operator_confirmation') FROM public.building_notices WHERE reservation_id='00000000-0000-4000-8000-00000000ab20'))->>'ok')='true','flujo normal sent compatible');
+SELECT pg_temp.historical_assert((public.manage_building_notice('record',(SELECT jsonb_build_object('notice_id',id,'expected_version',version,'request_key','normal-delivered','action','delivered','occurred_at',clock_timestamp(),'confirmed',true,'evidence','Referencia sintética entrega','evidence_kind','delivery_receipt') FROM public.building_notices WHERE reservation_id='00000000-0000-4000-8000-00000000ab20'))->>'ok')='true','flujo normal delivered compatible');
+ROLLBACK;

@@ -51,10 +51,26 @@ export interface BuildingNoticeEvent {
   occurred_at: string | null
   evidence: string | null
 }
+export interface BuildingNoticeObservation {
+  id: string
+  reservation_id: string
+  recipient_id: string
+  snapshot: NoticeSnapshot
+  status: 'sent' | 'delivered' | 'received'
+  occurred_at: string
+  recorded_at: string
+  actor_id: string
+  author: string
+  evidence: string
+  reference: string
+  version: number
+  invalidated_at?: string | null
+}
 export interface BuildingNoticeView {
   reservation: { id: string; property_id: string; guest_name: string; guests: number | null; check_in: string; check_out: string; status: string }
   property: string
   recipients: BuildingRecipient[]
+  observations?: BuildingNoticeObservation[]
   notices: BuildingNotice[]
   history: BuildingNoticeEvent[]
   legacy_marks: { task_id: string; at: string }[]
@@ -65,6 +81,8 @@ export const NOTICE_LABELS: Record<NoticeStatus, string> = {
   delivered: 'Entrega acreditada', received: 'Recepción confirmada',
 }
 export const NOTICE_HISTORY_LABELS: Record<string, string> = {
+  historical_invalidated: 'Evidencia histórica no vigente por cambios',
+  historical_sent: 'Envío histórico acreditado', historical_delivered: 'Entrega histórica acreditada', historical_received: 'Recepción histórica acreditada',
   candidate_imported: 'Contacto anterior pendiente de verificar', recipient_verified: 'Destinatario verificado',
   prepared: 'Borrador preparado', prepared_reused: 'Borrador consultado de nuevo',
   uncertain: 'Resultado incierto', sent: 'Envío registrado', delivered: 'Entrega acreditada',
@@ -97,9 +115,13 @@ export function noticeMessage(snapshot: NoticeSnapshot) {
   return buildGuestNotification({ apartment: snapshot.apartment, guestName: snapshot.guest_name,
     guests: snapshot.guests, checkIn: snapshot.check_in, checkOut: snapshot.check_out })
 }
+/** Una observación acredita solo el contenido y destinatario exactos que se comprobaron. */
+export function currentBuildingObservation(view: BuildingNoticeView, recipient: BuildingRecipient) {
+  return view.observations?.find(o => !o.invalidated_at && o.recipient_id === recipient.id && sameSnapshot(o.snapshot, noticeSnapshot(view, recipient)))
+}
 /** El enlace se ofrece únicamente para un borrador vigente y un destinatario verificado. */
 export function noticeDraftLink(view: BuildingNoticeView, recipient: BuildingRecipient, notice: BuildingNotice): string | null {
-  if (view.blockers.length || !recipient.verified_at || notice.status !== 'prepared' || notice.review_reason
+  if (currentBuildingObservation(view, recipient) || view.blockers.length || !recipient.verified_at || notice.status !== 'prepared' || notice.review_reason
     || !sameSnapshot(notice.snapshot, noticeSnapshot(view, recipient))) return null
   const message = noticeMessage(notice.snapshot)
   return recipient.channel === 'whatsapp' ? waLink(recipient.address, message.whatsappText)

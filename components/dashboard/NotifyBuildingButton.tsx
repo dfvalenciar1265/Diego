@@ -1,8 +1,9 @@
 'use client'
+import { HistoricalBuildingNoticeForm } from './HistoricalBuildingNoticeForm'
 import { useState, useTransition } from 'react'
 import { useUserRole } from '@/lib/user-context'
 import { getBuildingNotices, manageBuildingNotice } from '@/actions/building-notices'
-import { bogotaDateTimeLocal, noticeDraftLink, noticeMessage, noticeSnapshot, sameSnapshot, NOTICE_LABELS, NOTICE_HISTORY_LABELS, NOTICE_SOURCE_LABELS,
+import { currentBuildingObservation, bogotaDateTimeLocal, noticeDraftLink, noticeMessage, noticeSnapshot, sameSnapshot, NOTICE_LABELS, NOTICE_HISTORY_LABELS, NOTICE_SOURCE_LABELS,
   type BuildingNoticeView, type NoticeAction } from '@/lib/building-notices'
 
 const dateLabel = (iso: string) => new Intl.DateTimeFormat('es-CO', {
@@ -31,6 +32,7 @@ export function NotifyBuildingButton({ reservationId }: { reservationId: string 
 
   const recipient = view?.recipients.find(c => c.id === recipientId)
   const snapshot = view && recipient ? noticeSnapshot(view, recipient) : null
+  const observation = view && recipient ? currentBuildingObservation(view, recipient) : null
   const currentNotice = view?.notices.find(n => n.recipient_id === recipientId && snapshot && sameSnapshot(n.snapshot, snapshot))
   const notice = currentNotice ?? view?.notices.find(n => n.recipient_id === recipientId)
   const message = snapshot && !view?.blockers.length ? noticeMessage(snapshot) : null
@@ -87,7 +89,7 @@ export function NotifyBuildingButton({ reservationId }: { reservationId: string 
       {recipient && view ? <>
         <p className="break-all">{recipient.channel === 'email' ? 'Correo' : 'WhatsApp'}: {recipient.address}
           {` · ${recipient.verified_at ? 'Verificado' : 'Pendiente de verificar'}`}</p>
-        <p className="font-semibold">{notice ? `${NOTICE_LABELS[notice.status]} · contenido ${notice.content_version}` : 'Borrador pendiente'}</p>
+        <p className="font-semibold">{observation ? `${NOTICE_LABELS[observation.status]} · evidencia histórica vigente` : notice ? `${NOTICE_LABELS[notice.status]} · contenido ${notice.content_version}` : 'Borrador pendiente'}</p>
         {notice?.review_reason ? <p className="text-amber-900">{notice.review_reason}</p> : null}
         {message ? <details><summary className="min-h-11 cursor-pointer py-3">Revisar texto propuesto</summary>
           <pre className="whitespace-pre-wrap break-words rounded bg-slate-50 p-2 font-sans">{recipient.channel === 'email'
@@ -102,18 +104,18 @@ export function NotifyBuildingButton({ reservationId }: { reservationId: string 
           <button type="button" onClick={() => save('verify_recipient')} disabled={pending || evidence.trim().length < 10}
             className="min-h-11 rounded border px-3 disabled:opacity-50">Confirmar destinatario</button>
         </> : <>
-          {!currentNotice && (view.legacy_marks.length > 0 || view.notices.length > 0) ? <label className="block">Revisión del aviso anterior, si preparas otra versión
+          {!observation && !currentNotice && (view.legacy_marks.length > 0 || view.notices.length > 0) ? <label className="block">Revisión del aviso anterior, si preparas otra versión
             <textarea value={review} onChange={e => setReview(e.target.value)} disabled={pending} maxLength={500}
               className="mt-1 w-full rounded border p-2" rows={2} />
           </label> : null}
-          {!currentNotice ? <button type="button" onClick={() => save('prepare')} disabled={pending || view.blockers.length > 0}
+          {!observation && !currentNotice ? <button type="button" onClick={() => save('prepare')} disabled={pending || view.blockers.length > 0}
             className="min-h-11 rounded border px-3 disabled:opacity-50">Preparar borrador</button> : null}
           {link ? <div className="space-y-1">
             <a href={link} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center rounded border px-3 text-indigo-700">
               Abrir borrador en {recipient.channel === 'email' ? 'correo' : 'WhatsApp'}</a>
             <p>Revísalo y envíalo en esa aplicación. Después registra aquí lo que comprobaste.</p>
           </div> : null}
-          {notice ? <fieldset disabled={pending || view.blockers.length > 0} className="space-y-2 rounded border p-2">
+          {!observation && notice ? <fieldset disabled={pending || view.blockers.length > 0} className="space-y-2 rounded border p-2">
             <legend>Registrar resultado</legend>
             <label className="block">Resultado comprobado
               <select value={action} onChange={e => { setAction(e.target.value as NoticeAction); setConfirmed(false); setRequestKey(crypto.randomUUID()) }}
@@ -135,9 +137,17 @@ export function NotifyBuildingButton({ reservationId }: { reservationId: string 
             <button type="button" onClick={() => save('record')} disabled={pending || !confirmed || evidence.trim().length < 10 || !occurred}
               className="min-h-11 rounded border px-3 disabled:opacity-50">Guardar registro</button>
           </fieldset> : null}
+          {observation ? <p>Ya hay evidencia histórica vigente. No se ofrece preparar ni reenviar este aviso.</p> : null}
+          {snapshot && !view.blockers.length ? <HistoricalBuildingNoticeForm key={`${recipient.id}:${recipient.version}`} reservationId={reservationId} snapshot={snapshot} reload={load} /> : null}
         </>}
       </> : null}
-      {view ? <details><summary className="min-h-11 cursor-pointer py-3">Historial y evidencia ({view.history.length})</summary>
+      {view ? <details><summary className="min-h-11 cursor-pointer py-3">Historial y evidencia ({view.history.length + (view.observations?.length ?? 0)})</summary>
+        {view.observations?.map(o => {
+          const contact = view.recipients.find(c => c.id === o.recipient_id)
+          const current = !o.invalidated_at && contact && sameSnapshot(o.snapshot, noticeSnapshot(view, contact))
+          return <p key={o.id} className="mb-2 break-words">{NOTICE_LABELS[o.status]} · registro histórico · {current ? 'Vigente' : 'No vigente: revisar cambios; se conserva la evidencia'}
+            {` · hecho ${dateLabel(o.occurred_at)} · registrado ${dateLabel(o.recorded_at)} · ${o.author} · ${o.evidence} · referencia ${o.reference}`}</p>
+        })}
         {view.history.map(h => {
           const contact = view.recipients.find(c => c.id === h.recipient_id)
           return <p key={h.id} className="mb-2 break-words">{NOTICE_HISTORY_LABELS[h.action] ?? 'Registro anterior'} · {h.author}

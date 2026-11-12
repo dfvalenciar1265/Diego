@@ -15,3 +15,9 @@ Antes de producción: prueba con cuenta limpieza y cuenta inactiva, dos sesiones
 El formulario admite JPEG/PNG/WebP de hasta 5 MB, verifica firma de bytes, no acepta SVG. Los bytes no se transforman: pueden contener metadatos EXIF y siguen siendo privados. Recuperación segura: retirar ruta/acciones sin borrar historial, incidencias ni bucket. Este módulo no programa mensajes ni modifica reservas.
 
 Las escrituras bloquean las reservas del apartamento y usan comparación de versión. Una edición simultánea que tome filas en distinto orden puede provocar un deadlock PostgreSQL: la transacción se revierte íntegra y se debe releer/reintentar, nunca forzar sobrescritura. No se afirma ausencia de conflictos entre todos los escritores existentes.
+
+## Verificación ejecutada: Storage/Auth local real
+
+12-nov-2026: `scripts/test-inspection-storage-local.mjs` pasó contra Supabase local en 127.0.0.1:54321, sin stubs Auth/Storage. Se crearon solo usuarios/propiedad/reserva sintéticos. PNG de un píxel: carga y descarga con limpieza activa; lectura pública/anon/inactiva y escritura en carpeta ajena denegadas; tamaño superior a 5 MB y MIME SVG rechazados; RPC conserva foto privada y actor y se relee; URL firmada accesible antes de caducidad y denegada a +4s con TTL2s. Ningún secreto se imprime. El script valida host/puerto local antes de crear fixtures; los conserva en stack aislado.
+
+Ejecutar con `AIRADMIN_LOCAL_STATUS_LOG` apuntando al archivo privado de estado del stack (última línea JSON de Supabase). Esta prueba cubre API real de Storage y RPC, no por sí sola el formulario móvil o firma de bytes de la server action. No equivale a despliegue ni prueba en producción.

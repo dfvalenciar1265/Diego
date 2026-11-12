@@ -23,7 +23,7 @@ El 12-11-2026 se comprobó que no existe una rama de desarrollo de Supabase para
 
 Camino de publicación:
 1. Preparar Auth/DB/Storage aislados (stack local o rama de desarrollo con costo autorizado si corresponde), sin copiar huéspedes reales.
-2. Aplicar base y las tres migraciones nuevas; crear miembros y reservas sintéticos con roles admin, limpieza y tercero sin acceso.
+2. Aplicar base y las cuatro migraciones nuevas; crear miembros y reservas sintéticos con roles admin, limpieza y tercero sin acceso.
 3. Probar inicio de sesión real, guardado/relectura, foto JPG/PNG/WebP privada hasta 5 MB, rechazo de formatos/tamaño, URL firmada con vencimiento, denegación anónima y de usuarios inactivos, cambios/cancelaciones y dobles guardados.
 4. Revisar móvil/escritorio autenticados; confirmar que borradores no disparan mensajes y que cron/proveedores no se conectan al entorno de prueba.
 5. Comparar migraciones reales con repositorio y garantizar copia/recuperación no destructiva. Publicar migraciones antes de interfaz, hacer smoke test por roles y conservar historial ante rollback.
@@ -31,3 +31,12 @@ Camino de publicación:
 No se ha creado una rama facturable ni se ha publicado esta versión. Los permisos para trabajar en mejoras no sustituyen aceptación de costos adicionales ni resolver las comprobaciones pendientes.
 
 QA visual adicional: harness local con componentes reales, datos sintéticos y acciones bloqueadas; Chromium headless a 390×844 y 1440×1000. Sin errores JS ni desbordamiento horizontal en estados cerrados/desplegados. Se corrigieron el enlace al checklist en Inicio y los saltos de línea del placeholder. No sustituye prueba E2E con Auth/Storage reales.
+
+
+## Avance de validación real y publicación
+
+Docker oficial ya instalado con modalidad gratuita confirmada. Supabase local real con puertos127.0.0.1 ejecutó pruebas Auth/Storage y E2E con datos sintéticos; detalles en `e2e-operacion-local.md` y `checklist-llegadas.md`. El bloqueo de infraestructura inicial quedó resuelto. Diego autorizó publicar tras verificación. No se activarán envíos externos automáticos.
+
+El historial de migraciones remoto tiene versiones distintas al repositorio para funcionalidades antiguas. No utilizar `db push` indiscriminado: comparar esquema y aplicar exclusivamente cuatro migraciones nuevas. Rollback de aplicación conservando tablas/historial/bucket; la función original de avisos se conserva como `manage_without_observations`. La observación histórica no cambia ni falsifica las fechas de avisos preparados.
+
+Preflight remoto12-nov-2026 (solo lectura antes de publicación): dependencias, constraints, firmas de funciones y grants Storage compatibles; tablas nuevas y bucket no existentes. Advisories previos de vista SECURITY DEFINER `article_feedback_summary`, funciones y configuración se mantienen fuera de alcance, no son correcciones incluidas. Riesgos de deadlock se gestionan como error transaccional/relectura, nunca sobrescritura forzada. Capturar despliegue anterior como punto de retorno antes de publicación.
