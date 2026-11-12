@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { directArrivalsTomorrow } from '@/lib/direct-arrivals'
 import { getTemporaryNotices } from '@/actions/temporary-notices'
 import { noticeNeedsReview } from '@/lib/temporary-notices'
 import { hourInBogota } from '@/lib/gpt-api/dates'
@@ -54,7 +55,7 @@ export default async function DashboardPage() {
 
   // All dashboard data fetched concurrently (no waterfall)
   const supabase = await createClient()
-  const [arrivals, todayTasks, stockAlerts, pendingPurchases, checkOuts, maintenanceAll, acceptedChanges, followups, people] = await Promise.all([
+  const [arrivals, todayTasks, stockAlerts, pendingPurchases, checkOuts, maintenanceAll, acceptedChanges, followups, people, directTomorrow] = await Promise.all([
     preparationArrivals(supabase, selectedDay, selectedDay),
     getTasks({ date: selectedDay, type: 'other' }),
     getLowStockAlerts(),
@@ -64,6 +65,7 @@ export default async function DashboardPage() {
     getAcceptedChanges(),
     getTodayFollowups(),
     member.role === 'admin' || member.role === 'anfitrion' ? getTeamMembers() : Promise.resolve([]),
+    directArrivalsTomorrow(supabase,member.role,now),
   ])
 
   // Cobros adicionales: los de quien sale hoy van con su salida; el resto (vencidos u otros) aparte.
@@ -120,8 +122,12 @@ export default async function DashboardPage() {
 
       <nav aria-label="Herramientas de operación" className="flex flex-wrap gap-3 px-4 pt-4 text-sm">
         <Link href="/temporary-notices" className="underline">Avisos temporales{expiredNotices.length ? ` (${expiredNotices.length} por revisar)` : ''}</Link>
-        {member.role === 'admin' && <Link href="/direct-messages" className="underline">Mensajes de reservas directas</Link>}
+
       </nav>
+      {directTomorrow && <p className="rounded-xl border border-sky-200 bg-sky-50 p-3 text-sm">
+        Mañana ({directTomorrow.date}) {directTomorrow.count===1?'llega una reserva directa':`llegan ${directTomorrow.count} reservas directas`}.{' '}
+        <Link href={`/direct-messages?date=${directTomorrow.date}`} className="underline">Revisar mensajes y datos de contacto</Link>. Los envíos automáticos siguen desactivados.
+      </p>}
       {temporary.error ? <p role="status" className="px-4 pt-2 text-xs text-amber-800">Avisos temporales pendientes de comprobar.</p> : expiredNotices.length > 0 ? <div role="status" className="mx-4 mt-3 p-3 border border-amber-300 rounded-xl bg-amber-50"><strong>Hay {expiredNotices.length} avisos vencidos</strong><p className="text-sm">Revisa todas las ubicaciones antes de confirmar su retiro. No se han cambiado anuncios ni mensajes.</p></div> : null}
 
       {/* Indicadores del día mostrado, en tres columnas iguales. */}

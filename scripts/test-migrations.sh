@@ -188,4 +188,6 @@ bash scripts/test-building-notices-concurrency.sh "$DB"
 "${PSQL[@]}" -f scripts/test-arrival-inspection.sql
 "${PSQL[@]}" -f supabase/migrations/20261112042531_preventive_note_reviews.sql
 "${PSQL[@]}" -f scripts/test-preventive-review.sql
+"${PSQL[@]}" -f supabase/migrations/20261112112942_checkout_optional_checks.sql
+"${PSQL[@]}" -f scripts/test-checkout-checks.sql
 echo "Migraciones base + cobros/solicitudes + horarios + conciliación Gmail + preparación: todas las comprobaciones pasaron."

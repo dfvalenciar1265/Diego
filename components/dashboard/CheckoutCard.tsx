@@ -2,6 +2,7 @@
 import type { TodayCheckOut } from '@/actions/dashboard'
 import { ReservationTimePanel } from './ReservationTimePanel'
 import { CheckoutCleaningControl, type CleaningPerson } from './CheckoutCleaningControl'
+import { CheckoutOptionalChecks } from './CheckoutOptionalChecks'
 import type { UserRole } from '@/lib/types'
 
 export function CheckoutCard({ co, role, memberId, people, planning = false }: { co: TodayCheckOut; role: UserRole; memberId: string; people: CleaningPerson[]; planning?: boolean }) {
@@ -12,5 +13,6 @@ export function CheckoutCard({ co, role, memberId, people, planning = false }: {
     </span></p>
   </>} />
     <CheckoutCleaningControl key={`${co.cleaning.task?.status}:${co.cleaning.task?.assigned_to}:${planning}`} checkout={co} role={role} memberId={memberId} people={people} planning={planning} />
+    <CheckoutOptionalChecks stay={{id:co.id,property_id:co.property_id,...co.stay}} canOmit={!planning && ['admin','anfitrion','cleaning'].includes(role)} />
   </div>
 }

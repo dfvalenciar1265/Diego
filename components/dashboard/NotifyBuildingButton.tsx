@@ -1,9 +1,9 @@
 'use client'
 import { HistoricalBuildingNoticeForm } from './HistoricalBuildingNoticeForm'
-import { useState, useTransition } from 'react'
+import { useEffect, useRef, useState, useTransition } from 'react'
 import { useUserRole } from '@/lib/user-context'
 import { getBuildingNotices, manageBuildingNotice } from '@/actions/building-notices'
-import { currentBuildingObservation, bogotaDateTimeLocal, noticeDraftLink, noticeMessage, noticeSnapshot, sameSnapshot, NOTICE_LABELS, NOTICE_HISTORY_LABELS, NOTICE_SOURCE_LABELS,
+import { currentBuildingObservation, bogotaDateTimeLocal, noticeDraftLink, noticeMessage, noticeSnapshot, sameSnapshot, NOTICE_LABELS,
   type BuildingNoticeView, type NoticeAction } from '@/lib/building-notices'
 
 const dateLabel = (iso: string) => new Intl.DateTimeFormat('es-CO', {
@@ -17,6 +17,12 @@ const evidenceKind: Record<NoticeAction, string> = {
 /** Preparar y abrir el borrador nunca confirma el envío. Los registros requieren comprobación humana. */
 export function NotifyBuildingButton({ reservationId }: { reservationId: string }) {
   const role = useUserRole()
+  return role === 'admin' ? <BuildingNoticeControl key={reservationId} reservationId={reservationId} /> : null
+}
+
+function BuildingNoticeControl({ reservationId }: { reservationId: string }) {
+  const readSequence = useRef(0)
+  const writeInFlight = useRef(false)
   const [open, setOpen] = useState(false)
   const [view, setView] = useState<BuildingNoticeView | null>(null)
   const [recipientId, setRecipientId] = useState('')
@@ -28,7 +34,25 @@ export function NotifyBuildingButton({ reservationId }: { reservationId: string 
   const [confirmed, setConfirmed] = useState(false)
   const [requestKey, setRequestKey] = useState(() => crypto.randomUUID())
   const [pending, startTransition] = useTransition()
-  if (role !== 'admin') return null
+  useEffect(() => {
+    let active = true
+    // Se inicia fuera del efecto síncrono; la clave de reserva aísla todo el estado.
+    void Promise.resolve().then(() => { if (active && readSequence.current === 0) return load() }).catch(() => {})
+    return () => { active = false; readSequence.current += 1 }
+    // Cada instancia está ligada a una reserva; load coordina las lecturas concurrentes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reservationId])
+  // Verde únicamente con un hecho acreditado y vigente, sea humano o del asistente.
+  const accreditedTimes = view && !error && !pending && !view.blockers.length ? view.recipients.flatMap(contact => {
+    if (!contact.verified_at) return []
+    const historical = currentBuildingObservation(view, contact)
+    if (historical) return Number.isFinite(Date.parse(historical.occurred_at)) ? [historical.occurred_at] : []
+    const current = view.notices.find(n => n.recipient_id === contact.id && sameSnapshot(n.snapshot, noticeSnapshot(view, contact)))
+    if (!current || current.review_reason || !['sent','delivered','received'].includes(current.status)) return []
+    return [current.sent_at ?? current.delivered_at ?? current.received_at].filter((at): at is string => typeof at === 'string' && Number.isFinite(Date.parse(at)))
+  }) : []
+  const notifiedAt = accreditedTimes.sort((a, b) => Date.parse(a) - Date.parse(b)).at(-1)
+
 
   const recipient = view?.recipients.find(c => c.id === recipientId)
   const snapshot = view && recipient ? noticeSnapshot(view, recipient) : null
@@ -36,22 +60,34 @@ export function NotifyBuildingButton({ reservationId }: { reservationId: string 
   const currentNotice = view?.notices.find(n => n.recipient_id === recipientId && snapshot && sameSnapshot(n.snapshot, snapshot))
   const notice = currentNotice ?? view?.notices.find(n => n.recipient_id === recipientId)
   const message = snapshot && !view?.blockers.length ? noticeMessage(snapshot) : null
-  const link = view && recipient && notice ? noticeDraftLink(view, recipient, notice) : null
+  const link = !error && !pending && view && recipient && notice ? noticeDraftLink(view, recipient, notice) : null
 
   async function load() {
-    const result = await getBuildingNotices(reservationId)
-    if (!result.ok) throw new Error(result.error)
-    if (!result.data.arrivals[0]) throw new Error('La reserva ya no está disponible.')
-    setView(result.data.arrivals[0])
+    const sequence = ++readSequence.current
+    try {
+      const result = await getBuildingNotices(reservationId)
+      if (sequence !== readSequence.current) return
+      if (!result.ok) throw new Error(result.error)
+      const next = result.data.arrivals.find(arrival => arrival.reservation.id === reservationId)
+      if (!next) throw new Error('La reserva ya no está disponible.')
+      setView(next); setError('')
+    } catch (e) {
+      if (sequence !== readSequence.current) return
+      setView(null)
+      setError(e instanceof Error ? e.message : 'No se pudo consultar el aviso.')
+      throw e
+    }
   }
   function refresh() {
+    setView(null)
     startTransition(async () => {
-      try { await load(); setError(''); setRequestKey(crypto.randomUUID()) }
-      catch (e) { setError(e instanceof Error ? e.message : 'No se pudo consultar el aviso.') }
+      try { await load(); setRequestKey(crypto.randomUUID()) }
+      catch { /* load deja el estado sin acreditar cuando falla. */ }
     })
   }
   function save(operation: 'verify_recipient' | 'prepare' | 'record') {
-    if (!recipient || !view) return
+    if (!recipient || !view || pending || writeInFlight.current) return
+    writeInFlight.current = true
     const input = operation === 'verify_recipient'
       ? { recipient_id: recipient.id, expected_version: recipient.version, evidence, request_key: requestKey }
       : operation === 'prepare'
@@ -67,12 +103,12 @@ export function NotifyBuildingButton({ reservationId }: { reservationId: string 
         setError(''); setEvidence(''); setConfirmed(false); setRequestKey(crypto.randomUUID()); setOccurred(bogotaDateTimeLocal())
       } catch {
         setError('No se pudo comprobar el resultado. Actualiza el estado antes de repetir el registro.')
-      }
+      } finally { writeInFlight.current = false }
     })
   }
   return <div className="mt-2 border-t pt-2 text-xs" data-home-edit-error={Boolean(error) || pending}>
-    <button type="button" className="min-h-11 font-semibold text-indigo-700" aria-expanded={open}
-      onClick={() => { setOpen(!open); if (!open) refresh() }}>📨 Aviso al edificio {open ? '▲' : '▼'}</button>
+    <button type="button" className={`min-h-11 rounded-lg px-3 font-semibold ${notifiedAt ? 'bg-green-100 text-green-800' : 'bg-slate-100 text-slate-600'}`} aria-label="Aviso al edificio" aria-expanded={open}
+      onClick={() => { setOpen(!open); if (!open) refresh() }}>📨 {notifiedAt ? `Avisado · ${dateLabel(notifiedAt)}` : 'Avisar edificio'} {open ? '▲' : '▼'}</button>
     {open ? <div className="space-y-3">
       <button type="button" onClick={refresh} disabled={pending} className="min-h-11 underline">Actualizar estado</button>
       {view?.legacy_marks.map(mark => <p key={mark.task_id} className="text-amber-900">
@@ -141,22 +177,6 @@ export function NotifyBuildingButton({ reservationId }: { reservationId: string 
           {snapshot && !view.blockers.length ? <HistoricalBuildingNoticeForm key={`${recipient.id}:${recipient.version}`} reservationId={reservationId} snapshot={snapshot} reload={load} /> : null}
         </>}
       </> : null}
-      {view ? <details><summary className="min-h-11 cursor-pointer py-3">Historial y evidencia ({view.history.length + (view.observations?.length ?? 0)})</summary>
-        {view.observations?.map(o => {
-          const contact = view.recipients.find(c => c.id === o.recipient_id)
-          const current = !o.invalidated_at && contact && sameSnapshot(o.snapshot, noticeSnapshot(view, contact))
-          return <p key={o.id} className="mb-2 break-words">{NOTICE_LABELS[o.status]} · registro histórico · {current ? 'Vigente' : 'No vigente: revisar cambios; se conserva la evidencia'}
-            {` · hecho ${dateLabel(o.occurred_at)} · registrado ${dateLabel(o.recorded_at)} · ${o.author} · ${o.evidence} · referencia ${o.reference}`}</p>
-        })}
-        {view.history.map(h => {
-          const contact = view.recipients.find(c => c.id === h.recipient_id)
-          return <p key={h.id} className="mb-2 break-words">{NOTICE_HISTORY_LABELS[h.action] ?? 'Registro anterior'} · {h.author}
-            {` · ${NOTICE_SOURCE_LABELS[h.source] ?? 'Fuente anterior'} · registrado ${dateLabel(h.at)}`}
-            {h.occurred_at ? ` · hecho ${dateLabel(h.occurred_at)}` : ''}
-            {contact ? ` · ${contact.channel === 'email' ? 'Correo' : 'WhatsApp'}: ${contact.address}` : ''}
-            {h.evidence ? ` · ${h.evidence}` : ''}</p>
-        })}
-      </details> : null}
       {pending ? <p role="status">Consultando o guardando…</p> : null}
       {error ? <p role="alert" className="text-red-700">{error}</p> : null}
     </div> : null}
