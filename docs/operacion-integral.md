@@ -16,3 +16,16 @@
 ## Validación y límites
 
 Pruebas locales con datos sintéticos; no se ha accedido a producción ni cargado fotos de huéspedes. Las políticas Storage se prueban con una interfaz SQL local mínima; falta ensayo integrado del almacenamiento privado real. Falta revisión visual autenticada completa y decisión de publicación. Los nuevos módulos requieren sus migraciones antes de habilitar su interfaz en producción. Los borradores no acreditan envío, entrega ni lectura.
+
+## Prepublicación pendiente comprobada
+
+El 12-11-2026 se comprobó que no existe una rama de desarrollo de Supabase para AirAdmin. Ni el Mac ni la computadora cloud cuentan con Docker/Podman o stack Supabase local. No se debe conectar esta versión a datos de producción para simular pruebas.
+
+Camino de publicación:
+1. Preparar Auth/DB/Storage aislados (stack local o rama de desarrollo con costo autorizado si corresponde), sin copiar huéspedes reales.
+2. Aplicar base y las tres migraciones nuevas; crear miembros y reservas sintéticos con roles admin, limpieza y tercero sin acceso.
+3. Probar inicio de sesión real, guardado/relectura, foto JPG/PNG/WebP privada hasta 5 MB, rechazo de formatos/tamaño, URL firmada con vencimiento, denegación anónima y de usuarios inactivos, cambios/cancelaciones y dobles guardados.
+4. Revisar móvil/escritorio autenticados; confirmar que borradores no disparan mensajes y que cron/proveedores no se conectan al entorno de prueba.
+5. Comparar migraciones reales con repositorio y garantizar copia/recuperación no destructiva. Publicar migraciones antes de interfaz, hacer smoke test por roles y conservar historial ante rollback.
+
+No se ha creado una rama facturable ni se ha publicado esta versión. Los permisos para trabajar en mejoras no sustituyen aceptación de costos adicionales ni resolver las comprobaciones pendientes.
