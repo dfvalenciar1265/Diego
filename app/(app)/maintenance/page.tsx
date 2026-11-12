@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { getCurrentMember } from '@/lib/auth'
 import { getMaintenance } from '@/actions/maintenance'
@@ -23,6 +24,7 @@ export default async function MaintenancePage() {
         title="Mantenimiento"
         action={<MaintenanceClient properties={properties} />}
       />
+      {member.role === 'admin' ? <Link className="mx-4 inline-flex min-h-11 items-center underline" href="/maintenance/review">Revisar notas antiguas de preventivos</Link> : null}
       <MaintenanceView
         issues={issues}
         properties={properties}

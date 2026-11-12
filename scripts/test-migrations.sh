@@ -186,4 +186,6 @@ bash scripts/test-building-notices-concurrency.sh "$DB"
 "${PSQL[@]}" -f scripts/test-inspection-storage-before.sql
 "${PSQL[@]}" -f supabase/migrations/20261112023000_arrival_inspections.sql
 "${PSQL[@]}" -f scripts/test-arrival-inspection.sql
+"${PSQL[@]}" -f supabase/migrations/20261112042531_preventive_note_reviews.sql
+"${PSQL[@]}" -f scripts/test-preventive-review.sql
 echo "Migraciones base + cobros/solicitudes + horarios + conciliación Gmail + preparación: todas las comprobaciones pasaron."

@@ -131,3 +131,23 @@ describe('escritura común a app y MCP', () => {
     expect(rpc).toHaveBeenCalledWith('record_arrival_preparation', expect.objectContaining({ p_source: 'mcp', p_actor_id: actor.id }))
   })
 })
+
+it('incluye solo vínculos seguros, sin copiar snapshots ni motivos al DTO de preparación',async()=>{
+ const rpc=vi.fn().mockResolvedValue({data:[{parent_id:'parent-synthetic',corrective_id:'issue-synthetic',parent_title:'Aire sintético',property_id:arrival.property_id,pending_verification:true,parent_snapshot:{cost:12345},reason:'nota privada sintética'}],error:null})
+ const db=fakeDb({maintenance:[{id:'issue-synthetic',property_id:arrival.property_id,title:'Reporte sintético',priority:'normal',status:'open'}]},{rpc})
+ const view=(await preparationViews(db,[arrival],arrival.check_in))[arrival.id]
+ expect(rpc).toHaveBeenCalledWith('list_preventive_links',{p_corrective_ids:['issue-synthetic']})
+ expect(view.issues[0].preventive_links).toEqual([{parent_id:'parent-synthetic',title:'Aire sintético',pending_verification:true}])
+ expect(JSON.stringify(view)).not.toMatch(/cost|12345|nota privada|parent_snapshot/)
+})
+it('si falla vínculo seguro no certifica preparación',async()=>{
+ const db=fakeDb({maintenance:[{id:'issue-synthetic',property_id:arrival.property_id,title:'Reporte sintético',priority:'normal',status:'open'}]},{rpc:()=>({data:null,error:{message:'denegado'}})})
+ expect((await preparationViews(db,[arrival],arrival.check_in))[arrival.id].available).toBe(false)
+})
+it('no omite vínculos silenciosamente si los correctivos superan el límite seguro',async()=>{
+ const rpc=vi.fn()
+ const maintenance=Array.from({length:501},(_,i)=>({id:`issue-${i}`,property_id:arrival.property_id,title:'Reporte sintético',priority:'normal',status:'open'}))
+ const view=(await preparationViews(fakeDb({maintenance},{rpc}),[arrival],arrival.check_in))[arrival.id]
+ expect(view.available).toBe(false)
+ expect(rpc).not.toHaveBeenCalled()
+})

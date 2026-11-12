@@ -25,6 +25,9 @@ ALTER TABLE public.properties ADD COLUMN active boolean NOT NULL DEFAULT true;
 ALTER TABLE public.reservations ADD COLUMN pending_change jsonb;
 ALTER TABLE public.reservations ADD COLUMN guests smallint;
 ALTER TABLE public.tasks ADD COLUMN building_notified_at timestamptz;
+ALTER TABLE public.maintenance ADD COLUMN IF NOT EXISTS next_due date;
+ALTER TABLE public.maintenance ADD COLUMN IF NOT EXISTS last_done date;
+ALTER TABLE public.maintenance ADD COLUMN IF NOT EXISTS interval_months int;
 CREATE TABLE public.expenses (id uuid PRIMARY KEY DEFAULT gen_random_uuid(),property_id uuid,date date);
 ALTER TABLE public.expenses ENABLE ROW LEVEL SECURITY;
 SQL
