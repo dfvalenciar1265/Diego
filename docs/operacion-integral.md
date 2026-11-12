@@ -29,3 +29,5 @@ Camino de publicación:
 5. Comparar migraciones reales con repositorio y garantizar copia/recuperación no destructiva. Publicar migraciones antes de interfaz, hacer smoke test por roles y conservar historial ante rollback.
 
 No se ha creado una rama facturable ni se ha publicado esta versión. Los permisos para trabajar en mejoras no sustituyen aceptación de costos adicionales ni resolver las comprobaciones pendientes.
+
+QA visual adicional: harness local con componentes reales, datos sintéticos y acciones bloqueadas; Chromium headless a 390×844 y 1440×1000. Sin errores JS ni desbordamiento horizontal en estados cerrados/desplegados. Se corrigieron el enlace al checklist en Inicio y los saltos de línea del placeholder. No sustituye prueba E2E con Auth/Storage reales.

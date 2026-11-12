@@ -44,7 +44,7 @@ export function TemporaryNotices({ notices, properties, today, admin }: { notice
       <label className="block">Título<input required name="title" minLength={3} maxLength={150} className="block border p-2 w-full" /></label>
       <label className="block">Texto vigente<textarea required name="message" maxLength={2000} className="block border p-2 w-full" /></label>
       <label className="block">Último día de vigencia<input required type="date" name="expires_on" className="block border p-2" /></label>
-      <label className="block">Dónde se publicó, una ubicación por línea<textarea required name="locations" placeholder="Manual de llegada, español\nManual de llegada, inglés\nDescripción del anuncio" className="block border p-2 w-full" /></label>
+      <label className="block">Dónde se publicó, una ubicación por línea<textarea required name="locations" placeholder={'Manual de llegada, español\nManual de llegada, inglés\nDescripción del anuncio'} className="block border p-2 w-full" /></label>
       <p className="text-xs">No incluyas documentos, datos privados de huéspedes ni claves.</p>
       <button disabled={busy || !!pending} className="border rounded p-2">Guardar registro interno</button>
     </form>}
