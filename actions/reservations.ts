@@ -1,4 +1,5 @@
 'use server'
+import { directContactInput,persistDirectContact } from '@/lib/direct-contact'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { canDo } from '@/lib/permissions'
@@ -107,6 +108,8 @@ export async function createReservation(
   if (!role || !canDo(role, 'reservations:edit')) {
     return { success: false, error: 'No autorizado' }
   }
+  const contact=directContactInput(formData)
+  if(contact&&'error'in contact)return {success:false,error:contact.error}
   const supabase = await createClient()
   const guestsRaw = formData.get('guests') as string
   const propertyId = formData.get('property_id') as string
@@ -163,10 +166,11 @@ export async function createReservation(
     }
   }
 
+  const contactWarning=await persistDirectContact(supabase,inserted.id,contact)
   revalidatePath('/calendar')
   revalidatePath('/')
   revalidatePath('/cleaning')
-  return { success: true, warning }
+  return { success: true, warning:[warning,contactWarning].filter(Boolean).join(' ')||undefined }
 }
 
 export async function updateReservation(
@@ -176,6 +180,8 @@ export async function updateReservation(
   if (!role || !canDo(role, 'reservations:edit')) {
     return { success: false, error: 'No autorizado' }
   }
+  const contact=directContactInput(formData)
+  if(contact&&'error'in contact)return {success:false,error:contact.error}
   const supabase = await createClient()
   const guestsRaw = formData.get('guests') as string
   const airbnbCode = ((formData.get('airbnb_code') as string) || '').trim().toUpperCase() || null
@@ -214,10 +220,11 @@ export async function updateReservation(
   // day — which, among other things, hides the check-out time editor on the home.
   const warning = await moveLinkedTasks(supabase, id, checkIn, checkOut)
 
+  const contactWarning=await persistDirectContact(supabase,id,contact)
   revalidatePath('/calendar')
   revalidatePath('/')
   revalidatePath('/cleaning')
-  return { success: true, warning }
+  return { success: true, warning:[warning,contactWarning].filter(Boolean).join(' ')||undefined }
 }
 
 /**

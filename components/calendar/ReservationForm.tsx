@@ -1,4 +1,5 @@
 'use client'
+import { DirectContactFields } from './DirectContactFields'
 import { useRef, useState, useTransition } from 'react'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
@@ -24,12 +25,16 @@ export function ReservationForm({
 }: Props) {
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState('')
+  const [savedContactWarning,setSavedContactWarning]=useState('')
   // Focus the title on open instead of the first field — otherwise the apartment
   // <select> grabs focus and pops the native picker as soon as the sheet opens.
   const titleRef = useRef<HTMLDivElement>(null)
   const errorRef = useRef<HTMLDivElement>(null)
   const role = useUserRole()
   const confirm = useConfirm()
+  const [sourceChoice,setSourceChoice]=useState<{id:string;source:string}|null>(null)
+  const sourceId=reservation?.id??`new:${defaultSource??'direct'}`
+  const selectedSource=sourceChoice?.id===sourceId?sourceChoice.source:(reservation?.source??defaultSource??'direct')
   const canSeeFinances = role === 'admin' || role === 'maintenance'
 
   /** Shows the error inside the sheet (scrolled into view) and as a toast. */
@@ -41,6 +46,7 @@ export function ReservationForm({
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
+    if(savedContactWarning)return
     const formData = new FormData(e.currentTarget)
     setError('')
     const checkIn  = String(formData.get('check_in') ?? '')
@@ -59,6 +65,7 @@ export function ReservationForm({
         const who = guest ? ` de ${guest}` : ''
         toast.success(reservation ? `Reserva${who} actualizada` : `Reserva${who} creada`)
         if (result.warning) toast.warning(result.warning, { duration: 8000 })
+        if(result.warning?.includes('teléfono no se confirmó')){setSavedContactWarning(result.warning);return}
         onClose()
       } catch {
         fail('No se pudo guardar la reserva. Revisa tu conexión y reintenta.')
@@ -96,7 +103,7 @@ export function ReservationForm({
     : 'Editar reserva'
 
   return (
-    <Sheet open={open} onOpenChange={v => { if (!v) { setError(''); onClose() } }} key={reservation?.id ?? 'new'}>
+    <Sheet open={open} onOpenChange={v => { if (!v) { setError(''); setSavedContactWarning(''); onClose() } }} key={reservation?.id ?? 'new'}>
       <SheetContent side="bottom" className="rounded-t-2xl" initialFocus={titleRef} style={{ maxHeight: '90dvh', overflowY: 'auto', padding: '1rem 1rem env(safe-area-inset-bottom,1rem)' }}>
         <SheetHeader className="mb-4">
           <div ref={titleRef} tabIndex={-1} className="outline-none">
@@ -104,7 +111,7 @@ export function ReservationForm({
           </div>
         </SheetHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4 pb-6">
+        {savedContactWarning ? <section className="space-y-3"><p role="alert" className="rounded border border-amber-300 bg-amber-50 p-3">{savedContactWarning}</p><Button type="button" onClick={()=>{setSavedContactWarning('');onClose()}}>Cerrar y revisar la reserva guardada</Button></section> : <form onSubmit={handleSubmit} className="space-y-4 pb-6">
 
           {/* Apartamento */}
           <div>
@@ -127,7 +134,8 @@ export function ReservationForm({
             <Label>Tipo</Label>
             <select
               name="source"
-              defaultValue={reservation?.source ?? defaultSource ?? 'direct'}
+              value={selectedSource}
+              onChange={e=>setSourceChoice({id:sourceId,source:e.target.value})}
               className="w-full mt-1 rounded-lg border border-[#e2e8f0] p-3 text-sm
                          focus:outline-none focus:ring-2 focus:ring-[#ff385c]"
             >
@@ -160,6 +168,8 @@ export function ReservationForm({
               />
             </div>
           </div>
+
+          {open&&role==='admin'&&selectedSource==='direct'&&<DirectContactFields key={sourceId} reservationId={reservation?.id}/>}
 
           {/* Fechas */}
           <div className="grid grid-cols-2 gap-3">
@@ -246,7 +256,7 @@ export function ReservationForm({
               Eliminar reserva
             </Button>
           )}
-        </form>
+        </form>}
       </SheetContent>
     </Sheet>
   )

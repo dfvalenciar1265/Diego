@@ -25,6 +25,7 @@ export function ReservationTimePanel({ timing, stay, canEdit = false, heading }:
   const request = useRef({ signature: '', key: '' })
   const router = useRouter()
   const isArrival = timing.direction === 'checkin'
+  const displayedTime = timing.estimate?.time ?? timing.effective_time
   const specialTime = timing.authorization && timing.authorization.time !== timing.standard.time
   // Una nota antigua que repite el estándar no cambia la instrucción de trabajo.
   // La procedencia sigue almacenada; los avisos operativos importantes permanecen visibles.
@@ -36,7 +37,7 @@ export function ReservationTimePanel({ timing, stay, canEdit = false, heading }:
       return `Avisó que llega antes. La entrada sigue siendo desde las ${clockLabel(timing.effective_time)}.`
     }
     if (text === 'La salida estimada supera la hora permitida; requiere autorización.') {
-      return 'Avisó que sale después de la hora permitida. Falta autorizar ese horario.'
+      return `Avisó que sale después de la hora permitida (${clockLabel(timing.effective_time)}). Falta autorizar ese horario.`
     }
     if (text === 'Excepción heredada: autor y fecha originales desconocidos.') {
       return 'Horario de una nota antigua: confirmar con administración.'
@@ -67,42 +68,41 @@ export function ReservationTimePanel({ timing, stay, canEdit = false, heading }:
         <div className={`shrink-0 ${heading ? 'text-right' : ''}`}>
           <span className="block text-[11px]">{isArrival ? 'Entrada desde las' : 'Salida hasta las'}</span>
           {canEdit ? <button ref={timeButton} onClick={() => {
-            if (!editing) { setAuthorization(timing.authorization?.time ?? timing.effective_time); setMessage('') }
+            if (!editing) { setEstimate(timing.estimate?.time ?? ''); setAuthorization(timing.authorization?.time ?? timing.effective_time); setMessage('') }
             setEditing(!editing)
           }} aria-expanded={editing} aria-controls={editorId}
-            aria-label={`Editar hora de ${isArrival ? 'entrada' : 'salida'}: ${clockLabel(timing.effective_time)}`}
+            aria-label={`Editar hora de ${isArrival ? 'entrada' : 'salida'}: ${clockLabel(displayedTime)}`}
             className={`inline-flex min-h-11 items-center gap-1 rounded px-1 text-lg font-semibold underline decoration-dotted underline-offset-4 focus-visible:outline-2 ${isArrival ? 'text-[#e11d48]' : 'text-[#15803d]'}`}>
-            {clockLabel(timing.effective_time)}<Pencil size={13} aria-hidden="true" />
+            {clockLabel(displayedTime)}<Pencil size={13} aria-hidden="true" />
           </button> : <strong className={`text-lg font-semibold ${isArrival ? 'text-[#e11d48]' : 'text-[#15803d]'}`}>
-            {clockLabel(timing.effective_time)}
+            {clockLabel(displayedTime)}
           </strong>}
         </div>
       </div>
       {canEdit && editing ? <div id={editorId} className="space-y-2 rounded-lg border border-[#e2e8f0] bg-[#f8fafc] p-2">
         <p className="font-medium text-[#0f172a]">Cambiar hora de {isArrival ? 'entrada' : 'salida'} · Colombia</p>
-        <div className="flex flex-wrap items-end gap-2">
-          <label className="w-full min-w-0 sm:w-auto sm:flex-1">Hora permitida por administración<input autoFocus type="time" value={authorization}
-            onChange={e => setAuthorization(e.target.value)} className="mt-1 block min-h-11 w-full min-w-0 rounded border bg-white p-2" /></label>
-          <button disabled={pending || !authorization} onClick={() => save('authorization', authorization)} className="min-h-11 w-full rounded bg-[#0f172a] px-3 text-white disabled:opacity-40 sm:w-auto">Guardar hora permitida</button>
-        </div>
-        <p>Guardar autoriza este horario para esta reserva. Una hora avisada por el huésped no lo autoriza.</p>
-        <div className="flex flex-wrap gap-x-3">
-          {timing.authorization ? <button disabled={pending} onClick={() => save('authorization', '')} className="min-h-11 underline disabled:opacity-40">Volver al horario habitual ({clockLabel(timing.standard.time)})</button> : null}
-          <button disabled={pending} onClick={() => { setEditing(false); timeButton.current?.focus() }} className="min-h-11 underline">Cerrar</button>
-        </div>
-        <details>
-          <summary className="min-h-11 cursor-pointer py-3">Hora avisada por el huésped</summary>
+        <section aria-label="Hora avisada por el huésped" className="space-y-2">
+          <p className="font-medium">Hora avisada por el huésped</p>
           <div className="flex flex-wrap items-end gap-2">
-            <label className="w-full min-w-0 sm:w-auto sm:flex-1">Hora que avisó el huésped<input type="time" value={estimate}
+            <label className="w-full min-w-0 sm:w-auto sm:flex-1">Hora que avisó el huésped<input autoFocus type="time" value={estimate}
               onChange={e => setEstimate(e.target.value)} className="mt-1 block min-h-11 w-full min-w-0 rounded border bg-white p-2" /></label>
             <button disabled={pending} onClick={() => save('estimate', estimate)} className="min-h-11 w-full rounded border px-3 py-2 sm:w-auto">Guardar hora avisada</button>
           </div>
-          <p>Guardar la hora avisada no cambia la hora permitida.</p>
+          <p>Guardar la hora avisada no cambia la hora permitida. Dejarla vacía vuelve a mostrar la hora permitida.</p>
+        </section>
+        <details>
+          <summary className="min-h-11 cursor-pointer py-3 font-medium">Autorización de horario · administración</summary>
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="w-full min-w-0 sm:w-auto sm:flex-1">Hora permitida por administración<input type="time" value={authorization}
+              onChange={e => setAuthorization(e.target.value)} className="mt-1 block min-h-11 w-full min-w-0 rounded border bg-white p-2" /></label>
+            <button disabled={pending || !authorization} onClick={() => save('authorization', authorization)} className="min-h-11 w-full rounded bg-[#0f172a] px-3 text-white disabled:opacity-40 sm:w-auto">Guardar hora permitida</button>
+          </div>
+          <p>Guardar autoriza este horario para esta reserva. Una hora avisada por el huésped no lo autoriza.</p>
+          {timing.authorization ? <button disabled={pending} onClick={() => save('authorization', '')} className="min-h-11 underline disabled:opacity-40">Volver al horario habitual ({clockLabel(timing.standard.time)})</button> : null}
         </details>
+        <button disabled={pending} onClick={() => { setEditing(false); timeButton.current?.focus() }} className="min-h-11 underline disabled:opacity-40">Cerrar</button>
       </div> : null}
-      {specialTime ? <p className="font-medium text-[#0f172a]">Horario especial autorizado</p> : <p>Horario habitual · no es una hora avisada por el huésped</p>}
-      {timing.estimate ? <p>{isArrival ? 'Avisó llegada:' : 'Avisó salida:'} <strong>{clockLabel(timing.estimate.time)}</strong> · estimada, no cambia la hora permitida</p>
-        : <p className="text-amber-800">{isArrival ? 'Llegada al apartamento' : 'Salida del apartamento'}: hora del huésped pendiente</p>}
+      {specialTime ? <p className="font-medium text-[#0f172a]">Horario especial autorizado{displayedTime !== timing.effective_time ? `: ${clockLabel(timing.effective_time)}` : ''}</p> : null}
       {visibleReview.map(text => <p key={text} className="rounded bg-amber-50 px-2 py-1 text-amber-900">⚠ {reviewLabel(text)}</p>)}
       {message ? <p role="status">{message} <button className="underline" onClick={() => router.refresh()}>Actualizar horarios</button></p> : null}
     </div>

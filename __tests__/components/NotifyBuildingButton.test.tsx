@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({ read: vi.fn(), save: vi.fn(), role: 'admin' as string | null }))
 vi.mock('@/actions/building-notices', () => ({ getBuildingNotices: mocks.read, manageBuildingNotice: mocks.save }))
@@ -110,4 +110,89 @@ describe('aviso humano y verificable al edificio', () => {
     expect(screen.queryByRole('button', { name: 'Preparar borrador' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /Abrir borrador/ })).not.toBeInTheDocument()
   })
+})
+
+describe('botón compacto con estado acreditado', () => {
+  it('carga envío del asistente y muestra verde con hora sin abrir historial', async () => {
+    const view = buildingView()
+    view.notices = [buildingNotice(view, { status: 'sent', sent_at: '2026-11-08T15:30:00Z' })]
+    mocks.read.mockResolvedValue(response(view))
+    render(<NotifyBuildingButton reservationId={ids.reservation} />)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Aviso al edificio' })).toHaveTextContent(/Avisado/))
+    expect(screen.getByRole('button', { name: 'Aviso al edificio' })).toHaveClass('bg-green-100')
+    expect(screen.getByRole('button', { name: 'Aviso al edificio' })).toHaveTextContent(/10:30/)
+    fireEvent.click(screen.getByRole('button', { name: 'Aviso al edificio' }))
+    expect(screen.queryByText(/Historial y evidencia/)).not.toBeInTheDocument()
+    expect(mocks.save).not.toHaveBeenCalled()
+  })
+  it.each(['prepared','uncertain'] as const)('mantiene gris el estado %s', async status => {
+    const view = buildingView()
+    view.notices = [buildingNotice(view, { status })]
+    mocks.read.mockResolvedValue(response(view))
+    render(<NotifyBuildingButton reservationId={ids.reservation} />)
+    await waitFor(() => expect(mocks.read).toHaveBeenCalled())
+    expect(screen.getByRole('button', { name: 'Aviso al edificio' })).toHaveClass('bg-slate-100')
+    expect(screen.queryByText(/Avisado ·/)).not.toBeInTheDocument()
+  })
+  it('no acredita un aviso con cambios pendientes aunque tenga fecha', async () => {
+    const view = buildingView()
+    view.notices = [buildingNotice(view, { status:'sent', sent_at:'2026-11-08T15:30:00Z', review_reason:'Cambió la reserva' })]
+    mocks.read.mockResolvedValue(response(view))
+    render(<NotifyBuildingButton reservationId={ids.reservation} />)
+    await waitFor(() => expect(mocks.read).toHaveBeenCalled())
+    expect(screen.getByRole('button', { name: 'Aviso al edificio' })).toHaveClass('bg-slate-100')
+  })
+})
+
+
+describe('aislamiento y carreras de avisos', () => {
+  const sentView = () => { const view=buildingView();view.notices=[buildingNotice(view,{status:'sent',sent_at:'2026-11-08T15:30:00Z'})];return view }
+  it('al cambiar reserva descarta verde, contacto y borrador anteriores inmediatamente', async () => {
+    mocks.read.mockResolvedValue(response(sentView()))
+    const ui=render(<NotifyBuildingButton reservationId={ids.reservation}/>)
+    await waitFor(()=>expect(screen.getByRole('button',{name:'Aviso al edificio'})).toHaveClass('bg-green-100'))
+    mocks.read.mockResolvedValue({ok:false,error:'Sin acceso a nueva reserva'})
+    ui.rerender(<NotifyBuildingButton reservationId="10000000-0000-4000-8000-000000000099"/>)
+    expect(screen.getByRole('button',{name:'Aviso al edificio'})).not.toHaveClass('bg-green-100')
+    expect(screen.queryByText(/porter-sintetico@example.test/)).not.toBeInTheDocument()
+    await act(async()=>{})
+    expect(screen.getByRole('button',{name:'Aviso al edificio'})).not.toHaveClass('bg-green-100')
+  })
+  it('fallo al actualizar quita evidencia visual y no deja abrir borrador previo', async () => {
+    mocks.read.mockResolvedValue(response(sentView()))
+    render(<NotifyBuildingButton reservationId={ids.reservation}/>)
+    await waitFor(()=>expect(screen.getByRole('button',{name:'Aviso al edificio'})).toHaveClass('bg-green-100'))
+    mocks.read.mockRejectedValue(new Error('Fallo sintético'))
+    fireEvent.click(screen.getByRole('button',{name:'Aviso al edificio'}))
+    expect(screen.getByRole('button',{name:'Aviso al edificio'})).not.toHaveClass('bg-green-100')
+    await screen.findByRole('alert')
+    expect(screen.queryByRole('link')).not.toBeInTheDocument()
+    expect(screen.getByRole('button',{name:'Aviso al edificio'})).not.toHaveClass('bg-green-100')
+  })
+  it('lectura antigua tardía no reemplaza respuesta reciente ni restaura verde', async () => {
+    let finish!: (value:ReturnType<typeof response>)=>void
+    mocks.read.mockReturnValueOnce(new Promise(resolve=>{finish=resolve})).mockResolvedValue(response(buildingView()))
+    render(<NotifyBuildingButton reservationId={ids.reservation}/>)
+    await waitFor(()=>expect(mocks.read).toHaveBeenCalledTimes(1))
+    fireEvent.click(screen.getByRole('button',{name:'Aviso al edificio'}))
+    await screen.findByLabelText('Destinatario del edificio')
+    await act(async()=>{finish(response(sentView()))})
+    expect(screen.getByRole('button',{name:'Aviso al edificio'})).not.toHaveClass('bg-green-100')
+  })
+  it('no muestra datos devueltos para otra reserva', async () => {
+    mocks.read.mockResolvedValue(response(sentView()))
+    render(<NotifyBuildingButton reservationId="10000000-0000-4000-8000-000000000099"/>)
+    fireEvent.click(screen.getByRole('button',{name:'Aviso al edificio'}))
+    await screen.findByRole('alert')
+    expect(screen.queryByLabelText('Destinatario del edificio')).not.toBeInTheDocument()
+    expect(screen.getByRole('button',{name:'Aviso al edificio'})).not.toHaveClass('bg-green-100')
+  })
+})
+
+it.each([['vigente',null,'2026-11-08T07:30:00-05:00',true],['invalidada','2026-11-09T00:00:00Z','2026-11-08T07:30:00-05:00',false],['fecha inválida',null,'invalid-synthetic',false]] as const)('observación histórica %s no acredita más de lo comprobado',async(_label,invalidated_at,occurred_at,green)=>{
+ const view=buildingView();const notice=buildingNotice(view)
+ view.observations=[{id:ids.notice,reservation_id:ids.reservation,recipient_id:ids.recipient,snapshot:notice.snapshot,status:'delivered',occurred_at,recorded_at:'2026-11-09T00:00:00Z',actor_id:ids.admin,author:'Admin sintético',evidence:'Evidencia sintética',reference:'synthetic-ref',version:1,invalidated_at}]
+ mocks.read.mockResolvedValue(response(view));render(<NotifyBuildingButton reservationId={ids.reservation}/>);await act(async()=>{})
+ expect(screen.getByRole('button',{name:'Aviso al edificio'})).toHaveClass(green?'bg-green-100':'bg-slate-100')
+ if(green)expect(screen.getByRole('button',{name:'Aviso al edificio'})).toHaveTextContent('7:30')
 })
