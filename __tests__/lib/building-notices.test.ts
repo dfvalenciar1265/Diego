@@ -129,3 +129,18 @@ describe('borradores y escrituras verificables', () => {
     expect(rpc).not.toHaveBeenCalled()
   })
 })
+
+
+describe('enlace directo sin efectos',()=>{
+ it('construye propuesta verificada sin exigir notice preparado',async()=>{
+  const {directBuildingDraftLink}=await import('@/lib/building-notices')
+  const v=buildingView();expect(directBuildingDraftLink(v,v.recipients[0])).toMatch(/^mailto:/);expect(v.notices).toEqual([])
+ })
+ it('bloquea intento incierto, evidencia, cambios pendientes, contactos inválidos y marcas previas',async()=>{
+  const {directBuildingDraftLink}=await import('@/lib/building-notices')
+  for(const status of ['uncertain','sent','delivered','received'] as const){const v=buildingView();v.notices=[buildingNotice(v,{status})];expect(directBuildingDraftLink(v,v.recipients[0])).toBeNull()}
+  const v=buildingView();v.notices=[buildingNotice(v,{review_reason:'Revisar cambio'})];expect(directBuildingDraftLink(v,v.recipients[0])).toBeNull()
+  for(const address of ['a@example.test?bcc=other@example.test','a@example.test\r\nBcc:other@example.test']){const v=buildingView({recipients:[buildingRecipient({address})]});expect(directBuildingDraftLink(v,v.recipients[0])).toBeNull()}
+  const old=buildingView({legacy_marks:[{task_id:'synthetic',at:'2026-11-01T00:00:00Z'}]});expect(directBuildingDraftLink(old,old.recipients[0])).toBeNull()
+ })
+})

@@ -13,6 +13,7 @@ async function open(view = buildingView()) {
   render(<NotifyBuildingButton reservationId={ids.reservation} />)
   fireEvent.click(screen.getByRole('button', { name: /Aviso al edificio/ }))
   await screen.findByLabelText('Destinatario del edificio')
+  fireEvent.click(screen.getByText('Registrar resultado o revisar destinatarios'))
   fireEvent.change(screen.getByLabelText('Destinatario del edificio'), { target: { value: ids.recipient } })
 }
 afterEach(cleanup)
@@ -39,7 +40,7 @@ describe('aviso humano y verificable al edificio', () => {
   it('abrir el borrador no registra envío y exige confirmación y evidencia para guardarlo', async () => {
     const view = buildingView(); view.notices = [buildingNotice(view)]
     await open(view)
-    const link = screen.getByRole('link', { name: /Abrir borrador en correo/ })
+    const link = screen.getByRole('link', { name: /Correo · porter-sintetico/ })
     expect(link).toHaveAttribute('href', expect.stringContaining('mailto:porter-sintetico@example.test'))
     // Evita abrir una aplicación externa durante la prueba.
     link.addEventListener('click', event => event.preventDefault())
@@ -74,7 +75,7 @@ describe('aviso humano y verificable al edificio', () => {
   it.each(['uncertain','sent','delivered','received'] as const)('no ofrece reenviar un aviso %s', async status => {
     const view = buildingView(); view.notices = [buildingNotice(view, { status })]
     await open(view)
-    expect(screen.queryByRole('link', { name: /Abrir borrador/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Correo ·|WhatsApp ·/ })).not.toBeInTheDocument()
     expect(mocks.save).not.toHaveBeenCalled()
   })
   it('la verificación necesita evidencia y solo habilita preparar tras releer el estado guardado', async () => {
@@ -108,7 +109,7 @@ describe('aviso humano y verificable al edificio', () => {
     expect(screen.getByText('Envío registrado · contenido 1')).toBeVisible()
     expect(screen.getByText('Cambió la reserva. Revisa el aviso.')).toBeVisible()
     expect(screen.queryByRole('button', { name: 'Preparar borrador' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: /Abrir borrador/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Correo ·|WhatsApp ·/ })).not.toBeInTheDocument()
   })
 })
 
@@ -195,4 +196,17 @@ it.each([['vigente',null,'2026-11-08T07:30:00-05:00',true],['invalidada','2026-1
  mocks.read.mockResolvedValue(response(view));render(<NotifyBuildingButton reservationId={ids.reservation}/>);await act(async()=>{})
  expect(screen.getByRole('button',{name:'Aviso al edificio'})).toHaveClass(green?'bg-green-100':'bg-slate-100')
  if(green)expect(screen.getByRole('button',{name:'Aviso al edificio'})).toHaveTextContent('7:30')
+})
+
+it('ofrece borradores verificados en un paso sin seleccionar, preparar ni escribir',async()=>{
+ const view=buildingView({recipients:[buildingRecipient(),buildingRecipient({id:'10000000-0000-4000-8000-000000000008',channel:'whatsapp',address:'573000000000'}),buildingRecipient({id:'10000000-0000-4000-8000-000000000009',address:'candidate@example.test',verified_at:null})]})
+ mocks.read.mockResolvedValue(response(view));render(<NotifyBuildingButton reservationId={ids.reservation}/>);fireEvent.click(screen.getByRole('button',{name:'Aviso al edificio'}))
+ const link=await screen.findByRole('link',{name:'Correo · porter-sintetico@example.test'})
+ expect(screen.getByRole('link',{name:'WhatsApp · 573000000000'})).toHaveAttribute('href',expect.stringContaining('https://wa.me/573000000000?text='))
+ expect(screen.queryByRole('link',{name:/candidate/})).not.toBeInTheDocument()
+ expect(screen.getByText('Registrar resultado o revisar destinatarios').closest('details')).not.toHaveAttribute('open')
+ expect(screen.getByLabelText('Destinatario del edificio')).toHaveValue('')
+ link.addEventListener('click',e=>e.preventDefault());fireEvent.click(link)
+ expect(mocks.save).not.toHaveBeenCalled();expect(screen.getByRole('button',{name:'Aviso al edificio'})).not.toHaveClass('bg-green-100')
+ expect(decodeURIComponent(link.getAttribute('href')!)).toContain('Titular Sintético')
 })

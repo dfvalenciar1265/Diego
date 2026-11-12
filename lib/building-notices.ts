@@ -127,6 +127,26 @@ export function noticeDraftLink(view: BuildingNoticeView, recipient: BuildingRec
   return recipient.channel === 'whatsapp' ? waLink(recipient.address, message.whatsappText)
     : mailtoLink(recipient.address, message.emailSubject, message.emailBody)
 }
+/** Abrir una propuesta no registra preparación ni envío. Mantiene bloqueos de intentos anteriores. */
+export function directBuildingDraftLink(view: BuildingNoticeView, recipient: BuildingRecipient): string | null {
+  if (view.blockers.length || noticeBlockers(view).length || !recipient.verified_at
+    || recipient.property_id !== view.reservation.property_id
+    || !view.recipients.some(r => r.id === recipient.id && r.version === recipient.version && r.address === recipient.address)) return null
+  const validAddress = recipient.channel === 'whatsapp' ? /^\d{8,15}$/.test(recipient.address)
+    : /^[^\s@?&#:,]+@[^\s@?&#:,]+\.[^\s@?&#:,]+$/.test(recipient.address)
+  if (!validAddress || currentBuildingObservation(view, recipient)) return null
+  const snapshot = noticeSnapshot(view, recipient)
+  const matching = view.notices.filter(n => n.recipient_id === recipient.id && sameSnapshot(n.snapshot, snapshot))
+  // Una evidencia o resultado incierto nunca se elude usando un enlace sin persistencia.
+  if (matching.some(n => n.status !== 'prepared' || n.review_reason)) return null
+  const prepared = matching.find(n => n.status === 'prepared')
+  if (prepared) return noticeDraftLink(view, recipient, prepared)
+  if (view.legacy_marks.length || view.notices.some(n => n.recipient_id === recipient.id)
+    || view.observations?.some(o => o.recipient_id === recipient.id)) return null
+  const message = noticeMessage(snapshot)
+  return recipient.channel === 'whatsapp' ? waLink(recipient.address, message.whatsappText)
+    : mailtoLink(recipient.address, message.emailSubject, message.emailBody)
+}
 export function bogotaDateTimeLocal(now = new Date()): string {
   const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota', year: 'numeric', month: '2-digit',
     day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(now)
