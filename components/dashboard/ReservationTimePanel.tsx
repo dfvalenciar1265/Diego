@@ -20,6 +20,7 @@ export function ReservationTimePanel({ timing, stay, canEdit = false, heading }:
   const [message, setMessage] = useState('')
   const [pending, startTransition] = useTransition()
   const [editing, setEditing] = useState(false)
+  const [authorizing, setAuthorizing] = useState(false)
   const editorId = useId()
   const timeButton = useRef<HTMLButtonElement>(null)
   const request = useRef({ signature: '', key: '' })
@@ -57,6 +58,7 @@ export function ReservationTimePanel({ timing, stay, canEdit = false, heading }:
         })
         if (!result.success) { setMessage(result.error ?? 'No se guardó.'); return }
         setMessage('Guardado.')
+        if (kind === 'estimate') { setEditing(false); timeButton.current?.focus() }
         router.refresh()
       } catch { setMessage('Resultado incierto. Actualiza los horarios antes de reintentar.') }
     })
@@ -68,7 +70,7 @@ export function ReservationTimePanel({ timing, stay, canEdit = false, heading }:
         <div className={`shrink-0 ${heading ? 'text-right' : ''}`}>
           <span className="block text-[11px]">{isArrival ? 'Entrada desde las' : 'Salida hasta las'}</span>
           {canEdit ? <button ref={timeButton} onClick={() => {
-            if (!editing) { setEstimate(timing.estimate?.time ?? ''); setAuthorization(timing.authorization?.time ?? timing.effective_time); setMessage('') }
+            if (!editing) { setEstimate(displayedTime); setAuthorizing(false); setMessage('') }
             setEditing(!editing)
           }} aria-expanded={editing} aria-controls={editorId}
             aria-label={`Editar hora de ${isArrival ? 'entrada' : 'salida'}: ${clockLabel(displayedTime)}`}
@@ -79,28 +81,28 @@ export function ReservationTimePanel({ timing, stay, canEdit = false, heading }:
           </strong>}
         </div>
       </div>
-      {canEdit && editing ? <div id={editorId} className="space-y-2 rounded-lg border border-[#e2e8f0] bg-[#f8fafc] p-2">
-        <p className="font-medium text-[#0f172a]">Cambiar hora de {isArrival ? 'entrada' : 'salida'} · Colombia</p>
-        <section aria-label="Hora avisada por el huésped" className="space-y-2">
-          <p className="font-medium">Hora avisada por el huésped</p>
-          <div className="flex flex-wrap items-end gap-2">
-            <label className="w-full min-w-0 sm:w-auto sm:flex-1">Hora que avisó el huésped<input autoFocus type="time" value={estimate}
-              onChange={e => setEstimate(e.target.value)} className="mt-1 block min-h-11 w-full min-w-0 rounded border bg-white p-2" /></label>
-            <button disabled={pending} onClick={() => save('estimate', estimate)} className="min-h-11 w-full rounded border px-3 py-2 sm:w-auto">Guardar hora avisada</button>
-          </div>
-          <p>Guardar la hora avisada no cambia la hora permitida. Dejarla vacía vuelve a mostrar la hora permitida.</p>
-        </section>
-        <details>
-          <summary className="min-h-11 cursor-pointer py-3 font-medium">Autorización de horario · administración</summary>
+      {canEdit && editing ? <form id={editorId} onSubmit={e => { e.preventDefault(); if (!pending && estimate) save('estimate', estimate) }}
+        className="flex flex-wrap items-end gap-2 rounded-lg border border-[#e2e8f0] bg-[#f8fafc] p-2">
+        <label className="min-w-0 flex-1">Hora avisada · Colombia<input autoFocus required type="time" value={estimate}
+          disabled={pending} onChange={e => setEstimate(e.target.value)}
+          className="mt-1 block min-h-11 w-full min-w-0 rounded border bg-white p-2" /></label>
+        <button type="submit" disabled={pending || !estimate} className="min-h-11 rounded bg-[#0f172a] px-3 text-white disabled:opacity-40">Guardar</button>
+        <button type="button" disabled={pending} onClick={() => { setEditing(false); timeButton.current?.focus() }} className="min-h-11 px-2 underline">Cancelar</button>
+      </form> : null}
+      {canEdit && !editing ? <div>
+        <button disabled={pending} aria-expanded={authorizing} onClick={() => {
+          setAuthorization(timing.authorization?.time ?? timing.effective_time)
+          setMessage(''); setAuthorizing(!authorizing)
+        }} className="min-h-11 underline">Autorización de horario · administración</button>
+        {authorizing ? <div className="space-y-2 rounded-lg border border-[#e2e8f0] bg-[#f8fafc] p-2">
           <div className="flex flex-wrap items-end gap-2">
             <label className="w-full min-w-0 sm:w-auto sm:flex-1">Hora permitida por administración<input type="time" value={authorization}
-              onChange={e => setAuthorization(e.target.value)} className="mt-1 block min-h-11 w-full min-w-0 rounded border bg-white p-2" /></label>
+              disabled={pending} onChange={e => setAuthorization(e.target.value)} className="mt-1 block min-h-11 w-full min-w-0 rounded border bg-white p-2" /></label>
             <button disabled={pending || !authorization} onClick={() => save('authorization', authorization)} className="min-h-11 w-full rounded bg-[#0f172a] px-3 text-white disabled:opacity-40 sm:w-auto">Guardar hora permitida</button>
           </div>
           <p>Guardar autoriza este horario para esta reserva. Una hora avisada por el huésped no lo autoriza.</p>
           {timing.authorization ? <button disabled={pending} onClick={() => save('authorization', '')} className="min-h-11 underline disabled:opacity-40">Volver al horario habitual ({clockLabel(timing.standard.time)})</button> : null}
-        </details>
-        <button disabled={pending} onClick={() => { setEditing(false); timeButton.current?.focus() }} className="min-h-11 underline disabled:opacity-40">Cerrar</button>
+        </div> : null}
       </div> : null}
       {specialTime ? <p className="font-medium text-[#0f172a]">Horario especial autorizado{displayedTime !== timing.effective_time ? `: ${clockLabel(timing.effective_time)}` : ''}</p> : null}
       {visibleReview.map(text => <p key={text} className="rounded bg-amber-50 px-2 py-1 text-amber-900">⚠ {reviewLabel(text)}</p>)}
