@@ -5,7 +5,7 @@ import { useEffect, useRef, useState, useTransition } from 'react'
 import { useUserRole } from '@/lib/user-context'
 import { getBuildingNotices, manageBuildingNotice } from '@/actions/building-notices'
 import { currentBuildingObservation, bogotaDateTimeLocal, directBuildingDraftLink, noticeMessage, noticeSnapshot, sameSnapshot, NOTICE_LABELS,
-  type BuildingNoticeView, type NoticeAction } from '@/lib/building-notices'
+  type BuildingNotice, type BuildingNoticeView, type BuildingRecipient, type NoticeAction, type NoticeSnapshot } from '@/lib/building-notices'
 
 const dateLabel = (iso: string) => new Intl.DateTimeFormat('es-CO', {
   timeZone: 'America/Bogota', dateStyle: 'short', timeStyle: 'short',
@@ -13,6 +13,20 @@ const dateLabel = (iso: string) => new Intl.DateTimeFormat('es-CO', {
 const evidenceKind: Record<NoticeAction, string> = {
   uncertain: 'uncertain_result', sent: 'operator_confirmation', delivered: 'delivery_receipt',
   received: 'recipient_acknowledgment', reviewed: 'review',
+}
+
+const sendEvidence = 'El operador confirmó que envió el aviso al destinatario indicado por el canal seleccionado.'
+type OpenedDraft = { snapshot: NoticeSnapshot; key: string }
+type SendRecord = { notice_id: string; expected_version: number; occurred_at: string }
+
+function sentTime(view: BuildingNoticeView, contact: BuildingRecipient) {
+  if (!contact.verified_at || view.blockers.length) return
+  const observation = currentBuildingObservation(view, contact)
+  if (observation) return Number.isFinite(Date.parse(observation.occurred_at)) ? observation.occurred_at : undefined
+  const current = view.notices.find(n => n.recipient_id === contact.id && sameSnapshot(n.snapshot, noticeSnapshot(view, contact)))
+  if (!current || current.review_reason || !['sent', 'delivered', 'received'].includes(current.status)) return
+  const time = current.sent_at ?? current.delivered_at ?? current.received_at
+  return time && Number.isFinite(Date.parse(time)) ? time : undefined
 }
 
 /** Preparar y abrir el borrador nunca confirma el envío. Los registros requieren comprobación humana. */
@@ -25,6 +39,8 @@ function BuildingNoticeControl({ reservationId }: { reservationId: string }) {
   const readSequence = useRef(0)
   const writeInFlight = useRef(false)
   const [open, setOpen] = useState(false)
+  const [openedDrafts, setOpenedDrafts] = useState<Record<string, OpenedDraft>>({})
+  const sendAttempts = useRef(new Map<string, SendRecord>())
   const [view, setView] = useState<BuildingNoticeView | null>(null)
   const [recipientId, setRecipientId] = useState('')
   const [error, setError] = useState('')
@@ -43,17 +59,14 @@ function BuildingNoticeControl({ reservationId }: { reservationId: string }) {
     // Cada instancia está ligada a una reserva; load coordina las lecturas concurrentes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reservationId])
-  // Verde únicamente con un hecho acreditado y vigente, sea humano o del asistente.
-  const accreditedTimes = view && !error && !pending && !view.blockers.length ? view.recipients.flatMap(contact => {
-    if (!contact.verified_at) return []
-    const historical = currentBuildingObservation(view, contact)
-    if (historical) return Number.isFinite(Date.parse(historical.occurred_at)) ? [historical.occurred_at] : []
-    const current = view.notices.find(n => n.recipient_id === contact.id && sameSnapshot(n.snapshot, noticeSnapshot(view, contact)))
-    if (!current || current.review_reason || !['sent','delivered','received'].includes(current.status)) return []
-    return [current.sent_at ?? current.delivered_at ?? current.received_at].filter((at): at is string => typeof at === 'string' && Number.isFinite(Date.parse(at)))
-  }) : []
-  const notifiedAt = accreditedTimes.sort((a, b) => Date.parse(a) - Date.parse(b)).at(-1)
-
+  const statusView = error || pending ? null : view
+  const sentByRecipient = new Map(statusView?.recipients.map(contact => [contact.id, sentTime(statusView, contact)]))
+  const accreditedTimes = [...sentByRecipient.values()].filter((time): time is string => Boolean(time))
+  const allNotified = accreditedTimes.length > 0 && accreditedTimes.length === statusView?.recipients.length
+  const notifiedAt = allNotified ? accreditedTimes.sort((a, b) => Date.parse(a) - Date.parse(b)).at(-1) : undefined
+  const noticeLabel = notifiedAt ? `Avisado · ${dateLabel(notifiedAt)}`
+    : accreditedTimes.length ? `Aviso parcial · ${accreditedTimes.length}/${statusView?.recipients.length}`
+      : error ? 'Aviso por verificar' : !statusView ? 'Consultando aviso…' : 'Pendiente de avisar'
 
   const recipient = view?.recipients.find(c => c.id === recipientId)
   const snapshot = view && recipient ? noticeSnapshot(view, recipient) : null
@@ -71,6 +84,7 @@ function BuildingNoticeControl({ reservationId }: { reservationId: string }) {
       const next = result.data.arrivals.find(arrival => arrival.reservation.id === reservationId)
       if (!next) throw new Error('La reserva ya no está disponible.')
       setView(next); setError('')
+      return next
     } catch (e) {
       if (sequence !== readSequence.current) return
       setView(null)
@@ -106,9 +120,78 @@ function BuildingNoticeControl({ reservationId }: { reservationId: string }) {
       } finally { writeInFlight.current = false }
     })
   }
+  function rememberDraft(contact: BuildingRecipient, current: BuildingNoticeView) {
+    const snapshot = noticeSnapshot(current, contact)
+    setOpenedDrafts(previous => {
+      const existing = previous[contact.id]
+      if (existing && sameSnapshot(existing.snapshot, snapshot)) return previous
+      return { ...previous, [contact.id]: { snapshot, key: crypto.randomUUID() } }
+    })
+  }
+
+  function confirmManualSend(draft: OpenedDraft) {
+    if (pending || writeInFlight.current) return
+    writeInFlight.current = true
+    startTransition(async () => {
+      try {
+        const latest = await getBuildingNotices(reservationId)
+        if (!latest.ok) throw new Error(latest.error)
+        const current = latest.data.arrivals.find(arrival => arrival.reservation.id === reservationId)
+        const contact = current?.recipients.find(c => c.id === draft.snapshot.recipient_id)
+        if (!current || !contact || !sameSnapshot(draft.snapshot, noticeSnapshot(current, contact))) {
+          throw new Error('Cambió la reserva o el destinatario. Actualiza el aviso antes de registrarlo.')
+        }
+        if (sentTime(current, contact)) {
+          await load()
+          return
+        }
+        if (!directBuildingDraftLink(current, contact)) {
+          throw new Error('Este aviso necesita revisión antes de confirmar el envío.')
+        }
+        let record = sendAttempts.current.get(draft.key)
+        if (!record) {
+          let prepared: BuildingNotice | undefined = current.notices.find(n =>
+            n.recipient_id === contact.id && sameSnapshot(n.snapshot, draft.snapshot))
+          if (!prepared) {
+            const result = await manageBuildingNotice('prepare', {
+              reservation_id: reservationId, recipient_id: contact.id,
+              snapshot: draft.snapshot, request_key: `${draft.key}:prepare`,
+            })
+            if (!result.ok) throw new Error(result.error)
+            if ('snapshot' in result.data) prepared = result.data
+          }
+          if (!prepared || prepared.reservation_id !== reservationId || prepared.recipient_id !== contact.id ||
+            !sameSnapshot(prepared.snapshot, draft.snapshot) || prepared.status !== 'prepared' || prepared.review_reason) {
+            throw new Error('El aviso cambió. Actualiza su estado antes de repetir la confirmación.')
+          }
+          record = { notice_id: prepared.id, expected_version: prepared.version, occurred_at: new Date().toISOString() }
+          sendAttempts.current.set(draft.key, record)
+        }
+        const result = await manageBuildingNotice('record', {
+          ...record, action: 'sent', confirmed: true, evidence: sendEvidence,
+          evidence_kind: 'operator_confirmation', request_key: `${draft.key}:sent`,
+        })
+        if (!result.ok) throw new Error(result.error)
+        const saved = await load()
+        const savedContact = saved?.recipients.find(c => c.id === contact.id)
+        if (!saved || !savedContact || !sentTime(saved, savedContact)) {
+          throw new Error('No se pudo verificar el envío guardado. Actualiza el estado antes de repetir.')
+        }
+        sendAttempts.current.delete(draft.key)
+        setOpenedDrafts(previous => {
+          const next = { ...previous }
+          delete next[contact.id]
+          return next
+        })
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'No se pudo comprobar el registro. Actualiza antes de volver a intentar.')
+      } finally { writeInFlight.current = false }
+    })
+  }
+
   return <div className="mt-2 border-t pt-2 text-xs" data-home-edit-error={Boolean(error) || pending}>
-    <button type="button" className={`min-h-11 rounded-lg px-3 font-semibold ${notifiedAt ? 'bg-green-100 text-green-800' : 'bg-slate-100 text-slate-600'}`} aria-label="Aviso al edificio" aria-expanded={open}
-      onClick={() => { setOpen(!open); if (!open) refresh() }}>📨 {notifiedAt ? `Avisado · ${dateLabel(notifiedAt)}` : 'Avisar edificio'} {open ? '▲' : '▼'}</button>
+    <button type="button" className={`min-h-11 rounded-lg px-3 font-semibold ${notifiedAt ? 'bg-green-100 text-green-800' : accreditedTimes.length ? 'bg-amber-100 text-amber-900' : 'bg-slate-100 text-slate-600'}`} aria-label="Aviso al edificio" aria-expanded={open}
+      onClick={() => { setOpen(!open); if (!open) refresh() }}>📨 {noticeLabel} {open ? '▲' : '▼'}</button>
     {open ? <div className="space-y-3">
       <button type="button" onClick={refresh} disabled={pending} className="min-h-11 underline">Actualizar estado</button>
       {view?.legacy_marks.map(mark => <p key={mark.task_id} className="text-amber-900">
@@ -118,15 +201,26 @@ function BuildingNoticeControl({ reservationId }: { reservationId: string }) {
       {view && !error && !pending ? <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
         {view.recipients.map(contact => {
           const draft = directBuildingDraftLink(view, contact)
+          const at = sentByRecipient.get(contact.id)
+          const opened = openedDrafts[contact.id]
+          const confirmable = draft && opened && sameSnapshot(opened.snapshot, noticeSnapshot(view, contact))
           const label = contact.channel === 'email' ? 'Correo' : 'WhatsApp'
           const content = <><span className="font-semibold">{label}</span><span className="min-w-0 break-all text-xs">{contact.address}</span></>
           return <div key={contact.id} className="min-w-0">
-            {draft ? <a href={draft} target="_blank" rel="noopener noreferrer" aria-label={`${label} · ${contact.address}`}
+            {at ? <div className="flex min-h-16 flex-col justify-center gap-1 rounded-xl border border-green-200 bg-green-50 px-3 py-2 text-green-800">
+              {content}<span className="text-xs">Avisado · {dateLabel(at)}</span>
+            </div> : draft ? <a href={draft} target="_blank" rel="noopener noreferrer" aria-label={`${label} · ${contact.address}`}
+              onClick={() => rememberDraft(contact, view)}
               className="flex min-h-16 w-full min-w-0 flex-col justify-center gap-1 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-left text-indigo-800 focus-visible:outline-2 focus-visible:outline-indigo-600">
-              {content}
+              {content}<span className="text-xs">Pendiente de avisar</span>
             </a> : <button type="button" disabled aria-label={`${label} ${contact.address} ${contact.verified_at ? 'Sin reenvío disponible' : 'Pendiente de verificar'}`} className="flex min-h-16 w-full min-w-0 flex-col justify-center gap-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-left text-slate-500">
               {content}<span className="text-xs">{contact.verified_at ? 'Sin reenvío disponible' : 'Pendiente de verificar'}</span>
             </button>}
+            {confirmable ? <button type="button" onClick={() => confirmManualSend(opened)} disabled={pending}
+              aria-label={`Confirmar envío por ${label} a ${contact.address}`}
+              className="mt-1 min-h-11 w-full rounded-lg border border-green-300 px-3 font-semibold text-green-800 disabled:opacity-50">
+              Confirmar envío
+            </button> : null}
           </div>
         })}
       </div> : null}
@@ -185,7 +279,7 @@ function BuildingNoticeControl({ reservationId }: { reservationId: string }) {
               className="min-h-11 rounded border px-3 disabled:opacity-50">Guardar registro</button>
           </fieldset> : null}
           {observation ? <p>Ya hay evidencia histórica vigente. No se ofrece preparar ni reenviar este aviso.</p> : null}
-          {snapshot && !view.blockers.length ? <HistoricalBuildingNoticeForm key={`${recipient.id}:${recipient.version}`} reservationId={reservationId} snapshot={snapshot} reload={load} /> : null}
+          {snapshot && !view.blockers.length ? <HistoricalBuildingNoticeForm key={`${recipient.id}:${recipient.version}`} reservationId={reservationId} snapshot={snapshot} reload={async () => { await load() }} /> : null}
         </>}
       </> : null}
       </details>
