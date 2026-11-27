@@ -228,3 +228,78 @@ it('Mar Adentro mantiene el botón pendiente visible y deshabilitado',async()=>{
  expect(await screen.findByRole('button',{name:/WhatsApp 573000000003 Pendiente de verificar/})).toBeDisabled()
  expect(screen.queryByRole('link')).not.toBeInTheDocument()
 })
+
+describe('confirmación rápida por destinatario', () => {
+  const actionLabel = 'Confirmar envío por Correo a porter-sintetico@example.test'
+
+  async function openChannel(view = buildingView()) {
+    mocks.read.mockResolvedValue(response(view))
+    render(<NotifyBuildingButton reservationId={ids.reservation} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Aviso al edificio' }))
+    const link = await screen.findByRole('link', { name: 'Correo · porter-sintetico@example.test' })
+    expect(screen.queryByRole('button', { name: actionLabel })).not.toBeInTheDocument()
+    link.addEventListener('click', event => event.preventDefault())
+    fireEvent.click(link)
+    expect(mocks.save).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Aviso al edificio' })).toHaveTextContent('Pendiente de avisar')
+    return screen.getByRole('button', { name: actionLabel })
+  }
+
+  it('registra la confirmación explícita y solo pone verde con la relectura vigente', async () => {
+    const view = buildingView()
+    const prepared = buildingNotice(view)
+    const sent = { ...prepared, status: 'sent' as const, sent_at: '2026-11-08T15:30:00Z', version: 2 }
+    const button = await openChannel(view)
+    const savedView = { ...view, notices: [sent] }
+    mocks.save.mockImplementation(async (operation: string) => {
+      if (operation === 'prepare') return { ok: true, data: prepared }
+      mocks.read.mockResolvedValue(response(savedView))
+      return { ok: true, data: sent }
+    })
+    fireEvent.click(button)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Aviso al edificio' })).toHaveTextContent(/Avisado · .*10:30/))
+    expect(mocks.save).toHaveBeenNthCalledWith(1, 'prepare', expect.objectContaining({
+      reservation_id: ids.reservation, recipient_id: ids.recipient, snapshot: prepared.snapshot,
+    }))
+    expect(mocks.save).toHaveBeenNthCalledWith(2, 'record', expect.objectContaining({
+      notice_id: ids.notice, expected_version: 1, action: 'sent', confirmed: true,
+      evidence_kind: 'operator_confirmation', occurred_at: expect.stringMatching(/Z$/),
+    }))
+    expect(screen.queryByRole('link', { name: /porter-sintetico/ })).not.toBeInTheDocument()
+  })
+
+  it('no registra un envío si cambiaron los huéspedes desde que se abrió el borrador', async () => {
+    const view = buildingView()
+    const button = await openChannel(view)
+    mocks.read.mockResolvedValue(response({ ...view, reservation: { ...view.reservation, guests: 9 } }))
+    fireEvent.click(button)
+    expect(await screen.findByRole('alert')).toHaveTextContent('Cambió la reserva o el destinatario')
+    expect(mocks.save).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Aviso al edificio' })).toHaveTextContent('Aviso por verificar')
+  })
+
+  it('no da por enviado un registro que la relectura todavía no confirma', async () => {
+    const view = buildingView()
+    const prepared = buildingNotice(view)
+    view.notices = [prepared]
+    const button = await openChannel(view)
+    mocks.save.mockResolvedValue({ ok: true, data: { ...prepared, status: 'sent' } })
+    fireEvent.click(button)
+    expect(await screen.findByRole('alert')).toHaveTextContent('No se pudo verificar el envío guardado')
+    expect(screen.getByRole('button', { name: 'Aviso al edificio' })).not.toHaveClass('bg-green-100')
+    expect(mocks.save).toHaveBeenCalledTimes(1)
+  })
+
+  it('distingue un envío parcial del aviso completo para dos recepciones', async () => {
+    const second = buildingRecipient({ id: '10000000-0000-4000-8000-000000000008', channel: 'whatsapp', address: '573000000001' })
+    const view = buildingView({ recipients: [buildingRecipient(), second] })
+    view.notices = [buildingNotice(view, { status: 'sent', sent_at: '2026-11-08T15:30:00Z' })]
+    mocks.read.mockResolvedValue(response(view))
+    render(<NotifyBuildingButton reservationId={ids.reservation} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Aviso al edificio' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Aviso al edificio' })).toHaveTextContent('Aviso parcial · 1/2'))
+    expect(screen.getByRole('button', { name: 'Aviso al edificio' })).not.toHaveClass('bg-green-100')
+    expect(screen.getByText(/Avisado · .*10:30/)).toBeVisible()
+    expect(screen.getByRole('link', { name: /WhatsApp · 573000000001/ })).toBeVisible()
+  })
+})
